@@ -19,6 +19,10 @@ npm start
 
 For the backend, follow `insightistic-api/README.md` or `docs/HOSTINGER-VPS.md`. The API folder intentionally does not include Laravel core or `vendor/`; those are generated on the server with Composer.
 
+## Docker / Hostinger
+
+Use `docker-compose.hostinger.yml` in Hostinger Docker Manager. Set the values from `.env.docker.example` in the Docker Manager environment panel before deploying, especially `APP_KEY`, `DB_PASSWORD`, mail settings, Stripe keys, and `OPENAI_API_KEY` if you want OpenAI instead of the built-in rule provider.
+
 ## Production Shape
 
 - Frontend: `https://app.insightistic.com`

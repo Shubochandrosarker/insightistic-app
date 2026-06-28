@@ -5,7 +5,8 @@ export interface Org { id: number; name: string; slug: string; role?: Role; }
 export interface Site {
   id: number; name: string; domain?: string; platform?: string;
   connection_status: string; last_sync_at?: string | null;
-  wc_version?: string; plugin_version?: string;
+  wc_version?: string; wp_version?: string; plugin_version?: string;
+  currency?: string; timezone?: string;
 }
 export interface Metrics {
   revenue: number; orders: number; refunds: number; products_sold: number;

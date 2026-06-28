@@ -1,12 +1,14 @@
 import { InputHTMLAttributes } from "react";
-export function Field({ label, ...rest }: { label: string } & InputHTMLAttributes<HTMLInputElement>) {
+
+export function Field({ label, hint, ...rest }: { label?: string; hint?: string } & InputHTMLAttributes<HTMLInputElement>) {
   return (
     <label className="block">
-      <span className="mb-1 block text-sm text-slate-300">{label}</span>
+      {label && <span className="mb-1.5 block text-xs font-semibold text-fg">{label}</span>}
       <input
-        className="w-full rounded-lg border border-line bg-ink px-3 py-2 text-sm text-slate-100 outline-none focus:border-brand"
+        className="w-full rounded-xl border border-line bg-card2 px-3 py-2 text-sm text-fg outline-none transition placeholder:text-muted focus:border-brand focus:bg-card focus:ring-2 focus:ring-brand/15"
         {...rest}
       />
+      {hint && <span className="mt-1 block text-xs text-muted">{hint}</span>}
     </label>
   );
 }

@@ -137,6 +137,41 @@ class AnalyticsController extends Controller
         ]);
     }
 
+    /** Recent order feed for the Orders page. */
+    public function ordersList(Request $request)
+    {
+        $site = $this->site($request);
+
+        $orders = WcOrder::query()
+            ->where('site_id', $site->id)
+            ->orderByDesc('created_at_store')
+            ->limit(50)
+            ->get(['external_order_id', 'order_number', 'customer_id', 'status', 'total', 'currency', 'payment_method', 'created_at_store']);
+
+        $names = WcCustomer::query()
+            ->where('site_id', $site->id)
+            ->whereIn('external_customer_id', $orders->pluck('customer_id')->filter()->unique()->values())
+            ->get(['external_customer_id', 'first_name', 'last_name'])
+            ->keyBy('external_customer_id');
+
+        return response()->json([
+            'orders' => $orders->map(function ($o) use ($names) {
+                $c = $names->get($o->customer_id);
+                $name = $c ? trim(($c->first_name ?? '') . ' ' . ($c->last_name ?? '')) : null;
+
+                return [
+                    'order_number'   => $o->order_number ?: ('#' . $o->external_order_id),
+                    'customer'       => $name ?: 'Guest',
+                    'status'         => $o->status,
+                    'total'          => (float) $o->total,
+                    'currency'       => $o->currency,
+                    'payment_method' => $o->payment_method,
+                    'placed_at'      => optional($o->created_at_store)->toIso8601String(),
+                ];
+            }),
+        ]);
+    }
+
     public function compare(Request $request)
     {
         $site  = $this->site($request);

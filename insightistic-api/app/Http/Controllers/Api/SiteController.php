@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Site;
+use App\Models\WcOrder;
 use App\Support\Tenancy;
 use Illuminate\Http\Request;
 
@@ -62,6 +63,26 @@ class SiteController extends Controller
         $site = $request->attributes->get('site');
 
         return response()->json(['site' => $site]);
+    }
+
+    /** Connection / sync health + recent sync log for the Site Health page. */
+    public function health(Request $request)
+    {
+        $site = $request->attributes->get('site');
+
+        $logs = $site->syncLogs()
+            ->latest('id')
+            ->limit(12)
+            ->get(['job', 'status', 'records', 'message', 'started_at', 'finished_at']);
+
+        return response()->json([
+            'site' => $site->only([
+                'id', 'name', 'domain', 'connection_status', 'last_sync_at',
+                'wp_version', 'wc_version', 'plugin_version', 'timezone', 'currency',
+            ]),
+            'orders_total' => WcOrder::where('site_id', $site->id)->count(),
+            'sync_logs'    => $logs,
+        ]);
     }
 
     public function regenerateApiKey(Request $request)

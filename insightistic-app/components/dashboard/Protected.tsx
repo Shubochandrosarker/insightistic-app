@@ -10,6 +10,13 @@ export function Protected({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!loading && !user) router.replace("/login");
   }, [loading, user, router]);
-  if (loading || !user) return <div className="min-h-screen bg-ink"><Spinner /></div>;
+
+  if (loading || !user) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-bg">
+        <Spinner label="Loading your dashboard…" />
+      </div>
+    );
+  }
   return <>{children}</>;
 }

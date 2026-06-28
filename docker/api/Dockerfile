@@ -15,7 +15,8 @@ RUN apt-get update \
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 
 RUN composer create-project laravel/laravel /var/www/html "12.*" --no-interaction --prefer-dist \
-    && composer require laravel/sanctum barryvdh/laravel-dompdf stripe/stripe-php --no-interaction --no-scripts
+    && composer require laravel/sanctum barryvdh/laravel-dompdf stripe/stripe-php \
+        laravel/socialite socialiteproviders/microsoft --no-interaction --no-scripts
 
 COPY insightistic-api/ /tmp/insightistic-api/
 RUN cp -a /tmp/insightistic-api/. /var/www/html/ \

@@ -27,7 +27,7 @@ export default function Home() {
           Connect your site and see revenue, customers, products, emails, and AI business insights in one clean dashboard.
         </p>
         <div className="mt-8 flex justify-center gap-3">
-          <Link href="/register" className="rounded-lg bg-brand px-6 py-3 font-medium text-white hover:bg-blue-600">Start Free Trial</Link>
+          <Link href="/register" className="rounded-lg bg-brand px-6 py-3 font-medium text-white hover:bg-brand2">Start Free Trial</Link>
           <Link href="/pricing" className="rounded-lg border border-slate-300 px-6 py-3 font-medium text-slate-700 hover:border-slate-400">View Agency Plan</Link>
         </div>
       </section>
@@ -58,7 +58,7 @@ export default function Home() {
           <p className="mt-3 text-slate-300">
             Give every client a branded analytics dashboard with clear reports, AI insights, and business performance tracking.
           </p>
-          <Link href="/pricing" className="mt-6 inline-block rounded-lg bg-brand px-6 py-3 font-medium hover:bg-blue-600">See Agency plan</Link>
+          <Link href="/pricing" className="mt-6 inline-block rounded-lg bg-brand px-6 py-3 font-medium hover:bg-brand2">See Agency plan</Link>
         </div>
       </section>
 
@@ -69,7 +69,7 @@ export default function Home() {
 
       <section className="bg-slate-50 py-16 text-center">
         <h2 className="text-2xl font-semibold text-slate-900">Stop guessing. Start seeing the business clearly.</h2>
-        <Link href="/register" className="mt-6 inline-block rounded-lg bg-brand px-6 py-3 font-medium text-white hover:bg-blue-600">Start Free Trial</Link>
+        <Link href="/register" className="mt-6 inline-block rounded-lg bg-brand px-6 py-3 font-medium text-white hover:bg-brand2">Start Free Trial</Link>
       </section>
 
       <Footer />

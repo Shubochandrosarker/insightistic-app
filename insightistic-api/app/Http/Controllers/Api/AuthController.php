@@ -4,19 +4,18 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Mail\WelcomeMail;
-use App\Models\Organization;
-use App\Models\Plan;
-use App\Models\UsageCounter;
 use App\Models\User;
+use App\Services\AccountProvisioner;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Password as PasswordBroker;
-use Illuminate\Support\Str;
 use Illuminate\Validation\Rules\Password;
 
 class AuthController extends Controller
 {
+    public function __construct(private AccountProvisioner $provisioner) {}
+
     /**
      * Register a user AND bootstrap their first organization in one step.
      * The account is unusable without an org, so we never split these.
@@ -30,7 +29,7 @@ class AuthController extends Controller
             'organization_name' => ['required', 'string', 'max:120'],
         ]);
 
-        $result = DB::transaction(function () use ($data) {
+        [$user, $org] = DB::transaction(function () use ($data) {
             $user = User::create([
                 'name'     => $data['name'],
                 'email'    => $data['email'],
@@ -38,29 +37,11 @@ class AuthController extends Controller
                 'status'   => 'active',
             ]);
 
-            $starter = Plan::where('slug', 'starter')->first();
-
-            $org = Organization::create([
-                'name'          => $data['organization_name'],
-                'slug'          => $this->uniqueSlug($data['organization_name']),
-                'owner_user_id' => $user->id,
-                'plan_id'       => $starter?->id,
-                'status'        => 'trialing',
-                'trial_ends_at' => now()->addDays(14),
-            ]);
-
-            $org->users()->attach($user->id, ['role' => 'owner']);
-
-            UsageCounter::create([
-                'organization_id' => $org->id,
-                'period'          => now()->format('Y-m'),
-                'sites_connected' => 0,
-            ]);
+            $org = $this->provisioner->bootstrapOrganization($user, $data['organization_name']);
 
             return [$user, $org];
         });
 
-        [$user, $org] = $result;
         $token = $user->createToken('spa')->plainTextToken;
 
         // Onboarding email #1 (never let a mail failure break signup).
@@ -164,17 +145,5 @@ class AuthController extends Controller
         $request->user()->currentAccessToken()->delete();
 
         return response()->json(['message' => 'Logged out.']);
-    }
-
-    private function uniqueSlug(string $name): string
-    {
-        $base = Str::slug($name) ?: 'org';
-        $slug = $base;
-        $i = 1;
-        while (Organization::where('slug', $slug)->exists()) {
-            $slug = $base . '-' . $i++;
-        }
-
-        return $slug;
     }
 }

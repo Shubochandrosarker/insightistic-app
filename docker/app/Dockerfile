@@ -7,7 +7,9 @@ COPY insightistic-app/package.json insightistic-app/package-lock.json ./
 RUN npm ci
 
 COPY insightistic-app/ ./
-ARG NEXT_PUBLIC_API_URL=https://api.insightistic.com
+# Empty by default => proxy mode (browser calls same-origin /api, forwarded by
+# Next.js to API_PROXY_TARGET at runtime). Set to an API URL for direct mode.
+ARG NEXT_PUBLIC_API_URL=
 ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
 RUN npm run build && npm prune --omit=dev
 

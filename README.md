@@ -11,13 +11,26 @@ Insightistic is a multi-tenant WooCommerce analytics SaaS package with three dep
 
 ```bash
 cd insightistic-app
-cp .env.local.example .env.local
+cp .env.local.example .env.local   # leave NEXT_PUBLIC_API_URL empty, set API_PROXY_TARGET
 npm install
 npm run build
 npm start
 ```
 
 For the backend, follow `insightistic-api/README.md` or `docs/HOSTINGER-VPS.md`. The API folder intentionally does not include Laravel core or `vendor/`; those are generated on the server with Composer.
+
+## API connection (avoids "Failed to fetch")
+
+By default the app runs in **proxy mode**: the browser only ever calls the app's
+own origin (`/api/...`) and Next.js forwards requests to Laravel. This removes
+CORS, mixed-content, and build-time URL issues — the common causes of *Failed to
+fetch* on signup. Set `API_PROXY_TARGET` to your API (`http://127.0.0.1:8000`,
+`http://api:8000`, or a full URL). See `docs/INSTALL.md` for direct mode.
+
+## Social login
+
+Optional Google / Microsoft / GitHub sign-in. Buttons show only for configured
+providers — see `docs/SOCIAL-LOGIN.md`.
 
 ## Docker / Hostinger
 

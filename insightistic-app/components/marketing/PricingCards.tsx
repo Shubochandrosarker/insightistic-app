@@ -20,7 +20,7 @@ export function PricingCards() {
           <ul className="mt-4 space-y-2 text-sm text-slate-600">
             {p.feats.map((f) => <li key={f}>• {f}</li>)}
           </ul>
-          <Link href="/register" className={`mt-6 block rounded-lg py-2 text-center text-sm font-medium ${p.highlight ? "bg-brand text-white hover:bg-blue-600" : "border border-slate-300 text-slate-700 hover:border-slate-400"}`}>
+          <Link href="/register" className={`mt-6 block rounded-lg py-2 text-center text-sm font-medium ${p.highlight ? "bg-brand text-white hover:bg-brand2" : "border border-slate-300 text-slate-700 hover:border-slate-400"}`}>
             Start free trial
           </Link>
         </div>

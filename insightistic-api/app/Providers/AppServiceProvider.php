@@ -33,5 +33,15 @@ class AppServiceProvider extends ServiceProvider
             $app = rtrim(config('insightistic.app_url'), '/');
             return $app . '/reset-password?token=' . $token . '&email=' . urlencode($user->getEmailForPasswordReset());
         });
+
+        // Register the Microsoft Socialite provider (Google + GitHub ship with
+        // Socialite core). Guarded so the app still boots if the optional
+        // package isn't installed yet.
+        if (class_exists(\SocialiteProviders\Microsoft\MicrosoftExtendSocialite::class)) {
+            \Illuminate\Support\Facades\Event::listen(
+                \SocialiteProviders\Manager\SocialiteWasCalled::class,
+                [\SocialiteProviders\Microsoft\MicrosoftExtendSocialite::class, 'handle'],
+            );
+        }
     }
 }

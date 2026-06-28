@@ -3,12 +3,20 @@ import { createContext, useContext, useEffect, useState, ReactNode } from "react
 import { apiGet, apiPost, setToken } from "./api";
 import type { Org, User } from "./types";
 
+interface RegisterInput {
+  name: string;
+  email: string;
+  password: string;
+  organization_name: string;
+}
+
 interface AuthState {
   user: User | null;
   orgs: Org[];
   loading: boolean;
   login: (email: string, password: string) => Promise<void>;
-  register: (p: { name: string; email: string; password: string; password_confirmation: string; organization_name: string }) => Promise<void>;
+  register: (p: RegisterInput) => Promise<void>;
+  applyToken: (token: string) => Promise<void>;
   logout: () => void;
 }
 
@@ -40,11 +48,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setOrgs(res.organizations || []);
   }
 
-  async function register(p: any) {
-    const res = await apiPost("/auth/register", p);
+  async function register(p: RegisterInput) {
+    // The form has a single password field; mirror it as the confirmation so
+    // the backend's `confirmed` rule passes without a second input.
+    const res = await apiPost("/auth/register", { ...p, password_confirmation: p.password });
     setToken(res.token);
     setUser(res.user);
     setOrgs(res.organization ? [{ ...res.organization, role: "owner" }] : []);
+  }
+
+  /** Adopt a token issued by the OAuth callback and hydrate the session. */
+  async function applyToken(token: string) {
+    setToken(token);
+    const me = await apiGet("/auth/me");
+    setUser(me.user);
+    setOrgs(me.organizations || []);
   }
 
   function logout() {
@@ -54,7 +72,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setOrgs([]);
   }
 
-  return <Ctx.Provider value={{ user, orgs, loading, login, register, logout }}>{children}</Ctx.Provider>;
+  return (
+    <Ctx.Provider value={{ user, orgs, loading, login, register, applyToken, logout }}>
+      {children}
+    </Ctx.Provider>
+  );
 }
 
 export function useAuth() {

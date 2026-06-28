@@ -8,6 +8,7 @@ use App\Http\Controllers\Api\Connector\HandshakeController;
 use App\Http\Controllers\Api\Connector\PingController;
 use App\Http\Controllers\Api\Connector\SyncController;
 use App\Http\Controllers\Api\InsightController;
+use App\Http\Controllers\Api\OAuthController;
 use App\Http\Controllers\Api\OrganizationController;
 use App\Http\Controllers\Api\ReportController;
 use App\Http\Controllers\Api\SiteController;
@@ -29,6 +30,12 @@ Route::prefix('auth')->group(function () {
     Route::post('login', [AuthController::class, 'login']);
     Route::post('forgot-password', [AuthController::class, 'forgotPassword']);
     Route::post('reset-password', [AuthController::class, 'resetPassword']);
+
+    // Social login (Google / Microsoft / GitHub). Buttons appear in the SPA
+    // only for providers returned by the `oauth/providers` endpoint.
+    Route::get('oauth/providers', [OAuthController::class, 'providers']);
+    Route::get('oauth/{provider}/redirect', [OAuthController::class, 'redirect']);
+    Route::get('oauth/{provider}/callback', [OAuthController::class, 'callback']);
 });
 
 // ---- Authenticated app (user JWT/Sanctum + tenant resolution) -------------
@@ -60,6 +67,8 @@ Route::middleware(['auth:sanctum', 'tenant'])->group(function () {
 
     Route::middleware('site.access')->group(function () {
         Route::get('sites/{site}', [SiteController::class, 'show']);
+        Route::get('sites/{site}/health', [SiteController::class, 'health']);
+        Route::get('sites/{site}/orders', [AnalyticsController::class, 'ordersList']);
         Route::post('sites/{site}/regenerate-api-key', [SiteController::class, 'regenerateApiKey']);
 
         // Analytics (Week 3) — read from precomputed snapshots + live tables.

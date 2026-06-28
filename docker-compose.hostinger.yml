@@ -17,12 +17,15 @@ services:
       context: .
       dockerfile: docker/app/Dockerfile
       args:
-        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-https://api.insightistic.com}
+        # Empty by default => proxy mode (browser calls same-origin /api).
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-}
     restart: unless-stopped
     environment:
       NODE_ENV: production
       NEXT_TELEMETRY_DISABLED: "1"
-      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-https://api.insightistic.com}
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-}
+      # Next.js forwards /api/* to the API container (no CORS needed).
+      API_PROXY_TARGET: ${API_PROXY_TARGET:-http://api:8000}
     expose:
       - "3000"
 
@@ -51,6 +54,15 @@ services:
       CACHE_STORE: database
       SESSION_DRIVER: database
       INSIGHTISTIC_APP_URL: ${INSIGHTISTIC_APP_URL:-https://app.insightistic.com}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-}
+      OAUTH_REDIRECT_BASE: ${OAUTH_REDIRECT_BASE:-}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      MICROSOFT_CLIENT_ID: ${MICROSOFT_CLIENT_ID:-}
+      MICROSOFT_CLIENT_SECRET: ${MICROSOFT_CLIENT_SECRET:-}
+      MICROSOFT_TENANT: ${MICROSOFT_TENANT:-common}
+      GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID:-}
+      GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET:-}
       INSIGHTISTIC_AI_PROVIDER: ${INSIGHTISTIC_AI_PROVIDER:-openai}
       INSIGHTISTIC_AI_MODEL: ${INSIGHTISTIC_AI_MODEL:-gpt-4o-mini}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}

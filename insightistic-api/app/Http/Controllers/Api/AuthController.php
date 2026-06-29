@@ -113,7 +113,7 @@ class AuthController extends Controller
 
         return response()->json([
             'token'         => $token,
-            'user'          => $user->only(['id', 'name', 'email']),
+            'user'          => $user->only(['id', 'name', 'email', 'is_super_admin']),
             'organizations' => $user->organizations()->get(['organizations.id', 'name', 'slug'])
                 ->map(fn ($o) => [
                     'id'   => $o->id,
@@ -129,7 +129,7 @@ class AuthController extends Controller
         $user = $request->user();
 
         return response()->json([
-            'user'          => $user->only(['id', 'name', 'email']),
+            'user'          => $user->only(['id', 'name', 'email', 'is_super_admin']),
             'organizations' => $user->organizations()->get(['organizations.id', 'name', 'slug'])
                 ->map(fn ($o) => [
                     'id'   => $o->id,

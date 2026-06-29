@@ -1,5 +1,13 @@
 <?php
 
+use App\Http\Controllers\Api\Admin\OrganizationController as AdminOrganizationController;
+use App\Http\Controllers\Api\Admin\OverviewController as AdminOverviewController;
+use App\Http\Controllers\Api\Admin\ReportController as AdminReportController;
+use App\Http\Controllers\Api\Admin\SiteController as AdminSiteController;
+use App\Http\Controllers\Api\Admin\SubscriptionController as AdminSubscriptionController;
+use App\Http\Controllers\Api\Admin\SyncLogController as AdminSyncLogController;
+use App\Http\Controllers\Api\Admin\UsageController as AdminUsageController;
+use App\Http\Controllers\Api\Admin\UserController as AdminUserController;
 use App\Http\Controllers\Api\AnalyticsController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\BillingController;
@@ -94,6 +102,28 @@ Route::middleware(['auth:sanctum', 'tenant'])->group(function () {
     // Report view + send (not site-scoped in the URL; access checked in controller).
     Route::get('reports/{report}', [ReportController::class, 'show']);
     Route::post('reports/{report}/send-email', [ReportController::class, 'sendEmail']);
+});
+
+// ---- Super Admin (platform owner; auth + super_admin, NO tenant scope) -----
+Route::prefix('admin')->middleware(['auth:sanctum', 'super_admin'])->group(function () {
+    Route::get('overview', [AdminOverviewController::class, 'overview']);
+    Route::get('system-health', [AdminOverviewController::class, 'systemHealth']);
+
+    Route::get('organizations', [AdminOrganizationController::class, 'index']);
+    Route::get('organizations/{id}', [AdminOrganizationController::class, 'show']);
+    Route::patch('organizations/{id}', [AdminOrganizationController::class, 'update']);
+
+    Route::get('users', [AdminUserController::class, 'index']);
+    Route::get('users/{id}', [AdminUserController::class, 'show']);
+    Route::patch('users/{id}', [AdminUserController::class, 'update']);
+
+    Route::get('sites', [AdminSiteController::class, 'index']);
+    Route::get('sites/{id}', [AdminSiteController::class, 'show']);
+
+    Route::get('subscriptions', [AdminSubscriptionController::class, 'index']);
+    Route::get('sync-logs', [AdminSyncLogController::class, 'index']);
+    Route::get('reports', [AdminReportController::class, 'index']);
+    Route::get('usage', [AdminUsageController::class, 'index']);
 });
 
 // ---- Connector (WordPress plugin, authed by HMAC signature) ---------------

@@ -139,3 +139,47 @@ body {
   background: rgba(11, 17, 16, 0.14);
   border-radius: 9999px;
 }
+
+/* ---- App-like motion & mobile ergonomics --------------------------------- */
+@keyframes ins-fade {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes ins-sheet-up {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+@keyframes ins-shimmer {
+  100% { transform: translateX(100%); }
+}
+
+/* fade/slide page-in (respects reduced-motion) */
+.ins-page { animation: ins-fade 0.28s ease both; }
+
+/* tap feedback for touch targets */
+.ins-tap { transition: transform 0.08s ease, background-color 0.15s ease; }
+.ins-tap:active { transform: scale(0.96); }
+
+/* clear the fixed mobile bottom nav (80px) + iPhone home indicator */
+.pb-safe-nav { padding-bottom: calc(80px + env(safe-area-inset-bottom)); }
+.bottom-safe { padding-bottom: env(safe-area-inset-bottom); }
+
+/* skeleton shimmer */
+.ins-skeleton { position: relative; overflow: hidden; background: var(--ins-card-2); }
+.ins-skeleton::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, rgba(0, 0, 0, 0.05), transparent);
+  animation: ins-shimmer 1.4s infinite;
+}
+.dark .ins-skeleton::after {
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.07), transparent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ins-page,
+  .ins-skeleton::after { animation: none; }
+  .ins-tap:active { transform: none; }
+}

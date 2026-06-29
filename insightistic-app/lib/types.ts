@@ -1,6 +1,6 @@
 export type Role = "owner" | "admin" | "analyst" | "client_viewer";
 
-export interface User { id: number; name: string; email: string; }
+export interface User { id: number; name: string; email: string; is_super_admin?: boolean; }
 export interface Org { id: number; name: string; slug: string; role?: Role; }
 export interface Site {
   id: number; name: string; domain?: string; platform?: string;

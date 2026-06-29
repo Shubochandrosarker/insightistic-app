@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth";
@@ -7,12 +7,17 @@ import { AuthShell } from "@/components/auth/AuthShell";
 import { OAuthButtons } from "@/components/auth/OAuthButtons";
 
 export default function Login() {
-  const { login } = useAuth();
+  const { login, user, loading } = useAuth();
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+
+  // Already signed in → send them where they belong.
+  useEffect(() => {
+    if (!loading && user) router.replace(user.is_super_admin ? "/admin" : "/dashboard");
+  }, [user, loading, router]);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -20,8 +25,8 @@ export default function Login() {
     setErr(null);
     setBusy(true);
     try {
-      await login(email.trim(), password);
-      router.push("/dashboard");
+      const u = await login(email.trim(), password);
+      router.push(u?.is_super_admin ? "/admin" : "/dashboard");
     } catch (e: any) {
       setErr(e.message || "Login failed");
       setBusy(false);

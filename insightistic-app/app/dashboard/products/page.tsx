@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/Badge";
 import { PageHeader } from "@/components/dashboard/PageHeader";
 import { EmptyState } from "@/components/dashboard/EmptyState";
 import { Spinner } from "@/components/ui/Spinner";
+import { ResponsiveTable, type Column } from "@/components/app-shell/ResponsiveTable";
 import { money, num } from "@/lib/format";
 import { Package } from "lucide-react";
 
@@ -27,33 +28,24 @@ export default function ProductsPage() {
 
       <div className="grid gap-5 lg:grid-cols-3">
         <Card className="lg:col-span-2" title="Top performing products">
-          {top.length === 0 ? (
-            <p className="py-8 text-center text-sm text-muted">No product sales in range.</p>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="text-[11px] uppercase tracking-wide text-muted">
-                    <th className="border-b border-line pb-2.5 px-2 text-left font-semibold">Product</th>
-                    <th className="border-b border-line pb-2.5 px-2 text-right font-semibold">Sold</th>
-                    <th className="border-b border-line pb-2.5 px-2 text-right font-semibold">Revenue</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {top.map((p: any, i: number) => (
-                    <tr key={i} className="group">
-                      <td className="border-b border-line py-3 px-2 group-last:border-0">
-                        <div className="font-medium text-fg">{p.name || "—"}</div>
-                        <div className="text-[11px] text-muted">{p.sku || `#${p.product_id}`}</div>
-                      </td>
-                      <td className="border-b border-line py-3 px-2 text-right text-fg group-last:border-0">{num(p.units)}</td>
-                      <td className="border-b border-line py-3 px-2 text-right font-semibold text-fg group-last:border-0">{money(p.revenue, cur)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
+          <ResponsiveTable
+            rows={top}
+            rowKey={(p: any, i) => p.product_id ?? i}
+            empty="No product sales in range."
+            columns={[
+              {
+                key: "name", label: "Product", primary: true,
+                render: (p: any) => (
+                  <span>
+                    <span className="block font-medium text-fg">{p.name || "—"}</span>
+                    <span className="block text-[11px] text-muted">{p.sku || `#${p.product_id}`}</span>
+                  </span>
+                ),
+              },
+              { key: "units", label: "Sold", align: "right", render: (p: any) => num(p.units) },
+              { key: "revenue", label: "Revenue", align: "right", render: (p: any) => <span className="font-semibold text-fg">{money(p.revenue, cur)}</span> },
+            ]}
+          />
         </Card>
 
         <Card title="Low / out of stock">

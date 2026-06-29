@@ -12,7 +12,7 @@ class User extends Authenticatable
     use HasApiTokens, Notifiable;
 
     protected $fillable = [
-        'name', 'email', 'password', 'status',
+        'name', 'email', 'password', 'status', 'is_super_admin',
         'provider', 'provider_id', 'avatar_url', 'email_verified_at', 'last_login_at',
     ];
 
@@ -24,7 +24,13 @@ class User extends Authenticatable
             'email_verified_at' => 'datetime',
             'last_login_at'     => 'datetime',
             'password'          => 'hashed',
+            'is_super_admin'    => 'boolean',
         ];
+    }
+
+    public function isSuperAdmin(): bool
+    {
+        return (bool) $this->is_super_admin;
     }
 
     public function organizations(): BelongsToMany

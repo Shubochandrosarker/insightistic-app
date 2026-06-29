@@ -1,0 +1,45 @@
+/*
+Theme Name: Insightistic Marketing
+Theme URI: https://insightistic.com
+Author: Wordpressistic
+Author URI: https://insightistic.com
+Description: Premium dark SaaS marketing theme for Insightistic — AI Business Analytics for WordPress & WooCommerce. Mobile-first, fast, SEO-friendly and Formistic-ready. The SaaS app and dashboard live separately at app.insightistic.com; this theme only powers the public marketing website.
+Version: 1.0.0
+Requires at least: 6.4
+Tested up to: 6.7
+Requires PHP: 8.0
+License: GNU General Public License v2 or later
+License URI: http://www.gnu.org/licenses/gpl-2.0.html
+Text Domain: insightistic-marketing
+Tags: business, e-commerce, blog, custom-colors, custom-logo, custom-menu, featured-images, full-width-template, block-styles, wide-blocks, translation-ready, threaded-comments
+*/
+
+/*
+ * Presentation styles live in assets/css/theme.css, responsive.css and
+ * blocks.css (enqueued in inc/enqueue.php). This file only carries the theme
+ * header WordPress requires, plus a couple of accessibility primitives.
+ */
+
+.screen-reader-text {
+	border: 0;
+	clip: rect(1px, 1px, 1px, 1px);
+	clip-path: inset(50%);
+	height: 1px;
+	margin: -1px;
+	overflow: hidden;
+	padding: 0;
+	position: absolute !important;
+	width: 1px;
+	word-wrap: normal !important;
+}
+
+.skip-link:focus {
+	background: #fff;
+	color: #0b1110;
+	left: 1rem;
+	top: 1rem;
+	padding: 0.6rem 1rem;
+	position: fixed;
+	z-index: 100000;
+	border-radius: 0.5rem;
+}

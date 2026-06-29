@@ -1,0 +1,62 @@
+/* =========================================================================
+   Insightistic Marketing — responsive layer (progressive enhancement).
+   Base styles (theme.css) are mobile-first; these add larger layouts.
+   ========================================================================= */
+
+/* ---- ≥ 600px : two-column grids --------------------------------------- */
+@media (min-width: 600px) {
+	.ins-grid--features { grid-template-columns: repeat(2, 1fr); }
+	.ins-grid--posts { grid-template-columns: repeat(2, 1fr); }
+	.ins-grid--testimonials { grid-template-columns: repeat(2, 1fr); }
+	.ins-steps { grid-template-columns: repeat(2, 1fr); }
+	.ins-footer__cols { grid-template-columns: repeat(3, 1fr); }
+	.ins-contact__grid { grid-template-columns: 1.4fr 1fr; }
+	.ins-preview__lower { grid-template-columns: 1.6fr 1fr; }
+}
+
+/* ---- ≥ 820px : pricing 3-up, footer split, larger preview ------------- */
+@media (min-width: 820px) {
+	.ins-grid--pricing { grid-template-columns: repeat(3, 1fr); align-items: stretch; }
+	.ins-grid--testimonials { grid-template-columns: repeat(3, 1fr); }
+	.ins-footer__top { grid-template-columns: 1.2fr 2fr; gap: 3rem; }
+	.ins-footer__bottom { flex-direction: row; align-items: center; justify-content: space-between; }
+	.ins-ctaband__card { grid-template-columns: 1.6fr 1fr; align-items: center; }
+	.ins-ctaband__actions { justify-content: flex-end; }
+}
+
+/* ---- ≥ 1024px : desktop header + side-by-side splits ------------------ */
+@media (min-width: 1024px) {
+	.ins-burger { display: none; }
+	.ins-mobile { display: none !important; }
+	.ins-nav { display: block; }
+	.ins-header__actions { display: flex; }
+	.ins-header__inner { gap: 2rem; }
+	.ins-nav { margin-left: 0; }
+	.ins-menu { margin-left: 0; }
+	.ins-header__actions { margin-left: auto; }
+
+	.ins-grid--features { grid-template-columns: repeat(4, 1fr); }
+	.ins-steps { grid-template-columns: repeat(4, 1fr); }
+	.ins-split__inner { grid-template-columns: 1fr 1fr; }
+	.ins-split--reverse .ins-split__text { order: 2; }
+	.ins-split--reverse .ins-split__visual { order: 1; }
+	.ins-preview__metrics { grid-template-columns: repeat(4, 1fr); }
+	.ins-blog__layout { grid-template-columns: 1fr 320px; align-items: start; }
+	.ins-grid--posts { grid-template-columns: repeat(2, 1fr); }
+}
+
+/* ---- ≥ 1200px : a touch more room ------------------------------------- */
+@media (min-width: 1200px) {
+	.ins-grid--posts { gap: 1.75rem; }
+}
+
+/* Respect users who reduce motion. */
+@media (prefers-reduced-motion: reduce) {
+	* { animation-duration: 0.001ms !important; transition-duration: 0.001ms !important; }
+}
+
+/* Dark-by-default already; provide a light-content fallback for print. */
+@media print {
+	.ins-header, .ins-footer, .ins-hero__actions, .ins-burger { display: none !important; }
+	body { background: #fff; color: #000; }
+}

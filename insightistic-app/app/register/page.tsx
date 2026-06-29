@@ -13,7 +13,7 @@ const PLAN_LABELS: Record<string, string> = {
 };
 
 export default function Register() {
-  const { register } = useAuth();
+  const { register, user, loading } = useAuth();
   const router = useRouter();
   const [f, setF] = useState({ name: "", email: "", password: "", organization_name: "" });
   const [plan, setPlan] = useState<string | null>(null);
@@ -21,6 +21,10 @@ export default function Register() {
   const [busy, setBusy] = useState(false);
   const up = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement>) =>
     setF({ ...f, [k]: e.target.value });
+
+  useEffect(() => {
+    if (!loading && user) router.replace(user.is_super_admin ? "/admin" : "/dashboard");
+  }, [user, loading, router]);
 
   // Read ?plan= from the marketing-site CTA without forcing a Suspense boundary.
   useEffect(() => {

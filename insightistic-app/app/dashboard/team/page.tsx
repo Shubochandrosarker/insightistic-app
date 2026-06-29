@@ -9,6 +9,7 @@ import { Field } from "@/components/ui/Field";
 import { Badge } from "@/components/ui/Badge";
 import { PageHeader } from "@/components/dashboard/PageHeader";
 import { Spinner } from "@/components/ui/Spinner";
+import { ResponsiveTable, type Column } from "@/components/app-shell/ResponsiveTable";
 import { initials } from "@/lib/format";
 import { UserPlus } from "lucide-react";
 
@@ -98,47 +99,43 @@ export default function TeamPage() {
       )}
 
       <Card>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="text-[11px] uppercase tracking-wide text-muted">
-                <th className="border-b border-line pb-2.5 px-2 text-left font-semibold">Member</th>
-                <th className="border-b border-line pb-2.5 px-2 text-left font-semibold">Assigned sites</th>
-                <th className="border-b border-line pb-2.5 px-2 text-left font-semibold">Role</th>
-                <th className="border-b border-line pb-2.5 px-2 text-right font-semibold">Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              {members.map((m: any) => (
-                <tr key={m.id} className="group">
-                  <td className="border-b border-line py-3 px-2 group-last:border-0">
-                    <div className="flex items-center gap-3">
-                      <span className="flex h-9 w-9 items-center justify-center rounded-full bg-brand/15 text-xs font-bold text-brand-700">{initials(m.name)}</span>
-                      <div>
-                        <div className="font-medium text-fg">{m.name}</div>
-                        <div className="text-[11px] text-muted">{m.email}</div>
-                      </div>
-                    </div>
-                  </td>
-                  <td className="border-b border-line py-3 px-2 text-muted group-last:border-0">{m.sites_label || "All sites"}</td>
-                  <td className="border-b border-line py-3 px-2 group-last:border-0">
-                    {m.is_owner ? (
-                      <Badge tone="violet" dot>Owner</Badge>
-                    ) : (
-                      <select defaultValue={m.role} onChange={(e) => changeRole(m.id, e.target.value)}
-                        className="rounded-lg border border-line bg-card2 px-2 py-1 text-xs text-fg outline-none focus:border-brand">
-                        {ROLES.map((r) => <option key={r} value={r}>{ROLE_LABEL[r]}</option>)}
-                      </select>
-                    )}
-                  </td>
-                  <td className="border-b border-line py-3 px-2 text-right group-last:border-0">
-                    {m.is_owner ? <span className="text-xs text-muted">You</span> : <button onClick={() => remove(m.id)} className="text-sm font-semibold text-bad hover:underline">Remove</button>}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <ResponsiveTable
+          rows={members}
+          rowKey={(m: any) => m.id}
+          empty="No team members yet."
+          columns={[
+            {
+              key: "name", label: "Member", primary: true,
+              render: (m: any) => (
+                <span className="flex items-center gap-3">
+                  <span className="flex h-9 w-9 items-center justify-center rounded-full bg-brand/15 text-xs font-bold text-brand-700">{initials(m.name)}</span>
+                  <span>
+                    <span className="block font-medium text-fg">{m.name}</span>
+                    <span className="block text-[11px] text-muted">{m.email}</span>
+                  </span>
+                </span>
+              ),
+            },
+            { key: "sites", label: "Assigned sites", render: (m: any) => <span className="text-muted">{m.sites_label || "All sites"}</span> },
+            {
+              key: "role", label: "Role",
+              render: (m: any) => m.is_owner ? (
+                <Badge tone="violet" dot>Owner</Badge>
+              ) : (
+                <select defaultValue={m.role} onChange={(e) => changeRole(m.id, e.target.value)}
+                  className="rounded-lg border border-line bg-card2 px-2 py-1 text-xs text-fg outline-none focus:border-brand">
+                  {ROLES.map((r) => <option key={r} value={r}>{ROLE_LABEL[r]}</option>)}
+                </select>
+              ),
+            },
+            {
+              key: "action", label: "Action", align: "right",
+              render: (m: any) => m.is_owner
+                ? <span className="text-xs text-muted">You</span>
+                : <button onClick={() => remove(m.id)} className="text-sm font-semibold text-bad hover:underline">Remove</button>,
+            },
+          ]}
+        />
 
         <div className="mt-4 flex flex-wrap gap-x-5 gap-y-2 border-t border-line pt-4 text-xs text-muted">
           {LEGEND.map((l) => (

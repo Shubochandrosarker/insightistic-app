@@ -33,7 +33,7 @@ export default function OAuthCallback() {
     }
 
     applyToken(token)
-      .then(() => router.replace("/dashboard"))
+      .then((u) => router.replace(u?.is_super_admin ? "/admin" : "/dashboard"))
       .catch(() => setError("We couldn't finish signing you in. Please try again."));
   }, [applyToken, router]);
 

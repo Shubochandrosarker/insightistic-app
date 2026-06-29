@@ -14,9 +14,9 @@ interface AuthState {
   user: User | null;
   orgs: Org[];
   loading: boolean;
-  login: (email: string, password: string) => Promise<void>;
+  login: (email: string, password: string) => Promise<User>;
   register: (p: RegisterInput) => Promise<void>;
-  applyToken: (token: string) => Promise<void>;
+  applyToken: (token: string) => Promise<User>;
   logout: () => void;
 }
 
@@ -41,11 +41,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     })();
   }, []);
 
-  async function login(email: string, password: string) {
+  async function login(email: string, password: string): Promise<User> {
     const res = await apiPost("/auth/login", { email, password });
     setToken(res.token);
     setUser(res.user);
     setOrgs(res.organizations || []);
+    return res.user as User;
   }
 
   async function register(p: RegisterInput) {
@@ -58,11 +59,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   /** Adopt a token issued by the OAuth callback and hydrate the session. */
-  async function applyToken(token: string) {
+  async function applyToken(token: string): Promise<User> {
     setToken(token);
     const me = await apiGet("/auth/me");
     setUser(me.user);
     setOrgs(me.organizations || []);
+    return me.user as User;
   }
 
   function logout() {

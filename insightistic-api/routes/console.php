@@ -11,3 +11,12 @@ use Illuminate\Support\Facades\Schedule;
 Schedule::command('insightistic:snapshots')
     ->dailyAt('02:00')
     ->withoutOverlapping();
+
+/*
+ * Trial lifecycle: reminders (T-2, T-0), expiry enforcement (locks advanced
+ * features, keeps free plugin working), and the day-7 win-back. Hourly; all
+ * sends dedupe through email_logs so re-runs never double-send.
+ */
+Schedule::command('insightistic:trials')
+    ->hourly()
+    ->withoutOverlapping();

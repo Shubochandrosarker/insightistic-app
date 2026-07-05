@@ -14,7 +14,10 @@ use Illuminate\Validation\Rules\Password;
 
 class AuthController extends Controller
 {
-    public function __construct(private AccountProvisioner $provisioner) {}
+    public function __construct(
+        private AccountProvisioner $provisioner,
+        private \App\Services\LifecycleMailer $lifecycleMailer,
+    ) {}
 
     /**
      * Register a user AND bootstrap their first organization in one step.
@@ -29,7 +32,9 @@ class AuthController extends Controller
             'organization_name' => ['required', 'string', 'max:120'],
         ]);
 
-        [$user, $org] = DB::transaction(function () use ($data) {
+        $rawLicenseKey = null;
+
+        [$user, $org] = DB::transaction(function () use ($data, &$rawLicenseKey) {
             $user = User::create([
                 'name'     => $data['name'],
                 'email'    => $data['email'],
@@ -37,16 +42,24 @@ class AuthController extends Controller
                 'status'   => 'active',
             ]);
 
-            $org = $this->provisioner->bootstrapOrganization($user, $data['organization_name']);
+            $org = $this->provisioner->bootstrapOrganization($user, $data['organization_name'], $rawLicenseKey);
 
             return [$user, $org];
         });
 
         $token = $user->createToken('spa')->plainTextToken;
 
-        // Onboarding email #1 (never let a mail failure break signup).
+        // Onboarding emails (never let a mail failure break signup).
         try {
             Mail::to($user->email)->send(new WelcomeMail($user, $org));
+        } catch (\Throwable $e) {
+            report($e);
+        }
+        try {
+            // Trial-started email carries the one-time license key (spec §11).
+            $this->lifecycleMailer->send($org->fresh(['plan', 'owner']), 'trial_started', [
+                'license_key' => $rawLicenseKey,
+            ]);
         } catch (\Throwable $e) {
             report($e);
         }
@@ -55,6 +68,9 @@ class AuthController extends Controller
             'token'        => $token,
             'user'         => $user->only(['id', 'name', 'email']),
             'organization' => $org->only(['id', 'name', 'slug', 'status', 'trial_ends_at']),
+            // Shown ONCE. The dashboard onboarding displays + copies it; only a
+            // masked version exists anywhere after this response.
+            'license_key'  => $rawLicenseKey,
         ], 201);
     }
 

@@ -236,10 +236,9 @@ class SyncController extends Controller
         $site->update(['last_sync_at' => now(), 'connection_status' => 'connected']);
         $this->log($site, 'sync_complete', 'success', 0, 'Full sync finished');
 
-        // Rebuild analytics snapshots from the freshly synced orders. Runs after
-        // the HTTP response so it needs no queue worker for first-run UX; switch
-        // to ::dispatch() once Horizon is running in production.
-        RebuildSiteSnapshots::dispatchAfterResponse($site->id);
+        // Rebuild analytics snapshots from the freshly synced orders on the
+        // queue (the compose stack runs a dedicated queue worker).
+        RebuildSiteSnapshots::dispatch($site->id);
 
         return response()->json(['status' => 'ok', 'last_sync_at' => $site->last_sync_at]);
     }

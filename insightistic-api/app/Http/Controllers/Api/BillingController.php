@@ -6,6 +6,8 @@ use App\Http\Controllers\Controller;
 use App\Models\Organization;
 use App\Models\Plan;
 use App\Models\Subscription;
+use App\Services\LicenseService;
+use App\Services\LifecycleMailer;
 use App\Services\StripeService;
 use App\Services\UsageService;
 use App\Support\Tenancy;
@@ -19,6 +21,8 @@ class BillingController extends Controller
         private StripeService $stripe,
         private UsageService $usage,
         private Tenancy $tenancy,
+        private LicenseService $licenses,
+        private LifecycleMailer $mailer,
     ) {}
 
     /** Current subscription + plan + this month's usage. */
@@ -80,6 +84,49 @@ class BillingController extends Controller
         $url = $this->stripe->portalUrl($customerId, rtrim(config('insightistic.app_url'), '/') . '/billing');
 
         return response()->json(['url' => $url]);
+    }
+
+    /** Cancel at period end — access continues until the paid period closes. */
+    public function cancel()
+    {
+        $org = $this->tenancy->organization();
+        $sub = $org->subscription;
+
+        if (! $sub?->stripe_subscription_id) {
+            return response()->json(['message' => 'No active subscription to cancel.', 'code' => 'no_subscription'], 422);
+        }
+
+        $this->stripe->setCancelAtPeriodEnd($sub->stripe_subscription_id, true);
+        $sub->update(['cancel_at_period_end' => true]);
+
+        $this->mailer->send($org, 'subscription_cancelled', [
+            'period_end' => $sub->current_period_end?->format('M j, Y'),
+        ], 'cancel:' . now()->format('YmdHis'));
+
+        return response()->json([
+            'ok'         => true,
+            'ends_at'    => $sub->current_period_end?->toIso8601String(),
+            'message'    => 'Subscription will end at the close of the current billing period.',
+        ]);
+    }
+
+    /** Undo a pending cancellation while the period is still active. */
+    public function reactivate()
+    {
+        $org = $this->tenancy->organization();
+        $sub = $org->subscription;
+
+        if (! $sub?->stripe_subscription_id || ! $sub->cancel_at_period_end) {
+            return response()->json(['message' => 'Nothing to reactivate — start a new checkout instead.', 'code' => 'no_pending_cancel'], 422);
+        }
+
+        $this->stripe->setCancelAtPeriodEnd($sub->stripe_subscription_id, false);
+        $sub->update(['cancel_at_period_end' => false]);
+        $this->licenses->syncForOrganization($org->fresh());
+
+        $this->mailer->send($org, 'subscription_reactivated', [], 'react:' . now()->format('YmdHis'));
+
+        return response()->json(['ok' => true, 'message' => 'Subscription reactivated.']);
     }
 
     /**
@@ -150,6 +197,9 @@ class BillingController extends Controller
             $plan = $metaPlan ? Plan::find($metaPlan) : null;
         }
 
+        $previousPlanId = $org->plan_id;
+        $hadSubscription = (bool) $sub->exists;
+
         if ($plan) {
             $sub->plan_id = $plan->id;
             $org->plan_id = $plan->id;
@@ -158,6 +208,15 @@ class BillingController extends Controller
 
         $org->status = $this->orgStatus($sub->status);
         $org->save();
+
+        // License status/limits are a projection of subscription state.
+        $this->licenses->syncForOrganization($org->fresh(['plan']));
+
+        if (! $hadSubscription || $event->type === 'checkout.session.completed') {
+            $this->mailer->send($org->fresh('plan'), 'subscription_started', [], 'sub:' . ($sub->stripe_subscription_id ?: 'first'));
+        } elseif ($plan && $previousPlanId && $plan->id !== $previousPlanId) {
+            $this->mailer->send($org->fresh('plan'), 'plan_changed', [], 'plan:' . $plan->id . ':' . now()->format('Ymd'));
+        }
     }
 
     private function cancelSubscription(\Stripe\Event $event): void
@@ -173,6 +232,11 @@ class BillingController extends Controller
             ->update(['status' => 'canceled', 'cancel_at_period_end' => false]);
 
         $org->update(['status' => 'canceled']);
+        $this->licenses->syncForOrganization($org->fresh());
+
+        $this->mailer->send($org, 'subscription_cancelled', [
+            'period_end' => $org->subscription?->current_period_end?->format('M j, Y'),
+        ], 'cancel-hook:' . now()->format('Ymd'));
     }
 
     private function markPastDue(\Stripe\Event $event): void
@@ -181,6 +245,8 @@ class BillingController extends Controller
         $org = $this->resolveOrg(null, $object->customer ?? null);
         if ($org) {
             $org->update(['status' => 'past_due']);
+            $this->licenses->syncForOrganization($org->fresh());
+            $this->mailer->send($org, 'payment_failed', [], 'pf:' . now()->format('Ym'));
         }
     }
 

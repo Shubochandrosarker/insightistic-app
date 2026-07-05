@@ -9,12 +9,11 @@ import { PageHeader } from "@/components/dashboard/PageHeader";
 import { Spinner } from "@/components/ui/Spinner";
 import { num } from "@/lib/format";
 
+// Public lineup — Growth is the featured "Best Value" plan.
 const PLANS = [
   { slug: "starter", name: "Starter" },
-  { slug: "growth", name: "Growth" },
-  { slug: "business", name: "Business" },
+  { slug: "growth", name: "Growth — Best Value" },
   { slug: "agency", name: "Agency" },
-  { slug: "agency_pro", name: "Agency Pro" },
 ];
 
 function UsageBar({ label, used, limit }: { label: string; used: number; limit: number | null }) {
@@ -33,7 +32,7 @@ function UsageBar({ label, used, limit }: { label: string; used: number; limit: 
 }
 
 export default function BillingPage() {
-  const { data, loading } = useApi<any>("/billing/subscription");
+  const { data, loading, reload } = useApi<any>("/billing/subscription");
   const { sites } = useDashboard();
   const [plan, setPlan] = useState("growth");
   const [interval, setIntervalSel] = useState("monthly");
@@ -56,10 +55,25 @@ export default function BillingPage() {
     try { const r = await apiPost("/billing/portal"); window.location.href = r.url; }
     catch (e: any) { setMsg(e.message); setBusy(false); }
   }
+  async function cancelSub() {
+    if (!window.confirm("Cancel your subscription? You keep full access until the end of the current billing period.")) return;
+    setBusy(true); setMsg(null);
+    try { const r = await apiPost("/billing/cancel"); setMsg(r.message || "Cancellation scheduled."); reload(); }
+    catch (e: any) { setMsg(e.message); }
+    finally { setBusy(false); }
+  }
+  async function reactivateSub() {
+    setBusy(true); setMsg(null);
+    try { const r = await apiPost("/billing/reactivate"); setMsg(r.message || "Subscription reactivated."); reload(); }
+    catch (e: any) { setMsg(e.message); }
+    finally { setBusy(false); }
+  }
 
   if (loading || !data) return <Spinner />;
   const usage = data.usage || {};
   const planObj = data.plan || {};
+  const cancelPending = !!data.subscription?.cancel_at_period_end;
+  const hasSubscription = !!data.subscription?.stripe_subscription_id;
 
   return (
     <div>
@@ -76,9 +90,23 @@ export default function BillingPage() {
             Status: {data.organization?.status}
             {data.organization?.trial_ends_at && ` · trial ends ${new Date(data.organization.trial_ends_at).toLocaleDateString()}`}
           </div>
-          <div className="mt-5 flex gap-2">
+          {cancelPending && (
+            <p className="mt-2 rounded-lg border border-warn/30 bg-warn/10 px-3 py-2 text-xs text-warn">
+              Cancellation scheduled — access continues until
+              {data.subscription?.current_period_end
+                ? ` ${new Date(data.subscription.current_period_end).toLocaleDateString()}.`
+                : " the end of the billing period."}
+            </p>
+          )}
+          <div className="mt-5 flex flex-wrap gap-2">
             <Button onClick={() => document.getElementById("change-plan")?.scrollIntoView({ behavior: "smooth" })}>Upgrade</Button>
             <Button variant="ghost" onClick={portal} disabled={busy}>Manage in portal</Button>
+            {hasSubscription && !cancelPending && (
+              <Button variant="danger" onClick={cancelSub} disabled={busy}>Cancel subscription</Button>
+            )}
+            {cancelPending && (
+              <Button variant="soft" onClick={reactivateSub} disabled={busy}>Reactivate</Button>
+            )}
           </div>
         </Card>
 

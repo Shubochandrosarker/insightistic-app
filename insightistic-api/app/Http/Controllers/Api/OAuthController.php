@@ -84,10 +84,22 @@ class OAuthController extends Controller
                 'last_login_at'     => now(),
             ]);
 
-            $org = $this->provisioner->bootstrapOrganization($user, $this->deriveOrgName($oauthUser, $email));
+            $rawLicenseKey = null;
+            $org = $this->provisioner->bootstrapOrganization($user, $this->deriveOrgName($oauthUser, $email), $rawLicenseKey);
 
             try {
                 Mail::to($user->email)->send(new WelcomeMail($user, $org));
+            } catch (\Throwable $e) {
+                report($e);
+            }
+            try {
+                // OAuth signups never see a register response, so the one-time
+                // key travels in the trial-started email (masked everywhere else).
+                app(\App\Services\LifecycleMailer::class)->send(
+                    $org->fresh(['plan', 'owner']),
+                    'trial_started',
+                    ['license_key' => $rawLicenseKey],
+                );
             } catch (\Throwable $e) {
                 report($e);
             }

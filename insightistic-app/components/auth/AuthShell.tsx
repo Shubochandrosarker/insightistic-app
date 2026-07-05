@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 
 const stats = [
   { big: "3 min", small: "to connect" },
-  { big: "14 days", small: "free trial" },
+  { big: "7 days", small: "free trial" },
   { big: "White-label", small: "for agencies" },
 ];
 

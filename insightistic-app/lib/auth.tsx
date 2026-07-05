@@ -56,6 +56,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setToken(res.token);
     setUser(res.user);
     setOrgs(res.organization ? [{ ...res.organization, role: "owner" }] : []);
+    // The raw license key appears exactly once — in this response. Stash it in
+    // sessionStorage so the Licenses page can display it a single time; it is
+    // cleared the moment the user confirms they saved it.
+    if (res.license_key && typeof window !== "undefined") {
+      sessionStorage.setItem("ins_license_key_once", res.license_key);
+    }
   }
 
   /** Adopt a token issued by the OAuth callback and hydrate the session. */

@@ -4,13 +4,13 @@
         <p>Your organization <strong>{{ $org->name }}</strong> is ready on Insightistic.</p>
         <p>Next steps to see your business clearly:</p>
         <ol style="padding-left:18px;">
-            <li>Add your first website in the dashboard.</li>
-            <li>Install the Insightistic Connector plugin and paste your token.</li>
-            <li>Run the first sync — your dashboard fills with revenue, customers and AI insights.</li>
+            <li>Install the free Insightistic plugin on your WordPress site.</li>
+            <li>Paste your license key under <strong>Insightistic &rarr; License</strong> and click Activate.</li>
+            <li>Your site connects automatically — revenue, customers and AI insights fill in.</li>
         </ol>
         <p style="margin:18px 0;">
             <a href="{{ $appUrl }}/dashboard" style="background:#2563EB;color:#fff;padding:11px 18px;border-radius:8px;text-decoration:none;">Open your dashboard</a>
         </p>
-        <p style="color:#9aa3b2;font-size:12px;">You're on a 14-day trial. No card required to explore.</p>
+        <p style="color:#9aa3b2;font-size:12px;">You're on a {{ config('insightistic.trial_days', 7) }}-day trial. No card required to explore.</p>
     </div>
 </div>

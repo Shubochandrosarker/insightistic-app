@@ -56,6 +56,14 @@ class StripeService
         return $session->url;
     }
 
+    /** Flip cancel-at-period-end (cancel / reactivate without leaving the app). */
+    public function setCancelAtPeriodEnd(string $subscriptionId, bool $cancel): void
+    {
+        $this->client()->subscriptions->update($subscriptionId, [
+            'cancel_at_period_end' => $cancel,
+        ]);
+    }
+
     public function portalUrl(string $customerId, string $returnUrl): string
     {
         $session = $this->client()->billingPortal->sessions->create([

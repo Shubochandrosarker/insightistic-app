@@ -40,7 +40,7 @@ class DemoSeeder extends Seeder
             'owner_user_id' => $user->id,
             'plan_id'       => $plan?->id,
             'status'        => 'active',
-            'trial_ends_at' => now()->addDays(14),
+            'trial_ends_at' => now()->addDays((int) config('insightistic.trial_days', 7)),
         ]);
         $org->users()->attach($user->id, ['role' => 'owner']);
         UsageCounter::create(['organization_id' => $org->id, 'period' => now()->format('Y-m')]);

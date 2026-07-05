@@ -1,8 +1,9 @@
 "use client";
 import {
   LayoutGrid, Sparkles, TrendingUp, Package, Users, ShoppingCart, Mail,
-  Bell, FileText, Activity, Globe, UsersRound, CreditCard, Settings,
+  Bell, FileText, Activity, Globe, UsersRound, CreditCard, Settings, KeyRound,
 } from "lucide-react";
+import { TrialBanner } from "@/components/dashboard/TrialBanner";
 import { Protected } from "@/components/dashboard/Protected";
 import { Topbar } from "@/components/dashboard/Topbar";
 import { PlanCard } from "@/components/dashboard/PlanCard";
@@ -23,6 +24,7 @@ const NAV: NavItem[] = [
   { href: "/dashboard/alerts", label: "Alerts", icon: Bell },
   { href: "/dashboard/reports", label: "Reports", icon: FileText },
   { href: "/dashboard/site-health", label: "Site Health", icon: Activity },
+  { href: "/dashboard/licenses", label: "Licenses", icon: KeyRound },
   { href: "/dashboard/branding", label: "White Label", icon: Globe },
   { href: "/dashboard/team", label: "Team", icon: UsersRound },
   { href: "/dashboard/billing", label: "Billing", icon: CreditCard },
@@ -46,6 +48,7 @@ const MORE: NavItem[] = [
   { href: "/dashboard/emails", label: "Emails", icon: Mail },
   { href: "/dashboard/alerts", label: "Alerts", icon: Bell },
   { href: "/dashboard/site-health", label: "Site Health", icon: Activity },
+  { href: "/dashboard/licenses", label: "Licenses", icon: KeyRound },
   { href: "/dashboard/branding", label: "White Label", icon: Globe },
   { href: "/dashboard/team", label: "Team", icon: UsersRound },
   { href: "/dashboard/billing", label: "Billing", icon: CreditCard },
@@ -66,6 +69,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           mobileHeader={<DashboardMobileControls />}
           onLogout={logout}
         >
+          <TrialBanner />
           {children}
         </AppShell>
       </DashboardProvider>

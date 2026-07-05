@@ -49,7 +49,8 @@ export default function Register() {
     setBusy(true);
     try {
       await register({ ...f, name: f.name.trim(), email: f.email.trim() });
-      router.push(plan ? `/dashboard/billing?plan=${plan}` : "/dashboard");
+      // Land on Licenses first: the one-time key card is the first onboarding step.
+      router.push(plan ? `/dashboard/billing?plan=${plan}` : "/dashboard/licenses");
     } catch (e: any) {
       setErr(e.message || "Sign up failed");
       setBusy(false);
@@ -59,7 +60,7 @@ export default function Register() {
   return (
     <AuthShell
       title="Start your free trial"
-      subtitle="14 days free. No credit card required."
+      subtitle="7 days free. No credit card required."
       footer={
         <>
           Already have an account?{" "}

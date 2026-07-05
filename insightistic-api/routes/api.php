@@ -16,8 +16,11 @@ use App\Http\Controllers\Api\Connector\HandshakeController;
 use App\Http\Controllers\Api\Connector\PingController;
 use App\Http\Controllers\Api\Connector\SyncController;
 use App\Http\Controllers\Api\InsightController;
+use App\Http\Controllers\Api\LicenseController;
+use App\Http\Controllers\Api\NotificationController;
 use App\Http\Controllers\Api\OAuthController;
 use App\Http\Controllers\Api\OrganizationController;
+use App\Http\Controllers\Api\PluginLicenseController;
 use App\Http\Controllers\Api\ReportController;
 use App\Http\Controllers\Api\SiteController;
 use App\Http\Controllers\Api\TeamController;
@@ -32,12 +35,12 @@ use Illuminate\Support\Facades\Route;
 | visible — uncomment as each week's controller lands.
 */
 
-// ---- Public auth ----------------------------------------------------------
+// ---- Public auth (throttle:auth = brute-force protection) -----------------
 Route::prefix('auth')->group(function () {
-    Route::post('register', [AuthController::class, 'register']);
-    Route::post('login', [AuthController::class, 'login']);
-    Route::post('forgot-password', [AuthController::class, 'forgotPassword']);
-    Route::post('reset-password', [AuthController::class, 'resetPassword']);
+    Route::post('register', [AuthController::class, 'register'])->middleware('throttle:auth');
+    Route::post('login', [AuthController::class, 'login'])->middleware('throttle:auth');
+    Route::post('forgot-password', [AuthController::class, 'forgotPassword'])->middleware('throttle:auth');
+    Route::post('reset-password', [AuthController::class, 'resetPassword'])->middleware('throttle:auth');
 
     // Social login (Google / Microsoft / GitHub). Buttons appear in the SPA
     // only for providers returned by the `oauth/providers` endpoint.
@@ -64,6 +67,18 @@ Route::middleware(['auth:sanctum', 'tenant'])->group(function () {
     Route::get('billing/subscription', [BillingController::class, 'subscription'])->middleware('role:owner,admin');
     Route::post('billing/checkout', [BillingController::class, 'checkout'])->middleware('role:owner');
     Route::post('billing/portal', [BillingController::class, 'portal'])->middleware('role:owner');
+    Route::post('billing/cancel', [BillingController::class, 'cancel'])->middleware('role:owner');
+    Route::post('billing/reactivate', [BillingController::class, 'reactivate'])->middleware('role:owner');
+
+    // Licenses tab (spec §2). Raw keys only ever appear in regenerate/register responses.
+    Route::get('licenses', [LicenseController::class, 'index']);
+    Route::post('licenses/{license}/regenerate', [LicenseController::class, 'regenerate'])->middleware('role:owner');
+    Route::get('licenses/{license}/activations', [LicenseController::class, 'activations']);
+    Route::delete('activations/{activation}', [LicenseController::class, 'deactivateActivation'])->middleware('role:owner,admin');
+
+    // Notifications / conversion prompts.
+    Route::get('notifications', [NotificationController::class, 'index']);
+    Route::patch('notifications/{notification}', [NotificationController::class, 'update']);
 
     // White-label (Week 5) — read for owner/admin; writes owner-only + plan-gated.
     Route::get('brand-settings', [BrandSettingsController::class, 'show'])->middleware('role:owner,admin');
@@ -126,8 +141,22 @@ Route::prefix('admin')->middleware(['auth:sanctum', 'super_admin'])->group(funct
     Route::get('usage', [AdminUsageController::class, 'index']);
 });
 
+// ---- Plugin license endpoints (spec §4) ------------------------------------
+// activate is authenticated BY the license key itself (public + throttled);
+// everything after activation is HMAC-signed with the connector credentials
+// issued in the activate response.
+Route::prefix('plugin')->group(function () {
+    Route::post('activate', [PluginLicenseController::class, 'activate'])->middleware('throttle:license');
+
+    Route::middleware(['connector.auth', 'throttle:license'])->group(function () {
+        Route::post('validate', [PluginLicenseController::class, 'validate']);
+        Route::get('features', [PluginLicenseController::class, 'features']);
+        Route::post('deactivate', [PluginLicenseController::class, 'deactivate']);
+    });
+});
+
 // ---- Connector (WordPress plugin, authed by HMAC signature) ---------------
-Route::prefix('connector/v1')->middleware('connector.auth')->group(function () {
+Route::prefix('connector/v1')->middleware(['connector.auth', 'throttle:connector'])->group(function () {
     Route::post('ping', [PingController::class, 'ping']);
     Route::post('handshake', [HandshakeController::class, 'handshake']);
     Route::post('site-health', [SyncController::class, 'siteHealth']);

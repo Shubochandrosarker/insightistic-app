@@ -18,6 +18,16 @@ RUN composer create-project laravel/laravel /var/www/html "12.*" --no-interactio
     && composer require laravel/sanctum barryvdh/laravel-dompdf stripe/stripe-php \
         laravel/socialite socialiteproviders/microsoft --no-interaction --no-scripts
 
+# --no-scripts above (so the build doesn't need a live DB connection) skips
+# Laravel's package discovery/install steps, which normally register the
+# `sanctum` auth guard. Without this, every auth:sanctum route -- including
+# all of /api/admin/* -- throws "Auth guard [sanctum] is not defined." at
+# runtime. Discover packages and patch the guard in explicitly.
+COPY docker/api/patch-auth-guard.php /tmp/patch-auth-guard.php
+RUN php artisan package:discover --ansi \
+    && php /tmp/patch-auth-guard.php \
+    && rm /tmp/patch-auth-guard.php
+
 COPY insightistic-api/ /tmp/insightistic-api/
 RUN cp -a /tmp/insightistic-api/. /var/www/html/ \
     && rm -rf /tmp/insightistic-api \

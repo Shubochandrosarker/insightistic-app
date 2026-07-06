@@ -15,7 +15,7 @@ class RuleProvider implements AiProvider
         return 'rule-based-v1';
     }
 
-    public function generate(string $system, array $context): ?array
+    public function generate(string $system, array $context, ?int $identityId = null): ?array
     {
         $m       = $context['metrics'] ?? [];
         $deltas  = $context['deltas'] ?? [];

@@ -2,13 +2,29 @@
 
 return [
     'ai' => [
-        // 'openai' uses the OpenAI-compatible API; 'rule' is a $0 deterministic
-        // summarizer (no key, no spend) — great for testing and as a quota fallback.
+        // 'openai' uses the OpenAI-compatible API; 'wpistic_gateway' calls the
+        // shared WordPressistic AI Brain gateway instead; 'rule' is a $0
+        // deterministic summarizer (no key, no spend) — great for testing and
+        // as a quota fallback. Falls back to 'rule' if the chosen provider
+        // isn't fully configured (see AppServiceProvider::register()).
         'provider' => env('INSIGHTISTIC_AI_PROVIDER', 'openai'),
         'model'    => env('INSIGHTISTIC_AI_MODEL', 'gpt-4o-mini'),
         'api_key'  => env('OPENAI_API_KEY'),
         'base_url' => env('OPENAI_BASE_URL', 'https://api.openai.com/v1'),
         'timeout'  => (int) env('INSIGHTISTIC_AI_TIMEOUT', 60),
+    ],
+
+    // Shared WordPressistic AI Brain gateway (wpistic-ai-gateway Worker).
+    // Select it with INSIGHTISTIC_AI_PROVIDER=wpistic_gateway above.
+    'wpistic_gateway' => [
+        'base_url'      => env('WPISTIC_GATEWAY_URL', 'https://wpistic-ai-gateway.wordpressistic.workers.dev'),
+        'shared_secret' => env('WPISTIC_GATEWAY_SHARED_SECRET'),
+        'agent'         => env('WPISTIC_GATEWAY_AGENT', 'analytics-pro'),
+        // Tier asserted to the gateway for rate limits (free|starter|pro|agency).
+        // Insightistic's own license/feature gate already decides whether an
+        // org may use AI insights at all before this is ever called.
+        'tier'          => env('WPISTIC_GATEWAY_TIER', 'agency'),
+        'timeout'       => (int) env('WPISTIC_GATEWAY_TIMEOUT', 30),
     ],
 
     'reports' => [

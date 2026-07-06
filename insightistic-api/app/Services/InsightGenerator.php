@@ -28,7 +28,7 @@ TXT;
     public function summarize(Site $site, DateRange $range): ?array
     {
         $context = $this->metrics->bundle($site, $range);
-        $raw = $this->provider->generate(self::SYSTEM, $context);
+        $raw = $this->provider->generate(self::SYSTEM, $context, $site->organization_id);
 
         if (! $raw) {
             return null;

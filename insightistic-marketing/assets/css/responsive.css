@@ -55,7 +55,7 @@
 	* { animation-duration: 0.001ms !important; transition-duration: 0.001ms !important; }
 }
 
-/* Dark-by-default already; provide a light-content fallback for print. */
+/* Light-by-default already; keep the print stylesheet explicit anyway. */
 @media print {
 	.ins-header, .ins-footer, .ins-hero__actions, .ins-burger { display: none !important; }
 	body { background: #fff; color: #000; }

@@ -5,6 +5,7 @@ namespace App\Providers;
 use App\Services\Ai\AiProvider;
 use App\Services\Ai\OpenAiProvider;
 use App\Services\Ai\RuleProvider;
+use App\Services\Ai\WpisticGatewayProvider;
 use App\Support\Tenancy;
 use Illuminate\Support\ServiceProvider;
 
@@ -15,14 +16,18 @@ class AppServiceProvider extends ServiceProvider
         // One Tenancy context per request.
         $this->app->scoped(Tenancy::class, fn () => new Tenancy());
 
-        // AI provider: OpenAI when a key is configured, else the $0 rule-based
-        // fallback so insights/reports work end-to-end without any AI spend.
+        // AI provider: OpenAI or the wpistic-ai-gateway brain when fully
+        // configured, else the $0 rule-based fallback so insights/reports
+        // work end-to-end without any AI spend.
         $this->app->bind(AiProvider::class, function () {
             $cfg = config('insightistic.ai');
-            if (($cfg['provider'] ?? 'openai') === 'openai' && ! empty($cfg['api_key'])) {
-                return new OpenAiProvider($cfg);
-            }
-            return new RuleProvider();
+            return match ($cfg['provider'] ?? 'openai') {
+                'wpistic_gateway' => ! empty(config('insightistic.wpistic_gateway.shared_secret'))
+                    ? new WpisticGatewayProvider(config('insightistic.wpistic_gateway'))
+                    : new RuleProvider(),
+                'openai' => ! empty($cfg['api_key']) ? new OpenAiProvider($cfg) : new RuleProvider(),
+                default => new RuleProvider(),
+            };
         });
     }
 

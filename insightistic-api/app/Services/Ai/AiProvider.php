@@ -10,7 +10,8 @@ namespace App\Services\Ai;
  */
 interface AiProvider
 {
-    public function generate(string $system, array $context): ?array;
+    /** $identityId: organization id, for providers that meter/rate-limit per caller. */
+    public function generate(string $system, array $context, ?int $identityId = null): ?array;
 
     public function model(): string;
 }

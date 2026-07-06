@@ -18,7 +18,7 @@ class OpenAiProvider implements AiProvider
         return $this->config['model'] ?? 'gpt-4o-mini';
     }
 
-    public function generate(string $system, array $context): ?array
+    public function generate(string $system, array $context, ?int $identityId = null): ?array
     {
         try {
             $response = Http::withToken($this->config['api_key'])

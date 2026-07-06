@@ -149,6 +149,12 @@ INSIGHTISTIC_AI_PROVIDER=openai
 INSIGHTISTIC_AI_MODEL=gpt-4o-mini
 OPENAI_API_KEY=
 
+# Or set INSIGHTISTIC_AI_PROVIDER=wpistic_gateway to use the shared
+# WordPressistic AI Brain gateway instead of OpenAI directly:
+WPISTIC_GATEWAY_URL=https://wpistic-ai-gateway.wordpressistic.workers.dev
+WPISTIC_GATEWAY_SHARED_SECRET=
+WPISTIC_GATEWAY_AGENT=analytics-pro
+
 # Mail (for emailing reports)
 MAIL_MAILER=smtp
 MAIL_FROM_ADDRESS=reports@insightistic.com

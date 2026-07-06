@@ -21,7 +21,7 @@
 				{ "slug": "brand-2", "color": "#00D084", "name": "Brand 2" },
 				{ "slug": "mint", "color": "#86DBB8", "name": "Mint" },
 				{ "slug": "violet", "color": "#6C5CE7", "name": "Violet" },
-				{ "slug": "paper", "color": "#F4F8F6", "name": "Paper" },
+				{ "slug": "paper", "color": "#EEF4F1", "name": "Paper" },
 				{ "slug": "good", "color": "#00D084", "name": "Good" },
 				{ "slug": "warn", "color": "#F6C453", "name": "Warn" },
 				{ "slug": "bad", "color": "#FF6B6B", "name": "Bad" }
@@ -67,7 +67,7 @@
 		}
 	},
 	"styles": {
-		"color": { "background": "#0B1110", "text": "#E6EFEA" },
+		"color": { "background": "#EEF4F1", "text": "#0B1110" },
 		"typography": { "fontFamily": "var(--wp--preset--font-family--system)", "lineHeight": "1.6" },
 		"elements": {
 			"link": { "color": { "text": "#00D084" } },

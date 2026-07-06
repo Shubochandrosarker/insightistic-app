@@ -15,19 +15,19 @@
 
 /* Core button defaults that match the theme. */
 .wp-block-button__link { border-radius: 0.7rem; font-weight: 600; }
-.wp-block-button.is-style-outline .wp-block-button__link { border-color: rgba(255, 255, 255, 0.18); color: #fff; }
+.wp-block-button.is-style-outline .wp-block-button__link { border-color: rgba(11, 17, 16, 0.18); color: #0B1110; }
 
 /* Pattern: CTA band */
-.ins-pattern-cta { border: 1px solid rgba(255, 255, 255, 0.12); border-radius: 22px; }
-.ins-pattern-cta h2 { color: #fff; }
+.ins-pattern-cta { border: 1px solid rgba(11, 17, 16, 0.12); border-radius: 22px; }
+.ins-pattern-cta h2 { color: #0B1110; }
 
 /* Pattern: feature grid */
-.ins-pattern-features .wp-block-column { background: #14211F; border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 16px; padding: 1.4rem; }
-.ins-pattern-features h3 { color: #fff; }
+.ins-pattern-features .wp-block-column { background: #FFFFFF; border: 1px solid rgba(11, 17, 16, 0.08); border-radius: 16px; padding: 1.4rem; }
+.ins-pattern-features h3 { color: #0B1110; }
 
-/* Editor-side: keep dark canvas readable. */
-.editor-styles-wrapper { background: #0B1110; color: #E6EFEA; }
-.editor-styles-wrapper h1, .editor-styles-wrapper h2, .editor-styles-wrapper h3 { color: #fff; }
+/* Editor-side: match the light front-end canvas. */
+.editor-styles-wrapper { background: #EEF4F1; color: #0B1110; }
+.editor-styles-wrapper h1, .editor-styles-wrapper h2, .editor-styles-wrapper h3 { color: #0B1110; }
 
 /* Wide/full alignment safety. */
 .alignwide { max-width: 1180px; margin-inline: auto; }

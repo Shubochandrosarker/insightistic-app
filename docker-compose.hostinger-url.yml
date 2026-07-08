@@ -1,0 +1,121 @@
+name: insightistic
+
+x-api-env: &api_env
+  APP_ENV: production
+  APP_DEBUG: "false"
+  APP_KEY: ${APP_KEY}
+  APP_URL: https://api.insightistic.com
+  INSIGHTISTIC_APP_URL: https://app.insightistic.com
+  INSIGHTISTIC_TRIAL_DAYS: "7"
+
+  DB_CONNECTION: pgsql
+  DB_HOST: db
+  DB_PORT: "5432"
+  DB_DATABASE: insightistic
+  DB_USERNAME: insightistic
+  DB_PASSWORD: ${DB_PASSWORD}
+
+  QUEUE_CONNECTION: database
+  CACHE_STORE: database
+  SESSION_DRIVER: database
+
+  CORS_ALLOWED_ORIGINS: https://app.insightistic.com,https://insightistic.com
+
+  MAIL_MAILER: log
+  MAIL_FROM_ADDRESS: reports@insightistic.com
+  MAIL_FROM_NAME: Insightistic
+
+  INSIGHTISTIC_AI_PROVIDER: rule
+  OPENAI_API_KEY: ""
+
+  OAUTH_REDIRECT_BASE: https://app.insightistic.com
+
+  RUN_MIGRATIONS: "true"
+  SEED_PLANS: "true"
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: insightistic
+      POSTGRES_USER: insightistic
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U insightistic -d insightistic" ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  api:
+    image: ghcr.io/shubochandrosarker/insightistic-app/api:latest
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      <<: *api_env
+    volumes:
+      - api_storage:/var/www/html/storage/app
+    labels:
+      - com.centurylinklabs.watchtower.enable=true
+      - traefik.enable=true
+      - traefik.http.routers.insightistic-api.rule=Host(`api.insightistic.com`)
+      - traefik.http.routers.insightistic-api.entrypoints=websecure
+      - traefik.http.routers.insightistic-api.tls=true
+      - traefik.http.services.insightistic-api.loadbalancer.server.port=8000
+
+  queue:
+    image: ghcr.io/shubochandrosarker/insightistic-app/api:latest
+    restart: unless-stopped
+    command: [ "php", "artisan", "queue:work", "--sleep=3", "--tries=3", "--max-time=3600" ]
+    depends_on:
+      api:
+        condition: service_started
+    environment:
+      <<: *api_env
+      RUN_MIGRATIONS: "false"
+      SEED_PLANS: "false"
+    volumes:
+      - api_storage:/var/www/html/storage/app
+    labels:
+      - com.centurylinklabs.watchtower.enable=true
+
+  scheduler:
+    image: ghcr.io/shubochandrosarker/insightistic-app/api:latest
+    restart: unless-stopped
+    command: [ "php", "artisan", "schedule:work" ]
+    depends_on:
+      api:
+        condition: service_started
+    environment:
+      <<: *api_env
+      RUN_MIGRATIONS: "false"
+      SEED_PLANS: "false"
+    volumes:
+      - api_storage:/var/www/html/storage/app
+    labels:
+      - com.centurylinklabs.watchtower.enable=true
+
+  app:
+    image: ghcr.io/shubochandrosarker/insightistic-app/app:latest
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_started
+    environment:
+      NODE_ENV: production
+      API_PROXY_TARGET: http://api:8000
+    labels:
+      - com.centurylinklabs.watchtower.enable=true
+      - traefik.enable=true
+      - traefik.http.routers.insightistic-app.rule=Host(`app.insightistic.com`)
+      - traefik.http.routers.insightistic-app.entrypoints=websecure
+      - traefik.http.routers.insightistic-app.tls=true
+      - traefik.http.services.insightistic-app.loadbalancer.server.port=3000
+
+volumes:
+  pgdata:
+  api_storage:

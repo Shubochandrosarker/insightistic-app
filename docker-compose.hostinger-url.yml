@@ -3,7 +3,7 @@ name: insightistic
 x-api-env: &api_env
   APP_ENV: production
   APP_DEBUG: "false"
-  APP_KEY: ${APP_KEY}
+  APP_KEY: base64:WkabxlKyJvbSVsSHCwAf3Fv88UqY8BOdkfRAnwAwZpo=
   APP_URL: https://api.insightistic.com
   INSIGHTISTIC_APP_URL: https://app.insightistic.com
   INSIGHTISTIC_TRIAL_DAYS: "7"
@@ -13,7 +13,7 @@ x-api-env: &api_env
   DB_PORT: "5432"
   DB_DATABASE: insightistic
   DB_USERNAME: insightistic
-  DB_PASSWORD: ${DB_PASSWORD}
+  DB_PASSWORD: 7281cb7aff2cbf4a75b6e38e0e6a81b05ce1939df813e8d1cde1c477c3119097
 
   QUEUE_CONNECTION: database
   CACHE_STORE: database
@@ -40,7 +40,7 @@ services:
     environment:
       POSTGRES_DB: insightistic
       POSTGRES_USER: insightistic
-      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_PASSWORD: 7281cb7aff2cbf4a75b6e38e0e6a81b05ce1939df813e8d1cde1c477c3119097
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:

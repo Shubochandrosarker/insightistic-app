@@ -36,6 +36,19 @@ providers — see `docs/SOCIAL-LOGIN.md`.
 
 Use `docker-compose.hostinger.yml` in Hostinger Docker Manager. Set the values from `.env.docker.example` in the Docker Manager environment panel before deploying, especially `APP_KEY`, `DB_PASSWORD`, mail settings, Stripe keys, and `OPENAI_API_KEY` if you want OpenAI instead of the built-in rule provider.
 
+For a VPS that already runs Traefik and multiple projects, use the GHCR-based
+production kit instead:
+
+- GitHub Actions workflow: `.github/workflows/docker-ghcr.yml`
+- VPS compose file: `docker-compose.prod.yml`
+- VPS env template: `.env.production.example`
+- Internal nginx routing: `nginx/default.conf`
+- Full runbook: `docs/VPS-GHCR-DEPLOYMENT.md`
+
+The production compose file does not bind host port 80. Traefik routes
+`app.insightistic.com` and `api.insightistic.com` to the internal nginx service
+over the shared Docker network.
+
 ## Production Shape
 
 - Frontend: `https://app.insightistic.com`

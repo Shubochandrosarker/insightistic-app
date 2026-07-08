@@ -10,7 +10,9 @@ COPY insightistic-app/ ./
 # Empty by default => proxy mode (browser calls same-origin /api, forwarded by
 # Next.js to API_PROXY_TARGET at runtime). Set to an API URL for direct mode.
 ARG NEXT_PUBLIC_API_URL=
+ARG API_PROXY_TARGET=http://api:8000
 ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
+ENV API_PROXY_TARGET=${API_PROXY_TARGET}
 RUN npm run build && npm prune --omit=dev
 
 FROM node:20-alpine AS runner
@@ -18,6 +20,7 @@ FROM node:20-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
+ENV API_PROXY_TARGET=http://api:8000
 
 COPY --from=deps /app/package.json ./package.json
 COPY --from=deps /app/node_modules ./node_modules

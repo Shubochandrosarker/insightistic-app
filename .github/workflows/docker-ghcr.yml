@@ -1,0 +1,83 @@
+name: Build and Publish Docker Images to GHCR
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/docker-ghcr.yml"
+      - "docker/**"
+      - "insightistic-app/**"
+      - "insightistic-api/**"
+      - "docker-compose.prod.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: insightistic-docker-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Prepare image namespace
+        id: images
+        shell: bash
+        run: |
+          owner="${GITHUB_REPOSITORY_OWNER,,}"
+          repo="${GITHUB_REPOSITORY#*/}"
+          repo="${repo,,}"
+          echo "namespace=ghcr.io/${owner}/${repo}" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push frontend image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./docker/app/Dockerfile
+          platforms: linux/amd64
+          push: true
+          build-args: |
+            NEXT_PUBLIC_API_URL=
+            API_PROXY_TARGET=http://api:8000
+          tags: |
+            ${{ steps.images.outputs.namespace }}/app:latest
+            ${{ steps.images.outputs.namespace }}/app:${{ github.sha }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.title=Insightistic Frontend
+          cache-from: type=gha,scope=insightistic-app
+          cache-to: type=gha,mode=max,scope=insightistic-app
+
+      - name: Build and push API image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./docker/api/Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: |
+            ${{ steps.images.outputs.namespace }}/api:latest
+            ${{ steps.images.outputs.namespace }}/api:${{ github.sha }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.title=Insightistic API
+          cache-from: type=gha,scope=insightistic-api
+          cache-to: type=gha,mode=max,scope=insightistic-api

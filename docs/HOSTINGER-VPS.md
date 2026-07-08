@@ -1,5 +1,9 @@
 # Hostinger VPS Deployment Runbook
 
+For the current Docker/GHCR deployment path under `/opt/stacks/insightistic`,
+use `docs/VPS-GHCR-DEPLOYMENT.md`. This older runbook documents the manual
+PHP-FPM/PM2 deployment shape.
+
 This repo is ready for Git-based deployment, but the API is a Laravel overlay. Do not run `composer install` directly inside `insightistic-api/` until it has been merged into a real Laravel application.
 
 ## 1. Server Packages

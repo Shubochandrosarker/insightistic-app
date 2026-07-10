@@ -3,6 +3,14 @@
 **Date:** 2026-07-05
 **Scope:** `insightistic-app` repo (Laravel API + Next.js app + connector plugin + marketing theme) and the standalone `insightistic` WordPress plugin repo, audited against the Insightistic product specification (free plugin → license key → SaaS unlock, 7-day trial, automated lifecycle emails, conversion-focused dashboard).
 
+> **Superseded, partially.** The gap table below (§1) predates the license-key
+> system, feature gate, and auth rate limiting shipped afterward — all three
+> now exist in `insightistic-api` (`LicenseService`, `PluginLicenseController`,
+> `AppServiceProvider`'s `RateLimiter::for('auth'|'license'|'connector')`).
+> Treat this document as a historical planning snapshot, not a current gap
+> list; verify against the actual code before re-building anything it marks
+> "missing."
+
 ---
 
 ## 1. Executive summary
@@ -30,7 +38,7 @@
 
 ### 2.1 API (`insightistic-api`, Laravel 12)
 
-- **Auth:** Sanctum bearer tokens; register/login/forgot/reset; Socialite OAuth (Google/Microsoft/GitHub). Register → `AccountProvisioner::bootstrapOrganization()` → org + owner + **14-day trial** + starter plan + usage counter.
+- **Auth:** Sanctum bearer tokens; register/login/forgot/reset; Socialite OAuth (Google/Microsoft/GitHub). Register → `AccountProvisioner::bootstrapOrganization()` → org + owner + **7-day trial** + starter plan + usage counter.
 - **Multi-tenancy:** `tenant` middleware + global org scope (`BelongsToOrganization`); `site.access`, `role`, `super_admin` middleware all present.
 - **Tables (19):** users, plans, organizations, organization_users, sites, site_user_access, subscriptions, usage_counters, brand_settings, sync_logs, wc_orders, wc_order_items, wc_products, wc_customers, metric_snapshots, alerts, ai_insights, client_reports, report_schedules (+ personal_access_tokens).
 - **Plans seeded:** starter $9/$90 (1 site), growth $29/$290 (3), business $79/$790 (10), agency $199/$1990 (30, white-label), agency_pro $399/$3990 (100, white-label + custom domain).

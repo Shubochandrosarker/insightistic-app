@@ -22,5 +22,18 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions) {
-        //
+        // Never let a database error leak schema/table/SQL details to an API
+        // client — regardless of APP_DEBUG, which can be misconfigured on any
+        // given environment. Laravel's default debug-mode renderer would
+        // otherwise return the raw SQLSTATE message (including file paths and
+        // the full query) straight to the browser.
+        $exceptions->render(function (\Illuminate\Database\QueryException $e, \Illuminate\Http\Request $request) {
+            if ($request->expectsJson() || $request->is('api/*')) {
+                report($e);
+
+                return response()->json([
+                    'message' => 'Something went wrong. Please try again.',
+                ], 500);
+            }
+        });
     })->create();

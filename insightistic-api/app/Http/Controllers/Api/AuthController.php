@@ -25,6 +25,12 @@ class AuthController extends Controller
      */
     public function register(Request $request)
     {
+        // Normalize before validation so the uniqueness check and the stored
+        // row agree — otherwise "Foo@x.com" and "foo@x.com" would pass
+        // `unique:users,email` as distinct, then collide once User's email
+        // mutator lowercases both on save.
+        $request->merge(['email' => strtolower(trim((string) $request->input('email')))]);
+
         $data = $request->validate([
             'name'              => ['required', 'string', 'max:120'],
             'email'             => ['required', 'email', 'max:190', 'unique:users,email'],
@@ -34,12 +40,19 @@ class AuthController extends Controller
 
         $rawLicenseKey = null;
 
-        [$user, $org] = DB::transaction(function () use ($data, &$rawLicenseKey) {
+        // If this is the designated platform owner's email (SUPER_ADMIN_EMAIL),
+        // grant super admin on first signup so /admin is reachable without a
+        // separate manual `artisan insightistic:make-super-admin` step.
+        $superAdminEmail = strtolower(trim((string) config('insightistic.super_admin_email', '')));
+        $isSuperAdmin    = $superAdminEmail !== '' && $data['email'] === $superAdminEmail;
+
+        [$user, $org] = DB::transaction(function () use ($data, $isSuperAdmin, &$rawLicenseKey) {
             $user = User::create([
-                'name'     => $data['name'],
-                'email'    => $data['email'],
-                'password' => $data['password'], // hashed cast
-                'status'   => 'active',
+                'name'           => $data['name'],
+                'email'          => $data['email'],
+                'password'       => $data['password'], // hashed cast
+                'status'         => 'active',
+                'is_super_admin' => $isSuperAdmin,
             ]);
 
             $org = $this->provisioner->bootstrapOrganization($user, $data['organization_name'], $rawLicenseKey);
@@ -66,7 +79,7 @@ class AuthController extends Controller
 
         return response()->json([
             'token'        => $token,
-            'user'         => $user->only(['id', 'name', 'email']),
+            'user'         => $user->only(['id', 'name', 'email', 'is_super_admin']),
             'organization' => $org->only(['id', 'name', 'slug', 'status', 'trial_ends_at']),
             // Shown ONCE. The dashboard onboarding displays + copies it; only a
             // masked version exists anywhere after this response.
@@ -113,6 +126,8 @@ class AuthController extends Controller
 
     public function login(Request $request)
     {
+        $request->merge(['email' => strtolower(trim((string) $request->input('email')))]);
+
         $data = $request->validate([
             'email'    => ['required', 'email'],
             'password' => ['required', 'string'],

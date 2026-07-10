@@ -10,18 +10,17 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 $steps = array(
-	array( 'n' => '1', 'title' => __( 'Create your account', 'insightistic-marketing' ), 'text' => __( 'Sign up and start a 14-day free trial — no credit card.', 'insightistic-marketing' ) ),
-	array( 'n' => '2', 'title' => __( 'Add a site & copy the token', 'insightistic-marketing' ), 'text' => __( 'Add your store in the dashboard and copy the secure connector token.', 'insightistic-marketing' ) ),
-	array( 'n' => '3', 'title' => __( 'Install the connector plugin', 'insightistic-marketing' ), 'text' => __( 'Install the Insightistic connector, paste the API URL and token, connect.', 'insightistic-marketing' ) ),
-	array( 'n' => '4', 'title' => __( 'Run the first sync', 'insightistic-marketing' ), 'text' => __( 'Orders, products and customers import securely — and your dashboard fills in.', 'insightistic-marketing' ) ),
+	array( 'n' => '1', 'title' => __( 'Create your account', 'insightistic-marketing' ), 'text' => __( 'Sign up free — no credit card, free forever.', 'insightistic-marketing' ) ),
+	array( 'n' => '2', 'title' => __( 'Paste your license key', 'insightistic-marketing' ), 'text' => __( 'Already running the free Insightistic plugin? Paste the key from your dashboard into Insightistic → License — that\'s the whole setup.', 'insightistic-marketing' ) ),
+	array( 'n' => '3', 'title' => __( 'Watch your dashboard fill in', 'insightistic-marketing' ), 'text' => __( 'Orders, products, customers and site health sync automatically — no separate connector plugin needed.', 'insightistic-marketing' ) ),
 );
 ?>
 <section class="ins-section ins-connector" aria-labelledby="ins-connector-title">
 	<div class="ins-container">
 		<div class="ins-section__head">
-			<p class="ins-eyebrow"><?php esc_html_e( 'WordPress connector', 'insightistic-marketing' ); ?></p>
+			<p class="ins-eyebrow"><?php esc_html_e( 'Getting connected', 'insightistic-marketing' ); ?></p>
 			<h2 id="ins-connector-title"><?php esc_html_e( 'Connect in 3 minutes, securely', 'insightistic-marketing' ); ?></h2>
-			<p class="ins-lead ins-center"><?php esc_html_e( 'A lightweight plugin syncs your store over a signed connection. No customer card data ever leaves WordPress.', 'insightistic-marketing' ); ?></p>
+			<p class="ins-lead ins-center"><?php esc_html_e( 'Every sync runs over a signed connection — no customer card data ever leaves WordPress. Don\'t run the Insightistic plugin on this site? A standalone connector plugin covers that case too.', 'insightistic-marketing' ); ?></p>
 		</div>
 		<ol class="ins-steps">
 			<?php foreach ( $steps as $step ) : ?>

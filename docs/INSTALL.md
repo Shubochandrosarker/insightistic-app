@@ -55,6 +55,18 @@ Remember: `NEXT_PUBLIC_*` is baked at **build time**, so you must
 `npm run build` again after changing it.
 
 ## 3. Connect a WooCommerce store
+
+**If the site runs the main [Insightistic](https://github.com/Shubochandrosarker/insightistic) plugin** (the free
+GA4/GSC/PageSpeed/WooCommerce plugin, not this connector) — no separate connector install needed:
+1. In the WP admin menu → **Insightistic → License** → paste the license key shown after
+   signup (Dashboard → Licenses) → **Activate**.
+2. That's it. Activation issues the same per-site HMAC credentials the connector uses, so the
+   main plugin's own `Insightistic_Sync` class starts pushing WooCommerce orders, products,
+   customers and site-health on its own — daily automatically, or immediately via **Sync now**
+   on the License page.
+
+**If the site does *not* run the main Insightistic plugin** (e.g. an agency dashboarding a
+client's store that only has WooCommerce) — use the standalone connector:
 1. In the dashboard → **Settings → Add a site**. Copy the one-time **connector token**.
 2. On the WordPress site: install **insightistic-connector** (Plugins → Add New → Upload),
    activate it.
@@ -62,8 +74,9 @@ Remember: `NEXT_PUBLIC_*` is baked at **build time**, so you must
    (`https://api.insightistic.com`) and the connector token → **Connect**.
 4. **Sync** tab → **Run first sync**. Orders, products and customers import in chunks
    (Action Scheduler). Customer emails are hashed on the store; no card data is ever sent.
-5. Back in the dashboard, your **Overview** fills with revenue, customers, products, and
-   you can generate AI insights and reports.
+
+Either way, back in the dashboard your **Overview** fills with revenue, customers, products,
+and you can generate AI insights and reports.
 
 ## Roles
 Owner (billing/everything) · Admin (sites, reports, invite viewers) · Analyst (view + reports)

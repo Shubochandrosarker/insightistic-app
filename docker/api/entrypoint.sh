@@ -33,4 +33,8 @@ if [ "${SEED_PLANS:-true}" = "true" ]; then
   php artisan db:seed --class=Database\\Seeders\\PlanSeeder --force --no-interaction || true
 fi
 
+if [ -n "${SUPER_ADMIN_EMAIL:-}" ]; then
+  php artisan db:seed --class=Database\\Seeders\\SuperAdminSeeder --force --no-interaction || true
+fi
+
 exec "$@"

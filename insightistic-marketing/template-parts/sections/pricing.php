@@ -16,7 +16,7 @@ $plans = insightistic_pricing_plans();
 		<div class="ins-section__head">
 			<p class="ins-eyebrow"><?php esc_html_e( 'Pricing', 'insightistic-marketing' ); ?></p>
 			<h2 id="ins-pricing-title"><?php esc_html_e( 'Simple plans that scale with you', 'insightistic-marketing' ); ?></h2>
-			<p class="ins-lead ins-center"><?php esc_html_e( 'Every plan includes a 14-day free trial. No credit card required.', 'insightistic-marketing' ); ?></p>
+			<p class="ins-lead ins-center"><?php esc_html_e( 'Every plan includes a 7-day free trial. No credit card required.', 'insightistic-marketing' ); ?></p>
 
 			<div class="ins-pricing-toggle" data-period="monthly" role="group" aria-label="<?php esc_attr_e( 'Billing period', 'insightistic-marketing' ); ?>">
 				<button type="button" class="is-active" data-period="monthly" aria-pressed="true"><?php esc_html_e( 'Monthly', 'insightistic-marketing' ); ?></button>

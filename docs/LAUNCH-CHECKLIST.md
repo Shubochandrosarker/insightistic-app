@@ -7,6 +7,7 @@
 - [ ] Postgres provisioned; `php artisan migrate` run; `PlanSeeder` run
 - [ ] Queue worker running (`php artisan queue:work`) + cron `schedule:run`
 - [ ] `storage:link` done; reports disk writable
+- [ ] `SUPER_ADMIN_EMAIL` set so `/admin` is reachable without a manual command (see `docs/SUPER-ADMIN.md`)
 
 ## Billing
 - [ ] Stripe products/prices created; price IDs saved on `plans` rows
@@ -30,7 +31,7 @@
 - [ ] Data deletion path documented
 
 ## Go-to-market (spec §22)
-- [ ] Pricing page live; trial (14 days, no card) works end-to-end
+- [ ] Pricing page live; trial (7 days, no card) works end-to-end
 - [ ] First paid offer / LTD ready (e.g. founding-agency deal)
 - [ ] Demo account seeded for sales calls (`demo@insightistic.com / demo12345`)
 - [ ] Support inbox + basic docs linked from app

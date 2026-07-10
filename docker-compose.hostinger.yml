@@ -74,6 +74,7 @@ services:
       OAUTH_REDIRECT_BASE: ${OAUTH_REDIRECT_BASE:-}
       RUN_MIGRATIONS: ${RUN_MIGRATIONS:-true}
       SEED_PLANS: ${SEED_PLANS:-true}
+      SUPER_ADMIN_EMAIL: ${SUPER_ADMIN_EMAIL:-}
     volumes:
       - api-storage:/var/www/html/storage/app
 

@@ -72,11 +72,18 @@ class OAuthController extends Controller
 
         if (! $user) {
             $isNew = true;
+
+            // Same auto-promotion as the standard registration form (see
+            // AuthController::register()) — OAuth is just another signup path.
+            $superAdminEmail = strtolower(trim((string) config('insightistic.super_admin_email', '')));
+            $isSuperAdmin    = $superAdminEmail !== '' && strtolower($email) === $superAdminEmail;
+
             $user = User::create([
                 'name'              => $oauthUser->getName() ?: Str::before($email, '@'),
                 'email'             => $email,
                 'password'          => null,
                 'status'            => 'active',
+                'is_super_admin'    => $isSuperAdmin,
                 'email_verified_at' => now(),
                 'provider'          => $provider,
                 'provider_id'       => (string) $oauthUser->getId(),

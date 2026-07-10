@@ -16,6 +16,12 @@ dashboard. It only sends business data (orders, products, customers, site health
 never card data or passwords. All requests are HMAC-signed; the secret never leaves
 your server in cleartext.
 
+**Already running the main [Insightistic](https://wordpressistic.com/insightistic)
+plugin on this site?** You don't need this connector — activating your free account
+from Insightistic → License syncs the same data automatically. This connector is for
+sites that don't run the main Insightistic plugin (for example, an agency dashboarding
+a client's WooCommerce store from the Insightistic dashboard).
+
 == Installation ==
 1. Install and activate the plugin.
 2. In your Insightistic dashboard, add a site and copy the one-time connector token.

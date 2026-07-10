@@ -20,8 +20,18 @@ dashboard (or `/admin`) automatically.
 
 ## Create the first Super Admin
 
-Super admin is a backend-only elevation (never togglable from the UI). Use the
-artisan command on the API server:
+Super admin is a backend-only elevation (never togglable from the UI). Two ways
+to grant it:
+
+**Recommended: `SUPER_ADMIN_EMAIL` (automatic, no server access needed).** Set
+this env var (see `.env.production.example` / `insightistic-api/.env.example`)
+to the email you'll register with. New signups matching it are promoted at
+registration time; `SuperAdminSeeder` runs on every deploy (`docker/api/entrypoint.sh`)
+and heals any account that registered before the var was set. It's idempotent
+and a no-op until the account actually exists, so it's safe to set before you've
+signed up.
+
+**Manual fallback:** run the artisan command directly on the API server —
 
 ```bash
 # Promote an existing user
@@ -33,7 +43,7 @@ php artisan insightistic:make-super-admin owner@example.com \
 ```
 
 If `--password` is omitted with `--create`, a strong password is generated and
-printed once. After this, sign in at `https://app.insightistic.com/login` and
+printed once. Either way, sign in at `https://app.insightistic.com/login` and
 open **`/admin`**.
 
 ## Admin area (`/admin`)

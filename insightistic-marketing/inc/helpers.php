@@ -117,7 +117,7 @@ function insightistic_pricing_plans() {
 			'tagline'   => 'For small WooCommerce stores finding their footing.',
 			'monthly'   => '$19',
 			'yearly'    => '$15',
-			'features'  => array( '1 connected store', 'Revenue & order analytics', 'Weekly AI summary', 'Email reports', '14-day free trial' ),
+			'features'  => array( '1 connected store', 'Revenue & order analytics', 'Weekly AI summary', 'Email reports', '7-day free trial' ),
 			'featured'  => false,
 		),
 		array(
@@ -164,10 +164,10 @@ function insightistic_faqs() {
 	$faqs = array(
 		array( 'q' => 'What is Insightistic?', 'a' => 'Insightistic is an AI-powered business analytics platform for WordPress and WooCommerce websites. It helps store owners, agencies and teams understand revenue, orders, products, customers and AI-powered business insights from one clean dashboard.' ),
 		array( 'q' => 'Is Insightistic only for WooCommerce?', 'a' => 'Insightistic is focused on WooCommerce analytics and WordPress-powered businesses. WooCommerce stores get the most value because Insightistic can analyze revenue, orders, products, customers and refunds.' ),
-		array( 'q' => 'How does a store connect?', 'a' => 'Create an account, add a site in the dashboard, copy the connector token, install the Insightistic connector plugin on your WordPress site, paste the API URL and token, connect, and run the first sync.' ),
-		array( 'q' => 'Is my data secure?', 'a' => 'Yes. The connector uses signed, secure communication and only sends the business analytics data needed. It does not collect or store customer payment card details.' ),
+		array( 'q' => 'How does a store connect?', 'a' => 'Already running the free Insightistic WordPress plugin? Create an account, paste the license key into Insightistic → License on your site, and it syncs automatically — no separate install. Not running that plugin? Add a site in the dashboard, copy the connector token, install the standalone Insightistic connector plugin, paste the API URL and token, connect, and run the first sync.' ),
+		array( 'q' => 'Is my data secure?', 'a' => 'Yes. Every sync uses signed, secure communication and only sends the business analytics data needed. It does not collect or store customer payment card details.' ),
 		array( 'q' => 'Can agencies use Insightistic?', 'a' => 'Yes. Agencies can manage multiple client stores, generate branded reports, monitor performance and provide client-facing dashboards with white-label options.' ),
-		array( 'q' => 'Do you offer a free trial?', 'a' => 'Yes — every plan starts with a 14-day free trial, no credit card required. Start at app.insightistic.com/register.' ),
+		array( 'q' => 'Do you offer a free trial?', 'a' => 'Yes — every plan starts with a 7-day free trial, no credit card required. Start at app.insightistic.com/register.' ),
 	);
 
 	return apply_filters( 'insightistic_faqs', $faqs );

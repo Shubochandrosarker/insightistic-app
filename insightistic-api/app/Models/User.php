@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
@@ -26,6 +27,18 @@ class User extends Authenticatable
             'password'          => 'hashed',
             'is_super_admin'    => 'boolean',
         ];
+    }
+
+    /**
+     * Always store email lowercased, regardless of write path (registration,
+     * invites, OAuth, admin-created accounts) — login looks up by exact
+     * match, so any casing drift here means a correct password stops working.
+     */
+    protected function email(): Attribute
+    {
+        return Attribute::make(
+            set: fn (?string $value) => $value === null ? null : strtolower(trim($value)),
+        );
     }
 
     public function isSuperAdmin(): bool

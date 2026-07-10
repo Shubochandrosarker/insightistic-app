@@ -52,4 +52,9 @@ return [
         'secret'         => env('STRIPE_SECRET'),
         'webhook_secret' => env('STRIPE_WEBHOOK_SECRET'),
     ],
+
+    // Email that should always be a super admin. New signups matching this
+    // are promoted at registration time; SuperAdminSeeder heals any account
+    // that registered before this was set. Empty = feature disabled.
+    'super_admin_email' => env('SUPER_ADMIN_EMAIL'),
 ];

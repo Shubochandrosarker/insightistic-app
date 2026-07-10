@@ -20,13 +20,11 @@ RUN composer create-project laravel/laravel /var/www/html "12.*" --no-interactio
 
 # --no-scripts above (so the build doesn't need a live DB connection) skips
 # Laravel's package discovery/install steps, which normally register the
-# `sanctum` auth guard. Without this, every auth:sanctum route -- including
-# all of /api/admin/* -- throws "Auth guard [sanctum] is not defined." at
-# runtime. Discover packages and patch the guard in explicitly.
-COPY docker/api/patch-auth-guard.php /tmp/patch-auth-guard.php
-RUN php artisan package:discover --ansi \
-    && php /tmp/patch-auth-guard.php \
-    && rm /tmp/patch-auth-guard.php
+# `sanctum` auth guard. That's fine: insightistic-api/config/auth.php (copied
+# in below) already defines the guard explicitly, and unconditionally
+# overwrites the scaffold's config/auth.php — so the real fix already ships
+# in every build without any build-time patching.
+RUN php artisan package:discover --ansi
 
 COPY insightistic-api/ /tmp/insightistic-api/
 RUN cp -a /tmp/insightistic-api/. /var/www/html/ \

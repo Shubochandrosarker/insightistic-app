@@ -35,7 +35,7 @@ add_action(
 				'content'    => '<!-- wp:group {"className":"ins-pattern-cta","align":"wide","style":{"spacing":{"padding":{"top":"var:preset|spacing|60","bottom":"var:preset|spacing|60"}}},"backgroundColor":"panel","layout":{"type":"constrained"}} -->'
 					. '<div class="wp-block-group alignwide ins-pattern-cta has-panel-background-color has-background" style="padding-top:var(--wp--preset--spacing--60);padding-bottom:var(--wp--preset--spacing--60)">'
 					. '<!-- wp:heading {"textAlign":"center","level":2} --><h2 class="wp-block-heading has-text-align-center">Start seeing your store clearly</h2><!-- /wp:heading -->'
-					. '<!-- wp:paragraph {"align":"center","textColor":"mint"} --><p class="has-text-align-center has-mint-color has-text-color">14-day free trial · No credit card required · Connect in 3 minutes</p><!-- /wp:paragraph -->'
+					. '<!-- wp:paragraph {"align":"center","textColor":"mint"} --><p class="has-text-align-center has-mint-color has-text-color">7-day free trial · No credit card required · Connect in 3 minutes</p><!-- /wp:paragraph -->'
 					. '<!-- wp:buttons {"layout":{"type":"flex","justifyContent":"center"}} --><div class="wp-block-buttons">'
 					. '<!-- wp:button {"backgroundColor":"brand","textColor":"ink"} --><div class="wp-block-button"><a class="wp-block-button__link has-ink-color has-brand-background-color has-text-color has-background wp-element-button" href="' . $reg . '">Start free trial</a></div><!-- /wp:button -->'
 					. '<!-- wp:button {"className":"is-style-outline"} --><div class="wp-block-button is-style-outline"><a class="wp-block-button__link wp-element-button" href="' . $login . '">Sign in</a></div><!-- /wp:button -->'

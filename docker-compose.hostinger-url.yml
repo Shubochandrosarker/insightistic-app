@@ -32,6 +32,7 @@ x-api-env: &api_env
 
   RUN_MIGRATIONS: "true"
   SEED_PLANS: "true"
+  SUPER_ADMIN_EMAIL: ${SUPER_ADMIN_EMAIL:-}
 
 services:
   db:

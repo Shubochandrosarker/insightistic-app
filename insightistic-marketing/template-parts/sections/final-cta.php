@@ -17,6 +17,6 @@ if ( ! defined( 'ABSPATH' ) ) {
 			<a class="ins-btn ins-btn--brand ins-btn--lg" href="<?php echo esc_url( insightistic_register_url() ); ?>"><?php esc_html_e( 'Start Free Trial', 'insightistic-marketing' ); ?> <?php echo insightistic_icon( 'arrow-right', 18 ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?></a>
 			<a class="ins-btn ins-btn--ghost ins-btn--lg" href="<?php echo esc_url( insightistic_login_url() ); ?>"><?php esc_html_e( 'Sign in', 'insightistic-marketing' ); ?></a>
 		</div>
-		<p class="ins-hero__note"><?php esc_html_e( '14-day free trial · No credit card · Cancel anytime', 'insightistic-marketing' ); ?></p>
+		<p class="ins-hero__note"><?php esc_html_e( '7-day free trial · No credit card · Cancel anytime', 'insightistic-marketing' ); ?></p>
 	</div>
 </section>

@@ -1,10 +1,11 @@
 # Insightistic
 
-Insightistic is a multi-tenant WooCommerce analytics SaaS package with three deployable parts:
+Insightistic is a multi-tenant WooCommerce analytics SaaS package with four deployable parts:
 
 - `insightistic-app/` - Next.js frontend for marketing, auth, and dashboard.
 - `insightistic-api/` - Laravel API overlay files. Scaffold a fresh Laravel app first, then copy these files over it.
-- `insightistic-connector/` - WordPress connector plugin for WooCommerce sync.
+- `insightistic/` - Main WordPress plugin: activates with a license key (`/api/plugin/*`) and syncs WooCommerce data. This is the plugin the dashboard's Licenses page (`Dashboard → Licenses`) walks users through installing.
+- `insightistic-connector/` - Lightweight WordPress connector plugin for sites that don't run the main plugin (e.g. an agency dashboarding a client's store); connects via a manually-issued connector token instead of a license key (`Dashboard → Settings → Add a site`).
 - `docs/` - install, launch, and VPS deployment runbooks.
 
 ## Quick Start
@@ -53,6 +54,6 @@ over the shared Docker network.
 
 - Frontend: `https://app.insightistic.com`
 - API: `https://api.insightistic.com`
-- WordPress plugin: zip and upload `insightistic-connector/` to client WooCommerce stores.
+- WordPress plugin: zip and upload `insightistic/` (license-key activation) or `insightistic-connector/` (manual connector token) depending on the customer's flow.
 
 Keep API keys, database credentials, Stripe secrets, OpenAI keys, and connector tokens out of Git. Use VPS environment files only.

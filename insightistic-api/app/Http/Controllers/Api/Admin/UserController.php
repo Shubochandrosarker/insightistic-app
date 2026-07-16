@@ -64,6 +64,13 @@ class UserController extends AdminController
         $user->status = $data['status'];
         $user->save();
 
+        // Login now rejects non-active accounts, but a token issued before
+        // this change would otherwise keep working — revoke it immediately
+        // so a disable/suspend takes effect on already-open sessions too.
+        if ($data['status'] !== 'active') {
+            $user->tokens()->delete();
+        }
+
         return response()->json(['user' => $user->only(['id', 'name', 'email', 'status', 'is_super_admin'])]);
     }
 }

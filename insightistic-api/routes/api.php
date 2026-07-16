@@ -49,11 +49,18 @@ Route::prefix('auth')->group(function () {
     Route::get('oauth/{provider}/callback', [OAuthController::class, 'callback']);
 });
 
-// ---- Authenticated app (user JWT/Sanctum + tenant resolution) -------------
-Route::middleware(['auth:sanctum', 'tenant'])->group(function () {
+// ---- Authenticated identity (no organization required) --------------------
+// `me`/`logout` only need to know who the token belongs to, not which org is
+// active — gating them behind `tenant` would 403 any authenticated user with
+// zero organizations (e.g. a manually-created super admin, or a team member
+// just removed from their only org), logging them out on every page refresh.
+Route::middleware(['auth:sanctum'])->group(function () {
     Route::get('auth/me', [AuthController::class, 'me']);
     Route::post('auth/logout', [AuthController::class, 'logout']);
+});
 
+// ---- Authenticated app (user JWT/Sanctum + tenant resolution) -------------
+Route::middleware(['auth:sanctum', 'tenant'])->group(function () {
     Route::get('organizations/current', [OrganizationController::class, 'current']);
     Route::patch('organizations/current', [OrganizationController::class, 'update']);
 

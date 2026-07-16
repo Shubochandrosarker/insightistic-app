@@ -139,6 +139,14 @@ class AuthController extends Controller
             return response()->json(['message' => 'Invalid credentials.'], 422);
         }
 
+        if ($user->status === 'invited') {
+            return response()->json(['message' => 'Accept your invite first — check your email for the invite link.'], 403);
+        }
+
+        if ($user->status !== 'active') {
+            return response()->json(['message' => 'This account has been disabled. Contact your organization owner or support.'], 403);
+        }
+
         $user->forceFill(['last_login_at' => now()])->save();
         $token = $user->createToken('spa')->plainTextToken;
 

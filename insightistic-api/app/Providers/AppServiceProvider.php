@@ -52,6 +52,13 @@ class AppServiceProvider extends ServiceProvider
             return \Illuminate\Cache\RateLimiting\Limit::perMinute(120)
                 ->by('conn:' . ($request->header('X-INS-Key-Id') ?: $request->ip()));
         });
+        // plugin-ai: Insightistic Cloud AI calls proxy to a real AI provider,
+        // so this is deliberately tighter than the connector limiter above —
+        // matches the plugin's own client-side ~60s cost-guardrail lock.
+        \Illuminate\Support\Facades\RateLimiter::for('plugin-ai', function (\Illuminate\Http\Request $request) {
+            return \Illuminate\Cache\RateLimiting\Limit::perMinute(6)
+                ->by('conn-ai:' . ($request->header('X-INS-Key-Id') ?: $request->ip()));
+        });
 
         // Password reset / invite links should open the SPA, not a web route.
         \Illuminate\Auth\Notifications\ResetPassword::createUrlUsing(function ($user, string $token) {

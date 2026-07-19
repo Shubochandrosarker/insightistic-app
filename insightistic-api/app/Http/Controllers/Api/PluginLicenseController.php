@@ -238,19 +238,7 @@ class PluginLicenseController extends Controller
     /** @return array{0: ?License, 1: ?LicenseActivation} */
     private function resolveFromConnector(Request $request): array
     {
-        $site = $request->attributes->get('connector_site');
-        if (! $site) {
-            return [null, null];
-        }
-
-        $activation = $this->licenses->activationForSite($site->id);
-        if (! $activation) {
-            return [null, null];
-        }
-
-        $license = License::withoutGlobalScope('organization')->find($activation->license_id);
-
-        return [$license, $activation];
+        return $this->licenses->resolveFromConnector($request);
     }
 
     private function error(string $code, string $message, int $status, array $extra = [])

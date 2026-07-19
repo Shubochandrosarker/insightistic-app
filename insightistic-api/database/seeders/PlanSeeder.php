@@ -12,6 +12,14 @@ class PlanSeeder extends Seeder
         // Feature slugs are the single vocabulary shared by the API, the
         // dashboard, and the WordPress plugin's feature gate.
         $features = [
+            // Free forever — no card, no trial expiration. This is what the
+            // WordPress plugin actually promises ("Create a free account —
+            // no card, free forever") for AI Insights and email automation;
+            // every paid plan below is an upgrade from here, not a
+            // replacement for it. See AccountProvisioner for signup wiring.
+            'free' => [
+                'basic_analytics', 'ai_insights', 'email_audit_automation',
+            ],
             'starter' => [
                 'basic_analytics', 'seo_analysis', 'ai_insights',
             ],
@@ -39,10 +47,14 @@ class PlanSeeder extends Seeder
 
         // Public lineup (spec §13): Starter / Growth ("Best Value") / Agency.
         // business + agency_pro stay seeded but hidden so historical Stripe
-        // price ids and FKs survive.
+        // price ids and FKs survive. 'free' is likewise not a pricing-page
+        // card (is_active=false) — it's the automatic signup state every
+        // organization starts on (AccountProvisioner), not something anyone
+        // picks or upgrades away from a trial into.
         // Prices in cents.
         $plans = [
             //  slug          name          $m     $y      sites users ai    rpts  wl     cd     active featured
+            ['free',       'Free',       0,     0,      3,   1,   10,   0,    false, false, false, false],
             ['starter',    'Starter',    900,   9000,   1,   1,   20,   4,    false, false, true,  false],
             ['growth',     'Growth',     2900,  29000,  3,   3,   100,  20,   false, false, true,  true],
             ['business',   'Business',   7900,  79000,  10,  10,  300,  100,  false, false, false, false],

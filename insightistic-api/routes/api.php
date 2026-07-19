@@ -20,6 +20,8 @@ use App\Http\Controllers\Api\LicenseController;
 use App\Http\Controllers\Api\NotificationController;
 use App\Http\Controllers\Api\OAuthController;
 use App\Http\Controllers\Api\OrganizationController;
+use App\Http\Controllers\Api\PluginAiController;
+use App\Http\Controllers\Api\PluginCloudflareController;
 use App\Http\Controllers\Api\PluginLicenseController;
 use App\Http\Controllers\Api\ReportController;
 use App\Http\Controllers\Api\SiteController;
@@ -160,6 +162,18 @@ Route::prefix('plugin')->group(function () {
         Route::get('features', [PluginLicenseController::class, 'features']);
         Route::post('deactivate', [PluginLicenseController::class, 'deactivate']);
     });
+
+    // Insightistic Cloud AI (docs/APP-CONNECT-WORKFLOW.md §8). Its own,
+    // tighter limiter — this proxies to a real AI provider call, unlike the
+    // cheap license check-ins above.
+    Route::post('ai-insights', [PluginAiController::class, 'generate'])
+        ->middleware(['connector.auth', 'throttle:plugin-ai']);
+
+    // Hosted Cloudflare Traffic Insights (docs/APP-CONNECT-WORKFLOW.md §10).
+    // Read-heavy but plugin-side cached for 15 min; the connector limiter
+    // (shared with WooCommerce sync traffic) is generous enough.
+    Route::post('cloudflare-traffic', [PluginCloudflareController::class, 'trafficData'])
+        ->middleware(['connector.auth', 'throttle:connector']);
 });
 
 // ---- Connector (WordPress plugin, authed by HMAC signature) ---------------

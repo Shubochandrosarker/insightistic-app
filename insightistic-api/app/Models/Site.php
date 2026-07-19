@@ -15,16 +15,18 @@ class Site extends Model
         'organization_id', 'name', 'domain', 'platform',
         'connector_key_id', 'connector_secret', 'connection_status', 'last_sync_at',
         'timezone', 'currency', 'wp_version', 'wc_version', 'plugin_version',
+        'cloudflare_zone_id', 'cloudflare_account_id', 'cloudflare_api_token',
     ];
 
     // Never expose credentials in API responses.
-    protected $hidden = ['connector_key_id', 'connector_secret'];
+    protected $hidden = ['connector_key_id', 'connector_secret', 'cloudflare_api_token'];
 
     protected function casts(): array
     {
         return [
-            'last_sync_at'     => 'datetime',
-            'connector_secret' => 'encrypted', // AES at rest via APP_KEY
+            'last_sync_at'          => 'datetime',
+            'connector_secret'      => 'encrypted', // AES at rest via APP_KEY
+            'cloudflare_api_token'  => 'encrypted', // AES at rest via APP_KEY
         ];
     }
 
@@ -72,5 +74,11 @@ class Site extends Model
         return static::withoutGlobalScope('organization')
             ->where('connector_key_id', $keyId)
             ->first();
+    }
+
+    /** Whether this site has a Cloudflare zone linked (the hosted Traffic Insights path). */
+    public function hasCloudflareLinked(): bool
+    {
+        return ! empty($this->cloudflare_zone_id) && ! empty($this->cloudflare_api_token);
     }
 }

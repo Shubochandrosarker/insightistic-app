@@ -10,9 +10,16 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 /**
- * Bootstraps a brand-new account's first organization (owner + trial + usage
- * counter + auto-generated license) in one transaction. Shared by password
- * signup and OAuth signup so both flows produce an identical, usable account.
+ * Bootstraps a brand-new account's first organization (owner + usage counter
+ * + auto-generated license) in one transaction. Shared by password signup
+ * and OAuth signup so both flows produce an identical, usable account.
+ *
+ * Every new org starts on the 'free' plan with status 'active' and no
+ * trial_ends_at — free forever, matching what the WordPress plugin promises
+ * ("Create a free account — no card, free forever") for AI Insights and
+ * email automation. Nothing here expires; upgrading to a paid plan is a
+ * separate, explicit action via BillingController, not something that
+ * happens automatically when a trial lapses.
  */
 class AccountProvisioner
 {
@@ -31,15 +38,15 @@ class AccountProvisioner
         $rawKey = null;
 
         $org = DB::transaction(function () use ($user, $organizationName, &$rawKey) {
-            $starter = Plan::where('slug', 'starter')->first();
+            $free = Plan::where('slug', 'free')->first();
 
             $org = Organization::create([
                 'name'          => $organizationName,
                 'slug'          => $this->uniqueSlug($organizationName),
                 'owner_user_id' => $user->id,
-                'plan_id'       => $starter?->id,
-                'status'        => 'trialing',
-                'trial_ends_at' => now()->addDays((int) config('insightistic.trial_days', 7)),
+                'plan_id'       => $free?->id,
+                'status'        => 'active',
+                'trial_ends_at' => null,
             ]);
 
             $org->users()->attach($user->id, ['role' => 'owner']);

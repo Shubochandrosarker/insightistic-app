@@ -6,6 +6,7 @@ use App\Models\License;
 use App\Models\LicenseActivation;
 use App\Models\Organization;
 use App\Models\PluginEvent;
+use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 
 /**
@@ -218,6 +219,33 @@ class LicenseService
             ->where('status', 'active')
             ->latest('id')
             ->first();
+    }
+
+    /**
+     * Resolve the license + activation for an HMAC-authenticated plugin
+     * request. Shared by every `plugin/*` controller behind the
+     * `connector.auth` middleware (PluginLicenseController,
+     * PluginAiController, PluginCloudflareController) — the middleware
+     * already put the resolved Site on the request; this just walks
+     * Site → LicenseActivation → License.
+     *
+     * @return array{0: ?License, 1: ?LicenseActivation}
+     */
+    public function resolveFromConnector(Request $request): array
+    {
+        $site = $request->attributes->get('connector_site');
+        if (! $site) {
+            return [null, null];
+        }
+
+        $activation = $this->activationForSite($site->id);
+        if (! $activation) {
+            return [null, null];
+        }
+
+        $license = License::withoutGlobalScope('organization')->find($activation->license_id);
+
+        return [$license, $activation];
     }
 
     // ---- internals --------------------------------------------------------------

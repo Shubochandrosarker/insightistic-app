@@ -12,11 +12,12 @@ class Organization extends Model
 {
     protected $fillable = [
         'name', 'slug', 'owner_user_id', 'plan_id', 'status', 'trial_ends_at',
+        'archived_at', 'internal_notes',
     ];
 
     protected function casts(): array
     {
-        return ['trial_ends_at' => 'datetime'];
+        return ['trial_ends_at' => 'datetime', 'archived_at' => 'datetime'];
     }
 
     public function owner(): BelongsTo

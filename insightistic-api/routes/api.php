@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Api\Admin\AuditLogController as AdminAuditLogController;
 use App\Http\Controllers\Api\Admin\LicenseController as AdminLicenseController;
 use App\Http\Controllers\Api\Admin\OrganizationController as AdminOrganizationController;
 use App\Http\Controllers\Api\Admin\OverviewController as AdminOverviewController;
@@ -190,18 +191,28 @@ Route::prefix('admin')->middleware(['auth:sanctum', 'super_admin'])->group(funct
     Route::get('organizations', [AdminOrganizationController::class, 'index']);
     Route::get('organizations/{id}', [AdminOrganizationController::class, 'show']);
     Route::patch('organizations/{id}', [AdminOrganizationController::class, 'update']);
+    Route::post('organizations/{id}/archive', [AdminOrganizationController::class, 'archive']);
+    Route::post('organizations/{id}/restore', [AdminOrganizationController::class, 'restore']);
 
     Route::get('users', [AdminUserController::class, 'index']);
     Route::get('users/{id}', [AdminUserController::class, 'show']);
     Route::patch('users/{id}', [AdminUserController::class, 'update']);
+    Route::post('users/{id}/promote', [AdminUserController::class, 'promote']);
+    Route::post('users/{id}/demote', [AdminUserController::class, 'demote']);
+    Route::post('users/{id}/archive', [AdminUserController::class, 'archive']);
+    Route::post('users/{id}/restore', [AdminUserController::class, 'restore']);
 
     Route::get('sites', [AdminSiteController::class, 'index']);
     Route::get('sites/{id}', [AdminSiteController::class, 'show']);
+    Route::post('sites/{id}/disconnect', [AdminSiteController::class, 'disconnect']);
+    Route::post('sites/{id}/archive', [AdminSiteController::class, 'archive']);
+    Route::post('sites/{id}/restore', [AdminSiteController::class, 'restore']);
 
     Route::get('subscriptions', [AdminSubscriptionController::class, 'index']);
     Route::get('sync-logs', [AdminSyncLogController::class, 'index']);
     Route::get('reports', [AdminReportController::class, 'index']);
     Route::get('usage', [AdminUsageController::class, 'index']);
+    Route::get('audit-logs', [AdminAuditLogController::class, 'index']);
 
     // Licenses (spec §13.6). Destructive actions (revoke, disconnect-all)
     // require an explicit `confirm: true` in the request body — checked by

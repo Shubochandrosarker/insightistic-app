@@ -8,13 +8,16 @@ use App\Models\Organization;
 use App\Models\Plan;
 use App\Models\Site;
 use App\Models\SyncLog;
+use App\Services\AuditLogger;
 use App\Services\LicenseService;
 use Illuminate\Http\Request;
 
 class OrganizationController extends AdminController
 {
-    public function __construct(private LicenseService $licenses) {}
-
+    public function __construct(
+        private LicenseService $licenses,
+        private AuditLogger $audit,
+    ) {}
 
     public function index(Request $request)
     {
@@ -24,6 +27,9 @@ class OrganizationController extends AdminController
             ->with(['plan:id,name,slug', 'owner:id,name,email'])
             ->withCount(['sites', 'users']);
 
+        if (! $request->boolean('include_archived')) {
+            $query->whereNull('archived_at');
+        }
         if ($s = $request->query('search')) {
             $query->where(function ($w) use ($s, $like) {
                 $w->where('name', $like, "%$s%")
@@ -69,21 +75,30 @@ class OrganizationController extends AdminController
         ]);
     }
 
-    /** Manually change plan and/or suspend/reactivate. */
+    /** Edit name, plan, status, and/or internal notes. */
     public function update(Request $request, int $id)
     {
         $org = Organization::findOrFail($id);
+        $before = $org->only(['name', 'plan_id', 'status', 'internal_notes']);
 
         $data = $request->validate([
-            'plan'   => ['nullable', 'string', 'exists:plans,slug'],
-            'status' => ['nullable', 'in:trialing,active,past_due,suspended,canceled'],
+            'name'           => ['nullable', 'string', 'max:150'],
+            'plan'           => ['nullable', 'string', 'exists:plans,slug'],
+            'status'         => ['nullable', 'in:trialing,active,past_due,suspended,canceled'],
+            'internal_notes' => ['nullable', 'string', 'max:5000'],
         ]);
 
+        if (! empty($data['name'])) {
+            $org->name = $data['name'];
+        }
         if (! empty($data['plan'])) {
             $org->plan_id = Plan::where('slug', $data['plan'])->value('id');
         }
         if (! empty($data['status'])) {
             $org->status = $data['status'];
+        }
+        if ($request->has('internal_notes')) {
+            $org->internal_notes = $data['internal_notes'];
         }
         $org->save();
 
@@ -95,6 +110,39 @@ class OrganizationController extends AdminController
             $this->licenses->syncForOrganization($org->fresh());
         }
 
+        $this->audit->log($request, 'organization.update', 'Organization', $org->id, $before, $org->only(['name', 'plan_id', 'status', 'internal_notes']));
+
         return response()->json(['organization' => $org->fresh(['plan'])]);
+    }
+
+    /**
+     * POST /admin/organizations/{id}/archive — reversible. Sites/licenses
+     * are left untouched (still queryable, still enforce entitlements as
+     * normal); archiving only hides the org from default admin listings and
+     * is a signal, not an access change. A separate, more destructive
+     * "suspend" already exists via update(status: suspended) for actually
+     * cutting off access.
+     */
+    public function archive(Request $request, int $id)
+    {
+        $org = Organization::findOrFail($id);
+        $org->archived_at = now();
+        $org->save();
+
+        $this->audit->log($request, 'organization.archive', 'Organization', $org->id, ['archived_at' => null], ['archived_at' => $org->archived_at->toIso8601String()]);
+
+        return response()->json(['organization' => $org->only(['id', 'archived_at'])]);
+    }
+
+    /** POST /admin/organizations/{id}/restore */
+    public function restore(Request $request, int $id)
+    {
+        $org = Organization::findOrFail($id);
+        $org->archived_at = null;
+        $org->save();
+
+        $this->audit->log($request, 'organization.restore', 'Organization', $org->id, null, ['archived_at' => null]);
+
+        return response()->json(['organization' => $org->only(['id', 'archived_at'])]);
     }
 }

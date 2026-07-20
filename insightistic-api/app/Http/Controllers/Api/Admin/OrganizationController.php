@@ -8,10 +8,14 @@ use App\Models\Organization;
 use App\Models\Plan;
 use App\Models\Site;
 use App\Models\SyncLog;
+use App\Services\LicenseService;
 use Illuminate\Http\Request;
 
 class OrganizationController extends AdminController
 {
+    public function __construct(private LicenseService $licenses) {}
+
+
     public function index(Request $request)
     {
         $like = $this->likeOp();
@@ -82,6 +86,14 @@ class OrganizationController extends AdminController
             $org->status = $data['status'];
         }
         $org->save();
+
+        // Without this, a license's persisted status/plan_id/activation_limit
+        // only self-heals the next time something reads it (dashboard Licenses
+        // tab, plugin validate/activate) — this org's licenses would report
+        // stale entitlements to anything reading them in between.
+        if (! empty($data['plan']) || ! empty($data['status'])) {
+            $this->licenses->syncForOrganization($org->fresh());
+        }
 
         return response()->json(['organization' => $org->fresh(['plan'])]);
     }

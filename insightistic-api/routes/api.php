@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Api\Admin\LicenseController as AdminLicenseController;
 use App\Http\Controllers\Api\Admin\OrganizationController as AdminOrganizationController;
 use App\Http\Controllers\Api\Admin\OverviewController as AdminOverviewController;
 use App\Http\Controllers\Api\Admin\ReportController as AdminReportController;
@@ -160,6 +161,20 @@ Route::prefix('admin')->middleware(['auth:sanctum', 'super_admin'])->group(funct
     Route::get('sync-logs', [AdminSyncLogController::class, 'index']);
     Route::get('reports', [AdminReportController::class, 'index']);
     Route::get('usage', [AdminUsageController::class, 'index']);
+
+    // Licenses (spec §13.6). Destructive actions (revoke, disconnect-all)
+    // require an explicit `confirm: true` in the request body — checked by
+    // Laravel's `accepted` validation rule, not implied by the HTTP verb.
+    Route::get('licenses', [AdminLicenseController::class, 'index']);
+    Route::post('licenses', [AdminLicenseController::class, 'store']);
+    Route::get('licenses/{id}', [AdminLicenseController::class, 'show']);
+    Route::post('licenses/{id}/regenerate', [AdminLicenseController::class, 'regenerate']);
+    Route::post('licenses/{id}/suspend', [AdminLicenseController::class, 'suspend']);
+    Route::post('licenses/{id}/reactivate', [AdminLicenseController::class, 'reactivate']);
+    Route::post('licenses/{id}/revoke', [AdminLicenseController::class, 'revoke']);
+    Route::post('licenses/{id}/disconnect-all', [AdminLicenseController::class, 'disconnectAll']);
+    Route::patch('licenses/{id}/activation-limit', [AdminLicenseController::class, 'overrideActivationLimit']);
+    Route::delete('activations/{id}', [AdminLicenseController::class, 'revokeActivation']);
 });
 
 // ---- Plugin license endpoints (spec §4) ------------------------------------

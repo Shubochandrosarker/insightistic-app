@@ -9,6 +9,7 @@ use App\Http\Controllers\Api\Admin\SubscriptionController as AdminSubscriptionCo
 use App\Http\Controllers\Api\Admin\SyncLogController as AdminSyncLogController;
 use App\Http\Controllers\Api\Admin\UsageController as AdminUsageController;
 use App\Http\Controllers\Api\Admin\UserController as AdminUserController;
+use App\Http\Controllers\Api\AlertController;
 use App\Http\Controllers\Api\AnalyticsController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\BillingController;
@@ -131,6 +132,13 @@ Route::middleware(['auth:sanctum', 'tenant'])->group(function () {
         Route::get('sites/{site}/analytics/performance/latest', [PerformanceController::class, 'latest']);
 
         Route::get('sites/{site}/integrations', [IntegrationsController::class, 'index']);
+
+        // Alerts (Milestone 5, spec §12) — deterministic rules, run on a
+        // schedule (routes/console.php) or on demand via scan().
+        Route::get('sites/{site}/alerts', [AlertController::class, 'index']);
+        Route::post('sites/{site}/alerts/scan', [AlertController::class, 'scan']);
+        Route::post('sites/{site}/alerts/{alert}/resolve', [AlertController::class, 'resolve']);
+        Route::post('sites/{site}/alerts/{alert}/reopen', [AlertController::class, 'reopen']);
 
         // AI insights (Week 4)
         Route::get('sites/{site}/insights', [InsightController::class, 'index']);

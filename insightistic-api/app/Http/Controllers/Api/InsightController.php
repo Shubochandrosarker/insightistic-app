@@ -5,16 +5,21 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\AiInsight;
 use App\Models\Site;
+use App\Services\ContextAssembler;
 use App\Services\InsightGenerator;
 use App\Services\UsageService;
 use App\Support\DateRange;
 use App\Support\Tenancy;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 
 class InsightController extends Controller
 {
+    private const LEGACY_TYPES = ['daily', 'weekly', 'monthly'];
+
     public function __construct(
         private InsightGenerator $generator,
+        private ContextAssembler $contexts,
         private UsageService $usage,
         private Tenancy $tenancy,
     ) {}
@@ -38,8 +43,32 @@ class InsightController extends Controller
         $org  = $this->tenancy->organization();
 
         $data = $request->validate([
-            'type' => ['required', 'in:daily,weekly,monthly'],
+            'type'   => ['required', Rule::in(array_merge(self::LEGACY_TYPES, ContextAssembler::TYPES))],
+            'period' => ['nullable', 'string'],
+            'from'   => ['nullable', 'date'],
+            'to'     => ['nullable', 'date'],
+            'focus'  => ['nullable', 'string', 'max:50'],
         ]);
+
+        $isLegacy = in_array($data['type'], self::LEGACY_TYPES, true);
+        $range = $isLegacy
+            ? $this->rangeForType($data['type'], $site)
+            : DateRange::fromRequest($data['period'] ?? 'last_30_days', $data['from'] ?? null, $data['to'] ?? null, $site->timezone ?: config('app.timezone', 'UTC'));
+
+        // Assembling context is cheap (a few indexed reads) and doesn't touch
+        // the AI provider — check for evidence BEFORE metering usage, so a
+        // site with no traffic/SEO/performance data yet (Milestone 3's
+        // connector v2 isn't built) gets a clear "not enough data" response
+        // instead of silently burning a quota slot on every attempt.
+        $context = $isLegacy ? null : $this->contexts->assemble($data['type'], $site, $range, $data['focus'] ?? null);
+
+        if ($context !== null && ! $context['has_data']) {
+            return response()->json([
+                'insight' => null,
+                'code'    => 'no_data_yet',
+                'message' => 'Not enough data yet to generate this insight — check back once this site has synced more history.',
+            ]);
+        }
 
         if (! $this->usage->canGenerateInsight($org)) {
             return response()->json([
@@ -48,8 +77,9 @@ class InsightController extends Controller
             ], 402);
         }
 
-        $range = $this->rangeForType($data['type'], $site);
-        $insight = $this->generator->generate($site, $range, $data['type']);
+        $insight = $isLegacy
+            ? $this->generator->generate($site, $range, $data['type'])
+            : $this->generator->generateContextual($site, $data['type'], $context);
 
         if (! $insight) {
             return response()->json([

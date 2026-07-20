@@ -83,4 +83,61 @@ class StripeService
             config('insightistic.stripe.webhook_secret')
         );
     }
+
+    // --- Super Admin inspection/mutation (spec §13.8) -------------------------
+
+    /** @return \Stripe\Subscription */
+    public function getSubscription(string $subscriptionId)
+    {
+        return $this->client()->subscriptions->retrieve($subscriptionId, [
+            'expand' => ['latest_invoice', 'default_payment_method', 'items.data.price'],
+        ]);
+    }
+
+    /** @return \Stripe\Customer */
+    public function getCustomer(string $customerId)
+    {
+        return $this->client()->customers->retrieve($customerId, [
+            'expand' => ['invoice_settings.default_payment_method'],
+        ]);
+    }
+
+    /** @return \Stripe\Collection */
+    public function listInvoices(string $customerId, int $limit = 10)
+    {
+        return $this->client()->invoices->all(['customer' => $customerId, 'limit' => $limit]);
+    }
+
+    /** Move a live subscription onto a different price. */
+    public function changePlan(string $subscriptionId, string $newPriceId, string $prorationBehavior = 'create_prorations'): \Stripe\Subscription
+    {
+        $sub = $this->client()->subscriptions->retrieve($subscriptionId);
+        $itemId = $sub->items->data[0]->id;
+
+        return $this->client()->subscriptions->update($subscriptionId, [
+            'items'              => [['id' => $itemId, 'price' => $newPriceId]],
+            'proration_behavior' => $prorationBehavior,
+        ]);
+    }
+
+    /** Cancel right now instead of at period end. */
+    public function cancelImmediately(string $subscriptionId): void
+    {
+        $this->client()->subscriptions->cancel($subscriptionId);
+    }
+
+    /** Push a new trial_end onto the live Stripe subscription. */
+    public function extendTrial(string $subscriptionId, \DateTimeInterface $trialEnd): \Stripe\Subscription
+    {
+        return $this->client()->subscriptions->update($subscriptionId, [
+            'trial_end'          => $trialEnd->getTimestamp(),
+            'proration_behavior' => 'none',
+        ]);
+    }
+
+    /** Fetch a specific event by id so it can be replayed through the same handler as the live webhook. */
+    public function retrieveEvent(string $eventId): \Stripe\Event
+    {
+        return $this->client()->events->retrieve($eventId);
+    }
 }

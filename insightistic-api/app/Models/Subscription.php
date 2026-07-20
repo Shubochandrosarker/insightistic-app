@@ -14,19 +14,28 @@ class Subscription extends Model
         'organization_id', 'stripe_customer_id', 'stripe_subscription_id',
         'plan_id', 'status', 'current_period_start', 'current_period_end',
         'cancel_at_period_end',
+        'internal_override_active', 'internal_override_reason',
+        'internal_override_by', 'internal_override_at',
     ];
 
     protected function casts(): array
     {
         return [
-            'current_period_start' => 'datetime',
-            'current_period_end'   => 'datetime',
-            'cancel_at_period_end' => 'boolean',
+            'current_period_start'     => 'datetime',
+            'current_period_end'       => 'datetime',
+            'cancel_at_period_end'     => 'boolean',
+            'internal_override_active' => 'boolean',
+            'internal_override_at'     => 'datetime',
         ];
     }
 
     public function plan(): BelongsTo
     {
         return $this->belongsTo(Plan::class);
+    }
+
+    public function overriddenBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'internal_override_by');
     }
 }

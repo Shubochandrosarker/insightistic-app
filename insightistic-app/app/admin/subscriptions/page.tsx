@@ -1,4 +1,5 @@
 "use client";
+import Link from "next/link";
 import { AdminListPage } from "@/components/admin/AdminListPage";
 import { Badge } from "@/components/ui/Badge";
 
@@ -22,7 +23,14 @@ export default function AdminSubscriptions() {
         { key: "canceled", label: "Cancellation", options: [{ value: "1", label: "Cancels at period end" }] },
       ]}
       columns={[
-        { key: "organization", label: "Organization", primary: true, render: (s: any) => s.organization?.name || `Org #${s.organization_id}` },
+        {
+          key: "organization", label: "Organization", primary: true,
+          render: (s: any) => (
+            <Link href={`/admin/subscriptions/${s.id}`} className="hover:underline">
+              {s.organization?.name || `Org #${s.organization_id}`}
+            </Link>
+          ),
+        },
         { key: "plan", label: "Plan", render: (s: any) => s.plan?.name || "—" },
         { key: "status", label: "Status", render: (s: any) => <Badge tone={TONE[s.status] || "slate"} dot>{s.status}</Badge> },
         { key: "stripe_customer_id", label: "Stripe customer", render: (s: any) => <span className="font-mono text-[11px] text-muted">{s.stripe_customer_id || "—"}</span> },

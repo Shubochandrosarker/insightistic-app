@@ -102,6 +102,14 @@ class LicenseService
 
         $sub = $org->subscription()->first();
 
+        // Super Admin entitlement override (spec §13.8) — forces 'active' without
+        // touching Stripe's own data. Checked after the sticky license-level
+        // suspend/revoke branches above (those still win), but before every
+        // billing/trial-derived branch below.
+        if ($sub?->internal_override_active) {
+            return 'active';
+        }
+
         if ($org->status === 'past_due') {
             // Past the payment grace window → suspended; inside it → payment_failed.
             $graceDays = (int) config('insightistic.license.payment_grace_days', 7);

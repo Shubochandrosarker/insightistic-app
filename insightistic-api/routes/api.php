@@ -219,6 +219,15 @@ Route::prefix('admin')->middleware(['auth:sanctum', 'super_admin'])->group(funct
     Route::post('sites/{id}/restore', [AdminSiteController::class, 'restore']);
 
     Route::get('subscriptions', [AdminSubscriptionController::class, 'index']);
+    Route::get('subscriptions/{id}', [AdminSubscriptionController::class, 'show']);
+    Route::post('subscriptions/{id}/change-plan', [AdminSubscriptionController::class, 'changePlan']);
+    Route::post('subscriptions/{id}/cancel', [AdminSubscriptionController::class, 'cancel']);
+    Route::post('subscriptions/{id}/reactivate', [AdminSubscriptionController::class, 'reactivate']);
+    Route::post('subscriptions/{id}/extend-trial', [AdminSubscriptionController::class, 'extendTrial']);
+    Route::post('subscriptions/{id}/override', [AdminSubscriptionController::class, 'override']);
+    Route::get('subscriptions/{id}/portal-link', [AdminSubscriptionController::class, 'portalLink']);
+    Route::post('subscriptions/{id}/replay-webhook', [AdminSubscriptionController::class, 'replayWebhook']);
+    Route::post('subscriptions/{id}/resync', [AdminSubscriptionController::class, 'resync']);
     Route::get('sync-logs', [AdminSyncLogController::class, 'index']);
     Route::get('reports', [AdminReportController::class, 'index']);
     Route::get('usage', [AdminUsageController::class, 'index']);

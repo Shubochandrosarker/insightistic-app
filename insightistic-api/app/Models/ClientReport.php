@@ -5,7 +5,7 @@ namespace App\Models;
 use App\Concerns\BelongsToOrganization;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\URL;
 
 class ClientReport extends Model
 {
@@ -16,7 +16,14 @@ class ClientReport extends Model
         'period_start', 'period_end', 'html_url', 'pdf_url', 'sent_to', 'sent_at',
     ];
 
-    // pdf_url / html_url hold RELATIVE storage paths; expose absolute links in JSON.
+    // pdf_url / html_url hold RELATIVE storage paths; expose signed, expiring
+    // download links in JSON instead — never the raw public-disk URL. A raw
+    // `Storage::url()` link is permanent and guessable (sequential/UUID path
+    // on a public disk) and breaks outright if `APP_URL` doesn't match the
+    // disk's configured base — which is exactly what caused reports to be
+    // unopenable. ReportController::downloadPdf/downloadHtml verify the
+    // signature and stream the file directly, so these links work regardless
+    // of `APP_URL` drift or a missing `public/storage` symlink.
     protected $appends = ['pdf_link', 'html_link'];
 
     protected function casts(): array
@@ -33,18 +40,18 @@ class ClientReport extends Model
         return $this->belongsTo(Site::class);
     }
 
-    private function disk(): string
-    {
-        return config('insightistic.reports.disk', 'public');
-    }
-
     public function getPdfLinkAttribute(): ?string
     {
-        return $this->pdf_url ? Storage::disk($this->disk())->url($this->pdf_url) : null;
+        return $this->pdf_url ? $this->signedLink('reports.download.pdf') : null;
     }
 
     public function getHtmlLinkAttribute(): ?string
     {
-        return $this->html_url ? Storage::disk($this->disk())->url($this->html_url) : null;
+        return $this->html_url ? $this->signedLink('reports.download.html') : null;
+    }
+
+    private function signedLink(string $routeName): string
+    {
+        return URL::temporarySignedRoute($routeName, now()->addHour(), ['report' => $this->id]);
     }
 }

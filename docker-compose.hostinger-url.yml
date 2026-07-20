@@ -66,6 +66,7 @@ services:
       - traefik.http.routers.insightistic-api.rule=Host(`api.insightistic.com`)
       - traefik.http.routers.insightistic-api.entrypoints=websecure
       - traefik.http.routers.insightistic-api.tls=true
+      - traefik.http.routers.insightistic-api.tls.certresolver=letsencrypt
       - traefik.http.services.insightistic-api.loadbalancer.server.port=8000
 
   queue:
@@ -83,7 +84,7 @@ services:
       - api_storage:/var/www/html/storage/app
     labels:
       - com.centurylinklabs.watchtower.enable=true
-  - traefik.http.routers.insightistic-api.tls.certresolver=letsencrypt
+
   scheduler:
     image: ghcr.io/shubochandrosarker/insightistic-app/api:latest
     restart: unless-stopped

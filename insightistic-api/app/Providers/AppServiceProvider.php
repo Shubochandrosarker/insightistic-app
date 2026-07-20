@@ -59,6 +59,11 @@ class AppServiceProvider extends ServiceProvider
             return \Illuminate\Cache\RateLimiting\Limit::perMinute(6)
                 ->by('conn-ai:' . ($request->header('X-INS-Key-Id') ?: $request->ip()));
         });
+        // public: unauthenticated, cacheable, low-value-per-request endpoints
+        // (e.g. the public plans manifest) — generous, per-IP only.
+        \Illuminate\Support\Facades\RateLimiter::for('public', function (\Illuminate\Http\Request $request) {
+            return \Illuminate\Cache\RateLimiting\Limit::perMinute(60)->by($request->ip());
+        });
 
         // Password reset / invite links should open the SPA, not a web route.
         \Illuminate\Auth\Notifications\ResetPassword::createUrlUsing(function ($user, string $token) {

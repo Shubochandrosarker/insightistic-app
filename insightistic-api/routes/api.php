@@ -32,6 +32,7 @@ use App\Http\Controllers\Api\PerformanceController;
 use App\Http\Controllers\Api\PluginAiController;
 use App\Http\Controllers\Api\PluginCloudflareController;
 use App\Http\Controllers\Api\PluginLicenseController;
+use App\Http\Controllers\Api\PublicPlanController;
 use App\Http\Controllers\Api\ReportController;
 use App\Http\Controllers\Api\ReportScheduleController;
 use App\Http\Controllers\Api\SeoController;
@@ -48,6 +49,11 @@ use Illuminate\Support\Facades\Route;
 | Future endpoints are listed as commented stubs so the full surface is
 | visible — uncomment as each week's controller lands.
 */
+
+// ---- Public plan manifest (spec §13.7) — no auth, cacheable. The single
+// source the marketing site's pricing page and any other public surface
+// should read from, instead of hardcoding plan copy. ------------------------
+Route::get('public/plans', [PublicPlanController::class, 'index'])->middleware('throttle:public');
 
 // ---- Public auth (throttle:auth = brute-force protection) -----------------
 Route::prefix('auth')->group(function () {

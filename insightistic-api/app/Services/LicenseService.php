@@ -6,6 +6,7 @@ use App\Models\License;
 use App\Models\LicenseActivation;
 use App\Models\Organization;
 use App\Models\PluginEvent;
+use App\Models\Site;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 
@@ -128,6 +129,88 @@ class LicenseService
             $license->activation_limit = (int) ($org->plan?->site_limit ?? 1);
             $license->save();
         }
+    }
+
+    // ---- Super Admin lifecycle actions -----------------------------------------
+    // computeStatus() treats a persisted 'suspended'/'revoked' status and a set
+    // revoked_at as sticky (checked before any org/subscription/trial branch —
+    // see the precedence comment above), so these three write status directly
+    // rather than going through computeStatus(). suspend()/revoke() rely on that
+    // stickiness to hold; reactivate() clears it first so computeStatus() falls
+    // through to the org's actual current state instead of re-deriving 'suspended'.
+
+    /** Suspend a license regardless of org/billing state. Immediately revokes entitlement. */
+    public function suspend(License $license, ?string $reason = null): void
+    {
+        $license->status = 'suspended';
+        $license->save();
+
+        PluginEvent::record($license, null, 'license_suspended', array_filter(['reason' => $reason]));
+    }
+
+    /** Lift a Super Admin suspension; status re-derives from current org/billing/trial state. */
+    public function reactivate(License $license): void
+    {
+        $org = Organization::find($license->organization_id);
+
+        $license->status = 'active'; // clear the sticky 'suspended' flag before recomputing
+        $license->status = $this->computeStatus($org, $license);
+        $license->save();
+
+        PluginEvent::record($license, null, 'license_reactivated');
+    }
+
+    /** Permanently revoke a license. Unlike suspend(), this cannot be undone by reactivate(). */
+    public function revoke(License $license, ?string $reason = null): void
+    {
+        $license->revoked_at = now();
+        $license->status = 'revoked';
+        $license->save();
+
+        PluginEvent::record($license, null, 'license_revoked', array_filter(['reason' => $reason]));
+    }
+
+    /**
+     * Deactivate every active activation on a license and mark their sites
+     * disconnected. Callers must gate this behind an explicit confirmation —
+     * it's a hard reset for every connected site at once, not a per-site action.
+     *
+     * @return int Number of activations disconnected.
+     */
+    public function disconnectAll(License $license): int
+    {
+        $activations = $license->activations()->where('status', 'active')->get();
+        $siteIds = $activations->pluck('site_id')->filter()->values()->all();
+
+        $license->activations()->where('status', 'active')->update([
+            'status'         => 'deactivated',
+            'deactivated_at' => now(),
+        ]);
+
+        if ($siteIds) {
+            Site::withoutGlobalScope('organization')
+                ->whereIn('id', $siteIds)
+                ->update(['connection_status' => 'disconnected']);
+        }
+
+        PluginEvent::record($license, null, 'license_disconnect_all', ['count' => count($siteIds)]);
+
+        return count($siteIds);
+    }
+
+    /** Auditable override of a license's activation limit (independent of its plan's site_limit). */
+    public function overrideActivationLimit(License $license, int $limit, ?string $reason = null): void
+    {
+        $previous = (int) $license->activation_limit;
+
+        $license->activation_limit = max(0, $limit);
+        $license->save();
+
+        PluginEvent::record($license, null, 'activation_limit_overridden', array_filter([
+            'previous' => $previous,
+            'limit'    => $license->activation_limit,
+            'reason'   => $reason,
+        ]));
     }
 
     // ---- entitlements ---------------------------------------------------------

@@ -16,6 +16,7 @@ class Site extends Model
         'connector_key_id', 'connector_secret', 'connection_status', 'last_sync_at',
         'timezone', 'currency', 'wp_version', 'wc_version', 'plugin_version',
         'cloudflare_zone_id', 'cloudflare_account_id', 'cloudflare_api_token',
+        'archived_at',
     ];
 
     // Never expose credentials in API responses.
@@ -27,6 +28,7 @@ class Site extends Model
             'last_sync_at'          => 'datetime',
             'connector_secret'      => 'encrypted', // AES at rest via APP_KEY
             'cloudflare_api_token'  => 'encrypted', // AES at rest via APP_KEY
+            'archived_at'           => 'datetime',
         ];
     }
 

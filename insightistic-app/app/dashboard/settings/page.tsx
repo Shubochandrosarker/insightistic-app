@@ -8,6 +8,7 @@ import { Field } from "@/components/ui/Field";
 import { Badge } from "@/components/ui/Badge";
 import { PageHeader } from "@/components/dashboard/PageHeader";
 import { timeAgo } from "@/lib/format";
+import { Info } from "lucide-react";
 
 function Toggle({ label, defaultOn = false }: { label: string; defaultOn?: boolean }) {
   const [on, setOn] = useState(defaultOn);
@@ -56,12 +57,24 @@ export default function SettingsPage() {
     <div>
       <PageHeader
         title="Settings"
-        subtitle={`Site connection and sync for ${site?.name || "your workspace"}.`}
-        right={<Button variant="ghost" onClick={() => setAdding((a) => !a)}>Add a site</Button>}
+        subtitle={`Legacy manual connector for ${site?.name || "your workspace"}.`}
+        right={<Button variant="ghost" onClick={() => setAdding((a) => !a)}>Add a site (legacy connector)</Button>}
       />
 
+      <div className="mb-5 flex items-start gap-3 rounded-xl border border-line bg-card2 px-4 py-3">
+        <Info size={16} className="mt-0.5 shrink-0 text-muted" />
+        <p className="text-sm text-muted">
+          Most sites don&rsquo;t need this page. Installing the free Insightistic WordPress plugin
+          and pasting your license key on the{" "}
+          <a href="/dashboard/licenses" className="font-semibold text-brand hover:text-brand2">Licenses</a>{" "}
+          page connects your site automatically — no separate token to copy. This manual connector
+          token flow only exists for agencies dashboarding a client&rsquo;s store without installing
+          the main plugin there.
+        </p>
+      </div>
+
       {adding && (
-        <Card className="mb-5" title="Add a site">
+        <Card className="mb-5" title="Add a site (legacy connector)">
           <div className="grid gap-3 sm:grid-cols-2">
             <Field label="Site name" value={newSite.name} onChange={(e) => setNewSite({ ...newSite, name: e.target.value })} />
             <Field label="Domain" value={newSite.domain} onChange={(e) => setNewSite({ ...newSite, domain: e.target.value })} placeholder="store.example.com" />
@@ -71,7 +84,7 @@ export default function SettingsPage() {
       )}
 
       <div className="grid gap-5 lg:grid-cols-2">
-        <Card title="Site connection">
+        <Card title="Legacy connector status">
           {site ? (
             <div className="space-y-4">
               <Field label="Site name" value={site.name} readOnly />
@@ -88,7 +101,7 @@ export default function SettingsPage() {
               </div>
             </div>
           ) : (
-            <p className="text-sm text-muted">No site selected. Use “Add a site” to connect one.</p>
+            <p className="text-sm text-muted">No legacy-connector site selected. Use “Add a site” above only if this site can&rsquo;t run the main plugin.</p>
           )}
         </Card>
 

@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\License;
 use App\Models\LicenseActivation;
+use App\Models\PluginEvent;
 use App\Services\LicenseService;
 use App\Services\LifecycleMailer;
 use App\Support\Tenancy;
@@ -98,6 +99,21 @@ class LicenseController extends Controller
             ]);
 
         return response()->json(['activations' => $rows]);
+    }
+
+    /**
+     * GET /licenses/{license}/events — recent activity for the owner/admin
+     * license UX (spec §6.5). Event type + timestamp only, never the full
+     * payload_json Admin\LicenseController exposes — a Super Admin's
+     * suspend/revoke `reason` text isn't necessarily something to surface
+     * back to the customer verbatim.
+     */
+    public function events(License $license)
+    {
+        return response()->json([
+            'events' => PluginEvent::where('license_id', $license->id)
+                ->latest('id')->limit(30)->get(['id', 'event_type', 'created_at']),
+        ]);
     }
 
     /** "Deactivate website" — frees the slot; the plugin drops to free mode on next check-in. */

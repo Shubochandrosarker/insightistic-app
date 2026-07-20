@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Spinner } from "@/components/ui/Spinner";
 import { PageHeader } from "@/components/dashboard/PageHeader";
 import {
-  Copy, Check, KeyRound, RefreshCcw, Globe, Unplug, ShieldCheck, AlertTriangle,
+  Copy, Check, KeyRound, RefreshCcw, Globe, Unplug, ShieldCheck, AlertTriangle, History,
 } from "lucide-react";
 
 type LicenseRow = {
@@ -37,6 +37,23 @@ type ActivationRow = {
   last_sync_at: string | null;
   activated_at: string | null;
   last_seen_at: string | null;
+};
+
+type EventRow = { id: number; event_type: string; created_at: string };
+
+const EVENT_LABEL: Record<string, string> = {
+  activated: "Site activated",
+  reactivated: "Site reconnected",
+  deactivated: "Site deactivated",
+  validation_ok: "License check-in",
+  validation_denied: "License check-in denied",
+  key_regenerated: "Key regenerated",
+  license_suspended: "License suspended",
+  license_reactivated: "License reactivated",
+  license_revoked: "License revoked",
+  license_disconnect_all: "All sites disconnected",
+  activation_limit_overridden: "Activation limit changed",
+  activation_revoked_by_admin: "Site disconnected by support",
 };
 
 const STATUS_TONE: Record<string, "green" | "amber" | "red" | "violet" | "slate"> = {
@@ -136,6 +153,11 @@ export default function LicensesPage() {
 
   const { data: actData, reload: reloadActs } = useApi<{ activations: ActivationRow[] }>(
     license ? `/licenses/${license.id}/activations` : null,
+    [license?.id],
+  );
+
+  const { data: eventsData } = useApi<{ events: EventRow[] }>(
+    license ? `/licenses/${license.id}/events` : null,
     [license?.id],
   );
 
@@ -319,6 +341,23 @@ export default function LicensesPage() {
               </div>
             )}
           </Card>
+
+          {/* Event history (spec §6.5) */}
+          {eventsData && eventsData.events.length > 0 && (
+            <Card className="mt-5" title="Recent activity">
+              <ul className="space-y-2">
+                {eventsData.events.map((e) => (
+                  <li key={e.id} className="flex items-center justify-between gap-3 text-sm">
+                    <span className="flex items-center gap-2 text-fg">
+                      <History size={14} className="text-muted" />
+                      {EVENT_LABEL[e.event_type] ?? e.event_type.replace(/_/g, " ")}
+                    </span>
+                    <span className="shrink-0 text-xs text-muted">{new Date(e.created_at).toLocaleString()}</span>
+                  </li>
+                ))}
+              </ul>
+            </Card>
+          )}
         </>
       )}
     </div>

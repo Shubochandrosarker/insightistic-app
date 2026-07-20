@@ -30,3 +30,12 @@ Schedule::command('insightistic:trials')
 Schedule::command('insightistic:alerts-scan')
     ->everySixHours()
     ->withoutOverlapping();
+
+/*
+ * Scheduled report delivery (spec §12). Hourly so send_time is matched to
+ * within an hour of what the owner configured; dedup against
+ * client_reports.sent_at means a missed/retried run never double-sends.
+ */
+Schedule::command('insightistic:reports-deliver')
+    ->hourly()
+    ->withoutOverlapping();

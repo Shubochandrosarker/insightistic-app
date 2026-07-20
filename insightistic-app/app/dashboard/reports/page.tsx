@@ -2,17 +2,135 @@
 import { useState } from "react";
 import { useDashboard } from "@/lib/dashboard";
 import { useApi } from "@/lib/useApi";
-import { apiPost } from "@/lib/api";
+import { apiPost, apiPatch, apiDelete, apiDownload } from "@/lib/api";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
+import { Field } from "@/components/ui/Field";
 import { PageHeader } from "@/components/dashboard/PageHeader";
 import { EmptyState } from "@/components/dashboard/EmptyState";
 import { Spinner } from "@/components/ui/Spinner";
-import { FileText, Plus } from "lucide-react";
+import { FileText, Plus, Download, Clock } from "lucide-react";
 
 const TYPE_TONE: Record<string, "green" | "violet" | "slate"> = {
   weekly: "green", monthly: "violet", custom: "slate",
 };
+
+const EXPORTS = [
+  { key: "traffic", label: "Traffic" },
+  { key: "seo", label: "SEO" },
+  { key: "performance", label: "Performance" },
+  { key: "commerce", label: "Commerce" },
+];
+
+function SchedulesCard({ siteId }: { siteId: number }) {
+  const { data, loading, reload } = useApi<any>(`/sites/${siteId}/report-schedules`);
+  const [adding, setAdding] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [form, setForm] = useState({ frequency: "weekly", recipients: "", send_day: "monday", send_time: "09:00" });
+
+  async function create() {
+    setBusy(true);
+    try { await apiPost(`/sites/${siteId}/report-schedules`, form); setAdding(false); reload(); }
+    finally { setBusy(false); }
+  }
+  async function toggle(s: any) {
+    await apiPatch(`/sites/${siteId}/report-schedules/${s.id}`, { is_active: !s.is_active });
+    reload();
+  }
+  async function remove(id: number) {
+    if (!window.confirm("Delete this schedule?")) return;
+    await apiDelete(`/sites/${siteId}/report-schedules/${id}`);
+    reload();
+  }
+
+  const schedules = data?.schedules || [];
+
+  return (
+    <Card
+      title="Scheduled delivery"
+      subtitle="Send branded reports automatically by email."
+      right={<Button variant="ghost" onClick={() => setAdding((a) => !a)}><Plus size={15} /> New schedule</Button>}
+    >
+      {adding && (
+        <div className="mb-4 space-y-3 rounded-xl border border-line bg-card2 p-4">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div>
+              <span className="mb-1.5 block text-xs font-semibold text-fg">Frequency</span>
+              <select
+                value={form.frequency}
+                onChange={(e) => setForm({ ...form, frequency: e.target.value })}
+                className="w-full rounded-xl border border-line bg-card px-3 py-2 text-sm text-fg"
+              >
+                <option value="weekly">Weekly</option>
+                <option value="monthly">Monthly</option>
+              </select>
+            </div>
+            <Field
+              label={form.frequency === "monthly" ? "Day of month (1-28)" : "Day of week"}
+              value={form.send_day}
+              onChange={(e) => setForm({ ...form, send_day: e.target.value })}
+              placeholder={form.frequency === "monthly" ? "1" : "monday"}
+            />
+            <Field label="Send time (24h, HH:MM)" value={form.send_time} onChange={(e) => setForm({ ...form, send_time: e.target.value })} />
+            <Field label="Recipients (comma-separated)" value={form.recipients} onChange={(e) => setForm({ ...form, recipients: e.target.value })} placeholder="you@example.com, client@example.com" />
+          </div>
+          <Button onClick={create} disabled={busy || !form.recipients}>{busy ? "Saving…" : "Create schedule"}</Button>
+        </div>
+      )}
+
+      {loading ? (
+        <Spinner />
+      ) : schedules.length === 0 ? (
+        <p className="text-sm text-muted">No scheduled reports yet.</p>
+      ) : (
+        <div className="space-y-2">
+          {schedules.map((s: any) => (
+            <div key={s.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-line bg-card2 px-4 py-3">
+              <div className="flex items-center gap-3">
+                <Clock size={16} className="text-muted" />
+                <div>
+                  <div className="flex items-center gap-2 text-sm font-medium text-fg">
+                    <span className="capitalize">{s.frequency}</span>
+                    <Badge tone={s.is_active ? "green" : "slate"} dot>{s.is_active ? "Active" : "Paused"}</Badge>
+                  </div>
+                  <p className="text-xs text-muted">{s.recipients} · {s.send_day} at {s.send_time || "09:00"}</p>
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <Button variant="ghost" onClick={() => toggle(s)}>{s.is_active ? "Pause" : "Resume"}</Button>
+                <Button variant="ghost" onClick={() => remove(s.id)}>Delete</Button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </Card>
+  );
+}
+
+function ExportsCard({ siteId }: { siteId: number }) {
+  const [busy, setBusy] = useState<string | null>(null);
+
+  async function download(key: string) {
+    setBusy(key);
+    try { await apiDownload(`/sites/${siteId}/exports/${key}.csv?period=last_30_days`, `${key}-export.csv`); }
+    catch { /* apiDownload already surfaces a readable error; nothing else to do here */ }
+    finally { setBusy(null); }
+  }
+
+  return (
+    <Card className="mt-5" title="CSV exports" subtitle="Last 30 days, per data source.">
+      <div className="flex flex-wrap gap-2">
+        {EXPORTS.map((e) => (
+          <Button key={e.key} variant="ghost" onClick={() => download(e.key)} disabled={busy === e.key}>
+            <Download size={15} /> {busy === e.key ? "Downloading…" : e.label}
+          </Button>
+        ))}
+      </div>
+    </Card>
+  );
+}
 
 export default function ReportsPage() {
   const { siteId, sites } = useDashboard();
@@ -31,7 +149,7 @@ export default function ReportsPage() {
   async function send(id: number) {
     const email = window.prompt("Send this report to which email?");
     if (!email) return;
-    try { await apiPost(`/reports/${id}/send-email`, { email }); reload(); }
+    try { await apiPost(`/reports/${id}/send-email`, { recipients: [email] }); reload(); }
     catch (e: any) { setMsg(e.message); }
   }
 
@@ -43,7 +161,7 @@ export default function ReportsPage() {
     <div>
       <PageHeader
         title="Reports"
-        subtitle="Branded weekly and monthly reports — download or send by email."
+        subtitle="Branded weekly and monthly reports — download, email, or schedule."
         right={
           <button onClick={generate} disabled={busy}
             className="inline-flex items-center gap-2 rounded-xl bg-brand px-4 py-2 text-sm font-semibold text-white shadow-[0_8px_20px_-8px_rgba(0,192,75,0.55)] hover:bg-brand2 disabled:opacity-50">
@@ -88,6 +206,11 @@ export default function ReportsPage() {
           ))}
         </div>
       )}
+
+      <div className="mt-5">
+        <SchedulesCard siteId={siteId} />
+      </div>
+      <ExportsCard siteId={siteId} />
     </div>
   );
 }

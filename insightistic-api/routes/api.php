@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Api\Admin\AuditLogController as AdminAuditLogController;
+use App\Http\Controllers\Api\Admin\ImpersonationController as AdminImpersonationController;
 use App\Http\Controllers\Api\Admin\LicenseController as AdminLicenseController;
 use App\Http\Controllers\Api\Admin\OrganizationController as AdminOrganizationController;
 use App\Http\Controllers\Api\Admin\OverviewController as AdminOverviewController;
@@ -19,6 +20,7 @@ use App\Http\Controllers\Api\Connector\HandshakeController;
 use App\Http\Controllers\Api\Connector\PingController;
 use App\Http\Controllers\Api\Connector\SyncController;
 use App\Http\Controllers\Api\ExportController;
+use App\Http\Controllers\Api\ImpersonationController;
 use App\Http\Controllers\Api\InsightController;
 use App\Http\Controllers\Api\IntegrationsController;
 use App\Http\Controllers\Api\LicenseController;
@@ -68,10 +70,17 @@ Route::prefix('auth')->group(function () {
 Route::middleware(['auth:sanctum'])->group(function () {
     Route::get('auth/me', [AuthController::class, 'me']);
     Route::post('auth/logout', [AuthController::class, 'logout']);
+
+    // The "clear exit" from impersonation (spec §13.9) — called by the
+    // impersonated session's own token, so it can't sit behind `tenant` or
+    // `super_admin` either.
+    Route::post('impersonation/end', [ImpersonationController::class, 'end']);
 });
 
 // ---- Authenticated app (user JWT/Sanctum + tenant resolution) -------------
-Route::middleware(['auth:sanctum', 'tenant'])->group(function () {
+// restrict.impersonation is a no-op for every normal session — it only acts
+// when the current token carries the `impersonated` ability (spec §13.9).
+Route::middleware(['auth:sanctum', 'tenant', 'restrict.impersonation'])->group(function () {
     Route::get('organizations/current', [OrganizationController::class, 'current']);
     Route::patch('organizations/current', [OrganizationController::class, 'update']);
 
@@ -213,6 +222,12 @@ Route::prefix('admin')->middleware(['auth:sanctum', 'super_admin'])->group(funct
     Route::get('reports', [AdminReportController::class, 'index']);
     Route::get('usage', [AdminUsageController::class, 'index']);
     Route::get('audit-logs', [AdminAuditLogController::class, 'index']);
+
+    // Impersonation / support mode (spec §13.9). `reason` is required by
+    // the controller's validation — there's no way to start a session
+    // without one.
+    Route::get('impersonations', [AdminImpersonationController::class, 'index']);
+    Route::post('impersonate', [AdminImpersonationController::class, 'start']);
 
     // Licenses (spec §13.6). Destructive actions (revoke, disconnect-all)
     // require an explicit `confirm: true` in the request body — checked by

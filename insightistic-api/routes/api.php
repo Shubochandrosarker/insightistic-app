@@ -17,6 +17,7 @@ use App\Http\Controllers\Api\BrandSettingsController;
 use App\Http\Controllers\Api\Connector\HandshakeController;
 use App\Http\Controllers\Api\Connector\PingController;
 use App\Http\Controllers\Api\Connector\SyncController;
+use App\Http\Controllers\Api\ExportController;
 use App\Http\Controllers\Api\InsightController;
 use App\Http\Controllers\Api\IntegrationsController;
 use App\Http\Controllers\Api\LicenseController;
@@ -28,6 +29,7 @@ use App\Http\Controllers\Api\PluginAiController;
 use App\Http\Controllers\Api\PluginCloudflareController;
 use App\Http\Controllers\Api\PluginLicenseController;
 use App\Http\Controllers\Api\ReportController;
+use App\Http\Controllers\Api\ReportScheduleController;
 use App\Http\Controllers\Api\SeoController;
 use App\Http\Controllers\Api\SiteController;
 use App\Http\Controllers\Api\TeamController;
@@ -149,6 +151,18 @@ Route::middleware(['auth:sanctum', 'tenant'])->group(function () {
         // Reports (Week 4)
         Route::get('sites/{site}/reports', [ReportController::class, 'index']);
         Route::post('sites/{site}/reports/generate', [ReportController::class, 'generate']);
+
+        // Scheduled report delivery (Milestone 5, spec §12).
+        Route::get('sites/{site}/report-schedules', [ReportScheduleController::class, 'index']);
+        Route::post('sites/{site}/report-schedules', [ReportScheduleController::class, 'store']);
+        Route::patch('sites/{site}/report-schedules/{schedule}', [ReportScheduleController::class, 'update']);
+        Route::delete('sites/{site}/report-schedules/{schedule}', [ReportScheduleController::class, 'destroy']);
+
+        // Bounded CSV exports (Milestone 5, spec §12).
+        Route::get('sites/{site}/exports/traffic.csv', [ExportController::class, 'traffic']);
+        Route::get('sites/{site}/exports/seo.csv', [ExportController::class, 'seo']);
+        Route::get('sites/{site}/exports/performance.csv', [ExportController::class, 'performance']);
+        Route::get('sites/{site}/exports/commerce.csv', [ExportController::class, 'commerce']);
     });
 
     // Report view + send (not site-scoped in the URL; access checked in controller).

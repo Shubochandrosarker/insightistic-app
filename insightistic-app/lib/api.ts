@@ -77,3 +77,26 @@ export const apiPatch = (p: string, body?: any) =>
 export const apiDelete = (p: string) => request(p, { method: "DELETE" });
 export const apiUpload = (p: string, form: FormData) =>
   request(p, { method: "POST", body: form }, false);
+
+/** Downloads a binary/CSV endpoint (needs the Bearer header, unlike a plain <a href>). */
+export async function apiDownload(p: string, filename: string) {
+  const token = getToken();
+  const headers: Record<string, string> = {};
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+
+  const res = await fetch(`${BASE}/api${p}`, { headers });
+  if (!res.ok) {
+    const data = await res.json().catch(() => null);
+    throw { status: res.status, message: data?.message || `Export failed (HTTP ${res.status})` } as ApiError;
+  }
+
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}

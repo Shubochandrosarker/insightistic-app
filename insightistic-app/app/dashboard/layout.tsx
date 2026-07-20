@@ -2,6 +2,7 @@
 import {
   LayoutGrid, Sparkles, TrendingUp, Package, Users, ShoppingCart, Mail,
   Bell, FileText, Activity, Globe, UsersRound, CreditCard, Settings, KeyRound,
+  Search, Gauge, Plug,
 } from "lucide-react";
 import { TrialBanner } from "@/components/dashboard/TrialBanner";
 import { Protected } from "@/components/dashboard/Protected";
@@ -16,6 +17,9 @@ import { useAuth } from "@/lib/auth";
 const NAV: NavItem[] = [
   { href: "/dashboard", label: "Overview", icon: LayoutGrid },
   { href: "/dashboard/insights", label: "AI Insights", icon: Sparkles },
+  { href: "/dashboard/traffic", label: "Traffic", icon: TrendingUp },
+  { href: "/dashboard/seo", label: "SEO", icon: Search },
+  { href: "/dashboard/performance", label: "Performance", icon: Gauge },
   { href: "/dashboard/revenue", label: "Revenue", icon: TrendingUp },
   { href: "/dashboard/products", label: "Products", icon: Package },
   { href: "/dashboard/customers", label: "Customers", icon: Users },
@@ -24,6 +28,7 @@ const NAV: NavItem[] = [
   { href: "/dashboard/alerts", label: "Alerts", icon: Bell },
   { href: "/dashboard/reports", label: "Reports", icon: FileText },
   { href: "/dashboard/site-health", label: "Site Health", icon: Activity },
+  { href: "/dashboard/integrations", label: "Integrations", icon: Plug },
   { href: "/dashboard/licenses", label: "Licenses", icon: KeyRound },
   { href: "/dashboard/branding", label: "White Label", icon: Globe },
   { href: "/dashboard/team", label: "Team", icon: UsersRound },
@@ -31,23 +36,28 @@ const NAV: NavItem[] = [
   { href: "/dashboard/settings", label: "Settings", icon: Settings },
 ];
 
-// Mobile bottom tab bar — 4 primary destinations (+ auto "More").
+// Mobile bottom tab bar — 4 primary destinations (+ auto "More"). Order per
+// spec §14: Overview, Traffic, Insights, More/Sites.
 const BOTTOM_NAV: NavItem[] = [
   { href: "/dashboard", label: "Overview", icon: LayoutGrid },
+  { href: "/dashboard/traffic", label: "Traffic", icon: TrendingUp },
   { href: "/dashboard/insights", label: "Insights", icon: Sparkles },
-  { href: "/dashboard/reports", label: "Reports", icon: FileText },
   { href: "/dashboard/settings", label: "Sites", icon: Globe },
 ];
 
 // Everything else lives in the mobile "More" sheet.
 const MORE: NavItem[] = [
+  { href: "/dashboard/seo", label: "SEO", icon: Search },
+  { href: "/dashboard/performance", label: "Performance", icon: Gauge },
   { href: "/dashboard/revenue", label: "Revenue", icon: TrendingUp },
   { href: "/dashboard/products", label: "Products", icon: Package },
   { href: "/dashboard/customers", label: "Customers", icon: Users },
   { href: "/dashboard/orders", label: "Orders", icon: ShoppingCart },
   { href: "/dashboard/emails", label: "Emails", icon: Mail },
   { href: "/dashboard/alerts", label: "Alerts", icon: Bell },
+  { href: "/dashboard/reports", label: "Reports", icon: FileText },
   { href: "/dashboard/site-health", label: "Site Health", icon: Activity },
+  { href: "/dashboard/integrations", label: "Integrations", icon: Plug },
   { href: "/dashboard/licenses", label: "Licenses", icon: KeyRound },
   { href: "/dashboard/branding", label: "White Label", icon: Globe },
   { href: "/dashboard/team", label: "Team", icon: UsersRound },

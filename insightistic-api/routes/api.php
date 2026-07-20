@@ -17,16 +17,20 @@ use App\Http\Controllers\Api\Connector\HandshakeController;
 use App\Http\Controllers\Api\Connector\PingController;
 use App\Http\Controllers\Api\Connector\SyncController;
 use App\Http\Controllers\Api\InsightController;
+use App\Http\Controllers\Api\IntegrationsController;
 use App\Http\Controllers\Api\LicenseController;
 use App\Http\Controllers\Api\NotificationController;
 use App\Http\Controllers\Api\OAuthController;
 use App\Http\Controllers\Api\OrganizationController;
+use App\Http\Controllers\Api\PerformanceController;
 use App\Http\Controllers\Api\PluginAiController;
 use App\Http\Controllers\Api\PluginCloudflareController;
 use App\Http\Controllers\Api\PluginLicenseController;
 use App\Http\Controllers\Api\ReportController;
+use App\Http\Controllers\Api\SeoController;
 use App\Http\Controllers\Api\SiteController;
 use App\Http\Controllers\Api\TeamController;
+use App\Http\Controllers\Api\TrafficController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -113,6 +117,20 @@ Route::middleware(['auth:sanctum', 'tenant'])->group(function () {
         Route::get('sites/{site}/analytics/customers', [AnalyticsController::class, 'customers']);
         Route::get('sites/{site}/analytics/refunds', [AnalyticsController::class, 'refunds']);
         Route::get('sites/{site}/analytics/compare', [AnalyticsController::class, 'compare']);
+
+        // Traffic / SEO / Performance (Milestone 4). Read the tables Milestone
+        // 3 shipped; return honest empty states until connector v2 ingests.
+        Route::get('sites/{site}/analytics/traffic/overview', [TrafficController::class, 'overview']);
+        Route::get('sites/{site}/analytics/traffic/dimensions/{type}', [TrafficController::class, 'dimensions']);
+
+        Route::get('sites/{site}/analytics/seo/overview', [SeoController::class, 'overview']);
+        Route::get('sites/{site}/analytics/seo/queries', [SeoController::class, 'queries']);
+        Route::get('sites/{site}/analytics/seo/pages', [SeoController::class, 'pages']);
+
+        Route::get('sites/{site}/analytics/performance/history', [PerformanceController::class, 'history']);
+        Route::get('sites/{site}/analytics/performance/latest', [PerformanceController::class, 'latest']);
+
+        Route::get('sites/{site}/integrations', [IntegrationsController::class, 'index']);
 
         // AI insights (Week 4)
         Route::get('sites/{site}/insights', [InsightController::class, 'index']);

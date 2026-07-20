@@ -1,12 +1,19 @@
 # Insightistic — Build Status
 
-Two repos, built in your spec's order. Domains: `insightistic.com` (marketing),
+Built in your spec's order. Domains: `insightistic.com` (marketing),
 `app.insightistic.com` (dashboard), API at `api.insightistic.com` (or `app.../api`).
 
+This repo:
+
 ```
-insightistic-api/         Laravel 12 SaaS backend (multi-tenant)
-insightistic-connector/   WordPress plugin (HMAC-signed sync)
+insightistic-api/   Laravel 12 SaaS backend (multi-tenant)
+insightistic-app/   Next.js dashboard
 ```
+
+The `insightistic-connector/` WordPress plugin referenced throughout this log
+has since moved to the [`insightistic-website`](https://github.com/Shubochandrosarker/insightistic-website)
+repo, alongside the marketing theme and Formistic — this repo now holds only
+the app + API. See `README.md` for the current repo split.
 
 ## Done
 

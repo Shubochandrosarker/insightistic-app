@@ -220,4 +220,4 @@ pm2 restart insightistic-app
 
 ## 7. WordPress Connector
 
-Zip `insightistic-connector/` and upload it from WordPress admin. In the Insightistic dashboard, create a site, copy the one-time connector token, then paste the API URL and token into the plugin.
+Clone the [`insightistic-website`](https://github.com/Shubochandrosarker/insightistic-website) repo, zip its `insightistic-connector/` folder, and upload it from WordPress admin. In the Insightistic dashboard, create a site, copy the one-time connector token, then paste the API URL and token into the plugin.

@@ -18,6 +18,43 @@ export function setToken(t: string | null) {
   else localStorage.removeItem("ins_token");
 }
 
+export interface ImpersonationMeta {
+  session_id: number;
+  admin_name: string;
+  target_name: string;
+  reason: string;
+  elevated: boolean;
+  started_at: string;
+}
+
+/**
+ * Impersonation (spec §13.9) stashes the admin's own token + a copy of the
+ * new impersonation token here before switching the active session
+ * (lib/auth.tsx's applyToken) to the target user — "clear exit" restores
+ * from this stash rather than requiring the admin to log in again.
+ */
+export function getImpersonation(): { adminToken: string; meta: ImpersonationMeta } | null {
+  if (typeof window === "undefined") return null;
+  const adminToken = localStorage.getItem("ins_admin_return_token");
+  const metaRaw = localStorage.getItem("ins_impersonation_meta");
+  if (!adminToken || !metaRaw) return null;
+  try {
+    return { adminToken, meta: JSON.parse(metaRaw) };
+  } catch {
+    return null;
+  }
+}
+export function setImpersonation(adminToken: string, meta: ImpersonationMeta) {
+  if (typeof window === "undefined") return;
+  localStorage.setItem("ins_admin_return_token", adminToken);
+  localStorage.setItem("ins_impersonation_meta", JSON.stringify(meta));
+}
+export function clearImpersonation() {
+  if (typeof window === "undefined") return;
+  localStorage.removeItem("ins_admin_return_token");
+  localStorage.removeItem("ins_impersonation_meta");
+}
+
 export interface ApiError {
   status: number;
   message: string;

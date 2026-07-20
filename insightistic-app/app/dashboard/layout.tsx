@@ -5,6 +5,7 @@ import {
   Search, Gauge, Plug,
 } from "lucide-react";
 import { TrialBanner } from "@/components/dashboard/TrialBanner";
+import { ImpersonationBanner } from "@/components/dashboard/ImpersonationBanner";
 import { Protected } from "@/components/dashboard/Protected";
 import { Topbar } from "@/components/dashboard/Topbar";
 import { PlanCard } from "@/components/dashboard/PlanCard";
@@ -79,6 +80,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           mobileHeader={<DashboardMobileControls />}
           onLogout={logout}
         >
+          <ImpersonationBanner />
           <TrialBanner />
           {children}
         </AppShell>

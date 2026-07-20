@@ -84,6 +84,7 @@ Route::middleware(['auth:sanctum', 'tenant'])->group(function () {
     Route::get('licenses', [LicenseController::class, 'index']);
     Route::post('licenses/{license}/regenerate', [LicenseController::class, 'regenerate'])->middleware('role:owner');
     Route::get('licenses/{license}/activations', [LicenseController::class, 'activations']);
+    Route::get('licenses/{license}/events', [LicenseController::class, 'events']);
     Route::delete('activations/{activation}', [LicenseController::class, 'deactivateActivation'])->middleware('role:owner,admin');
 
     // Notifications / conversion prompts.

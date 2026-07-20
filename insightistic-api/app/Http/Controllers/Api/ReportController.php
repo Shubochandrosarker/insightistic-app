@@ -11,6 +11,7 @@ use App\Services\UsageService;
 use App\Support\Tenancy;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Storage;
 
 class ReportController extends Controller
 {
@@ -101,6 +102,42 @@ class ReportController extends Controller
         ]);
 
         return response()->json(['status' => 'sent', 'report' => $row]);
+    }
+
+    /**
+     * GET /reports/{report}/pdf — signed, unauthenticated. `pdf_link` on the
+     * model is a `URL::temporarySignedRoute()` to here, not a raw public-disk
+     * URL: the browser opens it as a plain `<a href target=_blank>` (no
+     * Authorization header on a top-level navigation), and streaming through
+     * the app means it works regardless of whether the `public/storage`
+     * symlink exists or `APP_URL` matches the disk's configured base URL —
+     * only the URL Laravel itself just generated has to resolve, which it
+     * always does by construction.
+     */
+    public function downloadPdf(Request $request, int $report)
+    {
+        return $this->streamReport($report, 'pdf_url', 'application/pdf');
+    }
+
+    /** GET /reports/{report}/html — signed, unauthenticated. See downloadPdf(). */
+    public function downloadHtml(Request $request, int $report)
+    {
+        return $this->streamReport($report, 'html_url', 'text/html');
+    }
+
+    private function streamReport(int $reportId, string $column, string $contentType)
+    {
+        // No tenant/auth context on a signed link — the signature itself is
+        // the access control, so this deliberately bypasses the org scope.
+        $row = ClientReport::withoutGlobalScope('organization')->find($reportId);
+        $path = $row?->{$column};
+        $disk = config('insightistic.reports.disk', 'public');
+
+        if (! $path || ! Storage::disk($disk)->exists($path)) {
+            return response()->json(['message' => 'Report not found.'], 404);
+        }
+
+        return Storage::disk($disk)->response($path, null, ['Content-Type' => $contentType]);
     }
 
     /**

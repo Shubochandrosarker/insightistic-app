@@ -128,6 +128,18 @@ Route::middleware(['auth:sanctum', 'tenant'])->group(function () {
     Route::post('reports/{report}/send-email', [ReportController::class, 'sendEmail']);
 });
 
+// ---- Report downloads (signed, unauthenticated) ----------------------------
+// The signature itself is the access control — these are opened as plain
+// browser navigations (<a href target=_blank>) from ClientReport::pdf_link/
+// html_link, which can't carry a Sanctum bearer token. Deliberately outside
+// the auth:sanctum group.
+Route::get('reports/{report}/pdf', [ReportController::class, 'downloadPdf'])
+    ->name('reports.download.pdf')
+    ->middleware('signed');
+Route::get('reports/{report}/html', [ReportController::class, 'downloadHtml'])
+    ->name('reports.download.html')
+    ->middleware('signed');
+
 // ---- Super Admin (platform owner; auth + super_admin, NO tenant scope) -----
 Route::prefix('admin')->middleware(['auth:sanctum', 'super_admin'])->group(function () {
     Route::get('overview', [AdminOverviewController::class, 'overview']);

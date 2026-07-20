@@ -7,6 +7,10 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class SeoDaily extends Model
 {
+    // Same pluralization mismatch as TrafficDaily — default guess is
+    // "seo_dailies", real table is singular "seo_daily".
+    protected $table = 'seo_daily';
+
     protected $fillable = ['site_id', 'date', 'clicks', 'impressions', 'ctr', 'avg_position'];
 
     protected function casts(): array

@@ -5,6 +5,7 @@ use App\Http\Controllers\Api\Admin\ImpersonationController as AdminImpersonation
 use App\Http\Controllers\Api\Admin\LicenseController as AdminLicenseController;
 use App\Http\Controllers\Api\Admin\OrganizationController as AdminOrganizationController;
 use App\Http\Controllers\Api\Admin\OverviewController as AdminOverviewController;
+use App\Http\Controllers\Api\Admin\PlanController as AdminPlanController;
 use App\Http\Controllers\Api\Admin\ReportController as AdminReportController;
 use App\Http\Controllers\Api\Admin\SiteController as AdminSiteController;
 use App\Http\Controllers\Api\Admin\SubscriptionController as AdminSubscriptionController;
@@ -242,6 +243,13 @@ Route::prefix('admin')->middleware(['auth:sanctum', 'super_admin'])->group(funct
     Route::post('licenses/{id}/disconnect-all', [AdminLicenseController::class, 'disconnectAll']);
     Route::patch('licenses/{id}/activation-limit', [AdminLicenseController::class, 'overrideActivationLimit']);
     Route::delete('activations/{id}', [AdminLicenseController::class, 'revokeActivation']);
+
+    // Plan / feature registry editor (spec §13.7).
+    Route::get('plans', [AdminPlanController::class, 'index']);
+    Route::post('plans', [AdminPlanController::class, 'store']);
+    Route::get('plans/{id}', [AdminPlanController::class, 'show']);
+    Route::patch('plans/{id}', [AdminPlanController::class, 'update']);
+    Route::get('plans/{id}/impact', [AdminPlanController::class, 'impact']);
 });
 
 // ---- Plugin license endpoints (spec §4) ------------------------------------

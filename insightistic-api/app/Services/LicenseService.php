@@ -20,10 +20,22 @@ use Illuminate\Support\Str;
  */
 class LicenseService
 {
+    /**
+     * Canonical entitlement vocabulary (spec §6.3) — the single source of
+     * truth Admin\PlanController's editor validates features_json against,
+     * so a plan can never be saved with a feature slug nothing else in the
+     * app recognizes. `seo_analysis` and `email_audit_automation` are kept
+     * only because PlanSeeder's existing rows already use them; every other
+     * plan should use their canonical spec §6.3 replacements
+     * (`seo_analytics`, and email automation has no dedicated flag yet).
+     */
     public const FEATURES = [
-        'basic_analytics', 'woocommerce_analytics', 'seo_analysis',
-        'email_audit_automation', 'ai_insights', 'advanced_reports',
-        'scheduled_reports', 'multi_site', 'agency_white_label', 'team_access',
+        'basic_analytics', 'traffic_analytics', 'seo_analytics', 'performance_tracking',
+        'woocommerce_analytics', 'engagement_analytics', 'ai_insights', 'ai_copilot',
+        'advanced_reports', 'scheduled_reports', 'alerts', 'data_export',
+        'multi_site', 'team_access', 'agency_white_label', 'custom_domain', 'api_access',
+        // legacy — see docblock above.
+        'seo_analysis', 'email_audit_automation',
     ];
 
     // ---- key lifecycle ------------------------------------------------------

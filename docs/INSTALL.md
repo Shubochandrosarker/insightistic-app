@@ -68,8 +68,9 @@ GA4/GSC/PageSpeed/WooCommerce plugin, not this connector) — no separate connec
 **If the site does *not* run the main Insightistic plugin** (e.g. an agency dashboarding a
 client's store that only has WooCommerce) — use the standalone connector:
 1. In the dashboard → **Settings → Add a site**. Copy the one-time **connector token**.
-2. On the WordPress site: install **insightistic-connector** (Plugins → Add New → Upload),
-   activate it.
+2. On the WordPress site: install **insightistic-connector** — zip the `insightistic-connector/`
+   folder from the [`insightistic-website`](https://github.com/Shubochandrosarker/insightistic-website)
+   repo, then Plugins → Add New → Upload — and activate it.
 3. Go to **Insightistic** in the WP admin menu → **Connection** tab → paste the API URL
    (`https://api.insightistic.com`) and the connector token → **Connect**.
 4. **Sync** tab → **Run first sync**. Orders, products and customers import in chunks

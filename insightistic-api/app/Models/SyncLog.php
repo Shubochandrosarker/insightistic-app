@@ -8,7 +8,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 class SyncLog extends Model
 {
     protected $fillable = [
-        'site_id', 'job', 'status', 'records', 'message', 'started_at', 'finished_at',
+        'site_id', 'sync_batch_id', 'job', 'schema_version', 'status', 'records',
+        'cursor', 'attempts', 'idempotency_key', 'message', 'started_at', 'finished_at',
     ];
 
     protected function casts(): array

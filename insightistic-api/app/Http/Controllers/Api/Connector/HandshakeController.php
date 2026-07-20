@@ -62,9 +62,20 @@ class HandshakeController extends Controller
             ],
             'sync' => [
                 // Chunk sizes the plugin should use (spec section 14).
-                'orders_per_request'    => 50,
-                'products_per_request'  => 100,
-                'customers_per_request' => 100,
+                'orders_per_request'      => 50,
+                'products_per_request'    => 100,
+                'customers_per_request'   => 100,
+                // Connector v2 (Milestone 3) — traffic/SEO/performance/
+                // engagement/broken-link ingestion. A plugin built against
+                // v1 only ignores this key entirely; only check it if the
+                // plugin wants to detect v2 endpoint availability before
+                // calling them (they 404 on servers that don't have it yet).
+                'v2'                      => true,
+                'traffic_days_per_request'    => 90,
+                'seo_days_per_request'        => 90,
+                'seo_rows_per_request'        => 250,
+                'engagement_rows_per_request' => 400,
+                'broken_links_per_request'    => 200,
             ],
         ]);
     }

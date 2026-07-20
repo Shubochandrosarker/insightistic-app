@@ -20,6 +20,7 @@ use App\Http\Controllers\Api\BrandSettingsController;
 use App\Http\Controllers\Api\Connector\HandshakeController;
 use App\Http\Controllers\Api\Connector\PingController;
 use App\Http\Controllers\Api\Connector\SyncController;
+use App\Http\Controllers\Api\Connector\SyncV2Controller;
 use App\Http\Controllers\Api\ExportController;
 use App\Http\Controllers\Api\ImpersonationController;
 use App\Http\Controllers\Api\InsightController;
@@ -302,6 +303,18 @@ Route::prefix('connector/v1')->middleware(['connector.auth', 'throttle:connector
     Route::post('products/bulk', [SyncController::class, 'productsBulk']);
     Route::post('customers/bulk', [SyncController::class, 'customersBulk']);
     Route::post('sync-complete', [SyncController::class, 'syncComplete']);
+
+    // Connector v2 (spec §7.2/§8, Milestone 3) — traffic/SEO/performance/
+    // engagement/broken-link ingestion, on top of v1's commerce sync above.
+    Route::post('sync/start', [SyncV2Controller::class, 'start']);
+    Route::post('sync/traffic/daily', [SyncV2Controller::class, 'trafficDaily']);
+    Route::post('sync/traffic/dimensions', [SyncV2Controller::class, 'trafficDimensions']);
+    Route::post('sync/seo/daily', [SyncV2Controller::class, 'seoDaily']);
+    Route::post('sync/seo/queries', [SyncV2Controller::class, 'seoQueries']);
+    Route::post('sync/seo/pages', [SyncV2Controller::class, 'seoPages']);
+    Route::post('sync/performance/runs', [SyncV2Controller::class, 'performanceRuns']);
+    Route::post('sync/engagement/daily', [SyncV2Controller::class, 'engagementDaily']);
+    Route::post('sync/broken-links', [SyncV2Controller::class, 'brokenLinks']);
 });
 
 // ---- Stripe webhook (no tenant, signature-verified) -----------------------

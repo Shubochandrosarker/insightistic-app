@@ -20,3 +20,13 @@ Schedule::command('insightistic:snapshots')
 Schedule::command('insightistic:trials')
     ->hourly()
     ->withoutOverlapping();
+
+/*
+ * Deterministic alert rules (spec §12) — revenue/traffic/SEO changes,
+ * performance regressions, low stock, stale/failed syncs, 404 spikes. Every
+ * 6 hours: most rules compare 7-day windows, so more-frequent runs wouldn't
+ * catch anything new, just waste a run.
+ */
+Schedule::command('insightistic:alerts-scan')
+    ->everySixHours()
+    ->withoutOverlapping();

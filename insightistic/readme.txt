@@ -4,7 +4,7 @@ Tags: woocommerce, analytics, reports, ai, license
 Requires at least: 6.2
 Tested up to: 6.7
 Requires PHP: 8.0
-Stable tag: 1.0.0
+Stable tag: 1.1.0
 License: GPLv2 or later
 
 AI-powered WooCommerce analytics for Insightistic — activate with your license key, no manual tokens.
@@ -30,10 +30,30 @@ activation.
    — shown once right after signup, or via "Regenerate key").
 3. Go to WordPress Admin → Insightistic → License, paste the key, click Activate.
 4. Your site appears on the Licenses page automatically and the first sync
-   starts immediately. Daily auto-sync and license check-ins run via Action
-   Scheduler after that.
+   starts immediately. A daily incremental sync, a weekly full reconciliation
+   and daily license check-ins run via Action Scheduler after that.
 
 == Changelog ==
+= 1.1.0 =
+* Incremental daily sync: only orders/products modified since the last
+  checkpoint are sent (per-entity cursors that advance only after a page is
+  confirmed received). The full historical sync now runs as a weekly
+  reconciliation instead of daily.
+* Realtime updates: order and product changes (create/update/status/refund/
+  stock) are batched and pushed about a minute after they happen.
+* Retry with backoff (1m/5m/15m) for failed sync pages — a temporary API
+  outage no longer stalls or wedges the sync chain.
+* Every bulk payload now carries a sync_batch_id (uuid per run) so
+  server-side upserts are idempotent.
+* HPOS: declared compatibility with WooCommerce High-Performance Order
+  Storage (custom order tables).
+* NEW, opt-in (off by default): share published pages, posts and product
+  descriptions with the Insightistic AI Knowledge Base. Password-protected,
+  private and draft content is never sent; add the `_insightistic_exclude`
+  post meta to exclude individual posts. Deletions are propagated.
+* Manual resync by date range: optionally limit a manual sync to orders
+  created between two dates (License screen).
+
 = 1.0.0 =
 * Initial release: license-key activation (spec §4), HMAC connector sync
   (orders/products/customers/site-health), daily license validation.

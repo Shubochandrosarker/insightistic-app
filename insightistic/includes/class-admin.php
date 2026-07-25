@@ -76,13 +76,21 @@ class Admin
             $this->redirect('license', ['msg' => 'activation_failed']);
         }
 
-        // Daily auto-sync + daily license check-in, paced by the server's
-        // validate_interval (defaults to 24h).
+        // Weekly full reconciliation + daily incremental (delta) sync + daily
+        // license check-in, paced by the server's validate_interval (defaults
+        // to 24h). The full historical sync deliberately never runs on the
+        // daily cadence — the daily job only sends records modified since the
+        // per-entity cursors (see DeltaSync).
         $interval = max(HOUR_IN_SECONDS, (int) Settings::get('validate_interval', DAY_IN_SECONDS));
 
         if (function_exists('as_schedule_recurring_action')) {
             if (! as_next_scheduled_action('insightistic_core_run_sync')) {
-                as_schedule_recurring_action(time() + 60, DAY_IN_SECONDS, 'insightistic_core_run_sync', [], 'insightistic');
+                // First full pass is kicked immediately below, so the first
+                // weekly reconciliation tick can wait a full week.
+                as_schedule_recurring_action(time() + WEEK_IN_SECONDS, WEEK_IN_SECONDS, 'insightistic_core_run_sync', [], 'insightistic');
+            }
+            if (! as_next_scheduled_action('insightistic_core_run_delta_sync')) {
+                as_schedule_recurring_action(time() + DAY_IN_SECONDS, DAY_IN_SECONDS, 'insightistic_core_run_delta_sync', [], 'insightistic');
             }
             if (! as_next_scheduled_action('insightistic_core_validate_license')) {
                 as_schedule_recurring_action(time() + $interval, $interval, 'insightistic_core_validate_license', [], 'insightistic');
@@ -100,8 +108,9 @@ class Admin
         $this->guard('insightistic_core_deactivate');
 
         if (function_exists('as_unschedule_all_actions')) {
-            as_unschedule_all_actions('insightistic_core_run_sync');
-            as_unschedule_all_actions('insightistic_core_validate_license');
+            foreach (Sync::ACTION_HOOKS as $hook) {
+                as_unschedule_all_actions($hook);
+            }
         }
 
         License::deactivate();
@@ -125,6 +134,7 @@ class Admin
             'sync_products'    => isset($_POST['sync_products']) ? 1 : 0,
             'sync_customers'   => isset($_POST['sync_customers']) ? 1 : 0,
             'sync_site_health' => isset($_POST['sync_site_health']) ? 1 : 0,
+            'sync_content'     => isset($_POST['sync_content']) ? 1 : 0,
         ]);
         $this->redirect('sync', ['msg' => 'saved']);
     }
@@ -135,8 +145,25 @@ class Admin
         if (! Settings::is_connected()) {
             $this->redirect('license', ['msg' => 'not_connected']);
         }
-        Sync::instance()->start_full_sync();
+
+        // Optional date-range resync — narrows the ORDERS query to orders
+        // created between the two dates; products/customers/content are
+        // unaffected by the range. Anything not strictly Y-m-d is dropped.
+        $from = $this->sanitize_date($_POST['date_from'] ?? '');
+        $to   = $this->sanitize_date($_POST['date_to'] ?? '');
+        if ($from !== '' && $to !== '' && $from > $to) {
+            [$from, $to] = [$to, $from];
+        }
+
+        Sync::instance()->start_full_sync($from, $to);
         $this->redirect('license', ['msg' => 'sync_started']);
+    }
+
+    /** Strict Y-m-d or empty string. */
+    private function sanitize_date($raw): string
+    {
+        $value = sanitize_text_field(wp_unslash((string) $raw));
+        return preg_match('/^\d{4}-\d{2}-\d{2}$/', $value) ? $value : '';
     }
 
     public function handle_clear_logs(): void
@@ -262,9 +289,20 @@ class Admin
                 <?php endif; ?>
             </table>
 
+            <form method="post" action="<?php echo esc_url($post); ?>" style="margin:0 0 8px;">
+                <input type="hidden" name="action" value="insightistic_core_sync_now">
+                <?php wp_nonce_field('insightistic_core_sync_now'); ?>
+                <label for="insightistic_date_from">Orders from</label>
+                <input type="date" id="insightistic_date_from" name="date_from">
+                <label for="insightistic_date_to">to</label>
+                <input type="date" id="insightistic_date_to" name="date_to">
+                <button type="submit" class="button button-primary">Run Manual Sync</button>
+                <p class="description">Optional date range: resyncs only orders <em>created</em> between the two
+                    dates (products, customers and content sync in full either way). Leave both empty for a
+                    complete sync.</p>
+            </form>
             <p style="display:flex;gap:8px;flex-wrap:wrap;">
                 <?php
-                $this->button_form($post, 'insightistic_core_sync_now', 'Run Manual Sync', 'primary');
                 $this->button_form($post, 'insightistic_core_refresh', 'Refresh License', 'secondary');
                 $this->button_form($post, 'insightistic_core_deactivate', 'Deactivate License', 'delete');
                 ?>
@@ -314,6 +352,19 @@ class Admin
                             value="1" <?php checked(! empty($s[$key])); ?>> Enabled</label></td>
                     </tr>
                 <?php endforeach; ?>
+                <tr>
+                    <th>AI Knowledge Base</th>
+                    <td>
+                        <label><input type="checkbox" name="sync_content" value="1"
+                            <?php checked(! empty($s['sync_content'])); ?>>
+                            Share published pages, posts &amp; product descriptions with the Insightistic
+                            AI Knowledge Base</label>
+                        <p class="description">Privacy note: off by default. Only publicly visible,
+                            published content is shared — drafts, private and password-protected posts are
+                            never sent, and no comments, user data or metadata are included. Add the post
+                            meta <code>_insightistic_exclude</code> to any post to keep it out.</p>
+                    </td>
+                </tr>
             </table>
             <?php submit_button('Save Sync Settings'); ?>
         </form>

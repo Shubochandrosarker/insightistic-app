@@ -146,6 +146,9 @@ TXT;
             'source_data_json' => $contract,
             'ai_model'         => $contract['model'],
             'status'           => 'unread',
+            // Mirrored out of the contract into a real column so freshness is
+            // queryable — inside JSON nothing could filter or sort on it.
+            'expires_at'       => $contract['expires_at'] ?? null,
         ]);
     }
 

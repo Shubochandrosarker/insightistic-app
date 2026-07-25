@@ -28,13 +28,137 @@ class InsightController extends Controller
     {
         $site = $this->site($request);
 
+        // Dismissed insights are hidden by default but never deleted — a
+        // dismissal is "not now", and the user can ask for them back.
+        $filter = (string) $request->query('filter', 'live');
+
+        $rows = AiInsight::query()
+            ->where('site_id', $site->id)
+            ->when($filter === 'live', fn ($q) => $q->whereNull('dismissed_at'))
+            ->when($filter === 'saved', fn ($q) => $q->whereNotNull('saved_at'))
+            ->when($filter === 'dismissed', fn ($q) => $q->whereNotNull('dismissed_at'))
+            ->when($request->filled('type'), fn ($q) => $q->where('type', $request->string('type')))
+            ->latest()
+            ->limit(50)
+            ->get();
+
         return response()->json([
-            'insights' => AiInsight::query()
-                ->where('site_id', $site->id)
-                ->latest()
-                ->limit(50)
-                ->get(['id', 'type', 'title', 'summary', 'recommendation', 'severity', 'priority_score', 'status', 'created_at']),
+            'insights' => $rows->map(fn (AiInsight $i) => $this->summarise($i))->values(),
+            'counts'   => [
+                'live'      => AiInsight::where('site_id', $site->id)->whereNull('dismissed_at')->count(),
+                'saved'     => AiInsight::where('site_id', $site->id)->whereNotNull('saved_at')->count(),
+                'dismissed' => AiInsight::where('site_id', $site->id)->whereNotNull('dismissed_at')->count(),
+            ],
         ]);
+    }
+
+    /*
+     * Route parameters are injected positionally, so every method on a
+     * `sites/{site}/insights/{insight}` route must declare {site} first even
+     * though it reads the resolved Site off the request. Omitting it silently
+     * binds the *site* id to $insight — which looks fine right up until a
+     * tenant has an insight whose id differs from its site's.
+     */
+
+    /** POST /sites/{site}/insights/{insight}/save + DELETE to unsave. */
+    public function save(Request $request, int $siteId, int $insight)
+    {
+        return $this->mutate($request, $insight, ['saved_at' => now()]);
+    }
+
+    public function unsave(Request $request, int $siteId, int $insight)
+    {
+        return $this->mutate($request, $insight, ['saved_at' => null]);
+    }
+
+    /** POST /sites/{site}/insights/{insight}/dismiss + DELETE to restore. */
+    public function dismiss(Request $request, int $siteId, int $insight)
+    {
+        return $this->mutate($request, $insight, ['dismissed_at' => now()]);
+    }
+
+    public function restore(Request $request, int $siteId, int $insight)
+    {
+        return $this->mutate($request, $insight, ['dismissed_at' => null]);
+    }
+
+    /**
+     * POST /sites/{site}/insights/{insight}/action
+     *
+     * Turns an insight into something that can be pasted into whatever
+     * tracker the team already uses. Insightistic deliberately does not
+     * invent its own task system — a half-built one nobody adopts is worse
+     * than an export that drops cleanly into Linear, Jira or a doc.
+     */
+    public function action(Request $request, int $siteId, int $insight)
+    {
+        $row = $this->find($request, $insight);
+
+        if (! $row) {
+            return response()->json(['message' => 'Insight not found.'], 404);
+        }
+
+        $row->update(['actioned_at' => now(), 'status' => 'done']);
+
+        $actions = $row->actions();
+        $contract = $row->source_data_json ?? [];
+
+        $markdown = "## {$row->title}\n\n"
+            . ($row->summary ? "{$row->summary}\n\n" : '')
+            . ($actions === [] ? '' : "### Recommended actions\n" . implode("\n", array_map(fn ($a) => "- [ ] {$a}", $actions)) . "\n\n")
+            . (! empty($contract['why_it_may_matter']) ? "### Why it matters\n{$contract['why_it_may_matter']}\n\n" : '')
+            . (! empty($contract['data_limitations']) ? "> Data limitations: {$contract['data_limitations']}\n" : '');
+
+        return response()->json([
+            'task' => [
+                'title'       => $row->title,
+                'description' => $row->summary,
+                'actions'     => $actions,
+                'severity'    => $row->severity,
+                'source'      => 'Insightistic insight #' . $row->id,
+                'markdown'    => $markdown,
+            ],
+            'insight' => $this->summarise($row->fresh()),
+        ]);
+    }
+
+    private function mutate(Request $request, int $insight, array $attrs)
+    {
+        $row = $this->find($request, $insight);
+
+        if (! $row) {
+            return response()->json(['message' => 'Insight not found.'], 404);
+        }
+
+        $row->update($attrs);
+
+        return response()->json(['insight' => $this->summarise($row->fresh())]);
+    }
+
+    private function find(Request $request, int $insight): ?AiInsight
+    {
+        return AiInsight::where('site_id', $this->site($request)->id)->find($insight);
+    }
+
+    /** List shape, including the lifecycle flags the dashboard renders. */
+    private function summarise(AiInsight $i): array
+    {
+        return [
+            'id'             => $i->id,
+            'type'           => $i->type,
+            'title'          => $i->title,
+            'summary'        => $i->summary,
+            'recommendation' => $i->recommendation,
+            'severity'       => $i->severity,
+            'priority_score' => $i->priority_score,
+            'status'         => $i->status,
+            'saved'          => $i->saved_at !== null,
+            'dismissed'      => $i->dismissed_at !== null,
+            'actioned'       => $i->actioned_at !== null,
+            'stale'          => $i->isStale(),
+            'expires_at'     => $i->expires_at?->toIso8601String(),
+            'created_at'     => $i->created_at?->toIso8601String(),
+        ];
     }
 
     public function generate(Request $request)
@@ -96,7 +220,7 @@ class InsightController extends Controller
         ], 201);
     }
 
-    public function show(Request $request, int $insight)
+    public function show(Request $request, int $siteId, int $insight)
     {
         $site = $this->site($request);
         $row = AiInsight::where('site_id', $site->id)->find($insight);
@@ -108,7 +232,7 @@ class InsightController extends Controller
         return response()->json(['insight' => $row]);
     }
 
-    public function markRead(Request $request, int $insight)
+    public function markRead(Request $request, int $siteId, int $insight)
     {
         $site = $this->site($request);
         $row = AiInsight::where('site_id', $site->id)->find($insight);

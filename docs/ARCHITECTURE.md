@@ -84,6 +84,22 @@ performance/engagement tables are fed by connector v2 endpoints.
 ## AI plane
 
 - `ContextAssembler` — authorized evidence bundles for 10 contextual types.
+- Insight lifecycle — `saved_at` / `dismissed_at` / `actioned_at` /
+  `expires_at` are columns on `ai_insights`, not `status` values: an insight
+  can be read *and* saved, and dismissing ("not now") is not completing.
+  Dismissal hides, never deletes. `expires_at` is mirrored out of the
+  generator's contract so freshness is queryable — inside JSON nothing could
+  filter or sort on it — and past-window insights render as stale rather than
+  disappearing. `POST .../insights/{id}/action` returns task-ready markdown;
+  Insightistic exports into whatever tracker the team already uses instead of
+  growing its own.
+- Proactive generation — `insightistic:insights-generate` (05:00, last in the
+  nightly chain so it reads freshly synced data) produces executive, traffic,
+  seo, commerce and alerts insights unprompted. Three guards: plan limits are
+  checked per organization before each generation and the run abandons that
+  org once its allowance is gone, a type is skipped when a live non-dismissed
+  insight of that type is still inside its freshness window, and context is
+  assembled before metering so a site with no evidence costs no quota.
 - Knowledge base — see docs/AI-KNOWLEDGE-BASE.md (queued ingestion,
   pgvector + FTS hybrid retrieval, SSRF-guarded crawling).
 - Copilot — SSE streaming chat grounded in analytics evidence + knowledge
@@ -104,6 +120,8 @@ Compose stacks: `docker-compose.prod.yml` (GHCR + Traefik; db=pgvector,
 redis, api, queue, scheduler, app, nginx, one-shot `migrate` service under
 the `ops` profile), plus two Hostinger variants. CI
 (`.github/workflows/ci.yml`) gates GHCR publishing. Queue: Redis with
-retries/backoff + `failed_jobs`; scheduler runs snapshots (02:00), trial
-automation (hourly), alert scans (6 h), report delivery (hourly). Health:
+retries/backoff + `failed_jobs`; scheduler runs data-source sync (01:20),
+snapshots (02:00), privacy maintenance (03:30), PageSpeed (04:10), proactive
+insights (05:00), trial automation (hourly), alert scans (6 h) and report
+delivery (hourly). Health:
 `/up`, container healthchecks, `/api/admin/system-health`.

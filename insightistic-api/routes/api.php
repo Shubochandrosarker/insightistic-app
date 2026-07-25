@@ -65,9 +65,10 @@ Route::prefix('auth')->group(function () {
 
     // Social login (Google / Microsoft / GitHub). Buttons appear in the SPA
     // only for providers returned by the `oauth/providers` endpoint.
-    Route::get('oauth/providers', [OAuthController::class, 'providers']);
-    Route::get('oauth/{provider}/redirect', [OAuthController::class, 'redirect']);
-    Route::get('oauth/{provider}/callback', [OAuthController::class, 'callback']);
+    // Redirect/callback are credential endpoints — brute-force throttled.
+    Route::get('oauth/providers', [OAuthController::class, 'providers'])->middleware('throttle:public');
+    Route::get('oauth/{provider}/redirect', [OAuthController::class, 'redirect'])->middleware('throttle:auth');
+    Route::get('oauth/{provider}/callback', [OAuthController::class, 'callback'])->middleware('throttle:auth');
 });
 
 // ---- Authenticated identity (no organization required) --------------------
@@ -78,6 +79,17 @@ Route::prefix('auth')->group(function () {
 Route::middleware(['auth:sanctum'])->group(function () {
     Route::get('auth/me', [AuthController::class, 'me']);
     Route::post('auth/logout', [AuthController::class, 'logout']);
+
+    // Active session/device management (security hardening).
+    Route::get('auth/sessions', [AuthController::class, 'sessions']);
+    Route::delete('auth/sessions/{tokenId}', [AuthController::class, 'revokeSession']);
+    Route::post('auth/sessions/revoke-others', [AuthController::class, 'revokeOtherSessions']);
+
+    // Single-use super-admin bootstrap token redemption (issued via
+    // `php artisan insightistic:super-admin:issue-token`). Throttled hard:
+    // failed attempts burn nothing but time.
+    Route::post('auth/super-admin/redeem', [\App\Http\Controllers\Api\SuperAdminBootstrapController::class, 'redeem'])
+        ->middleware('throttle:auth');
 
     // The "clear exit" from impersonation (spec §13.9) — called by the
     // impersonated session's own token, so it can't sit behind `tenant` or
@@ -177,15 +189,55 @@ Route::middleware(['auth:sanctum', 'tenant', 'restrict.impersonation'])->group(f
         Route::delete('sites/{site}/report-schedules/{schedule}', [ReportScheduleController::class, 'destroy']);
 
         // Bounded CSV exports (Milestone 5, spec §12).
-        Route::get('sites/{site}/exports/traffic.csv', [ExportController::class, 'traffic']);
-        Route::get('sites/{site}/exports/seo.csv', [ExportController::class, 'seo']);
-        Route::get('sites/{site}/exports/performance.csv', [ExportController::class, 'performance']);
-        Route::get('sites/{site}/exports/commerce.csv', [ExportController::class, 'commerce']);
+        Route::middleware('throttle:exports')->group(function () {
+            Route::get('sites/{site}/exports/traffic.csv', [ExportController::class, 'traffic']);
+            Route::get('sites/{site}/exports/seo.csv', [ExportController::class, 'seo']);
+            Route::get('sites/{site}/exports/performance.csv', [ExportController::class, 'performance']);
+            Route::get('sites/{site}/exports/commerce.csv', [ExportController::class, 'commerce']);
+        });
     });
 
     // Report view + send (not site-scoped in the URL; access checked in controller).
     Route::get('reports/{report}', [ReportController::class, 'show']);
     Route::post('reports/{report}/send-email', [ReportController::class, 'sendEmail']);
+
+    // ---- AI Knowledge Base (Phase 4) — org-scoped via the tenant global
+    // scope; reads for working roles, mutations for owner/admin only; every
+    // plan limit enforced server-side in the controllers. -------------------
+    Route::middleware('role:owner,admin,analyst')->group(function () {
+        Route::get('knowledge-bases', [\App\Http\Controllers\Api\KnowledgeBaseController::class, 'index']);
+        Route::get('knowledge-bases/{id}', [\App\Http\Controllers\Api\KnowledgeBaseController::class, 'show']);
+        Route::get('knowledge-bases/{id}/sources', [\App\Http\Controllers\Api\KnowledgeSourceController::class, 'index']);
+        Route::get('knowledge-sources/{id}', [\App\Http\Controllers\Api\KnowledgeSourceController::class, 'show']);
+        Route::post('knowledge-bases/{id}/test-retrieval', [\App\Http\Controllers\Api\KnowledgeSearchController::class, 'testRetrieval']);
+        Route::get('knowledge/usage', [\App\Http\Controllers\Api\KnowledgeSearchController::class, 'usage']);
+    });
+
+    Route::middleware('role:owner,admin')->group(function () {
+        Route::post('knowledge-bases', [\App\Http\Controllers\Api\KnowledgeBaseController::class, 'store']);
+        Route::patch('knowledge-bases/{id}', [\App\Http\Controllers\Api\KnowledgeBaseController::class, 'update']);
+        Route::delete('knowledge-bases/{id}', [\App\Http\Controllers\Api\KnowledgeBaseController::class, 'destroy']);
+
+        Route::post('knowledge-bases/{id}/sources', [\App\Http\Controllers\Api\KnowledgeSourceController::class, 'store'])
+            ->middleware('throttle:knowledge-upload');
+        Route::post('knowledge-sources/{id}/retry', [\App\Http\Controllers\Api\KnowledgeSourceController::class, 'retry'])
+            ->middleware('throttle:knowledge-crawl');
+        Route::post('knowledge-sources/{id}/reindex', [\App\Http\Controllers\Api\KnowledgeSourceController::class, 'reindex'])
+            ->middleware('throttle:knowledge-crawl');
+        Route::post('knowledge-sources/{id}/disable', [\App\Http\Controllers\Api\KnowledgeSourceController::class, 'disable']);
+        Route::delete('knowledge-sources/{id}', [\App\Http\Controllers\Api\KnowledgeSourceController::class, 'destroy']);
+    });
+
+    // ---- AI Copilot (Phase 5) — personal threads within the org. ----------
+    Route::get('copilot/threads', [\App\Http\Controllers\Api\CopilotController::class, 'threads']);
+    Route::post('copilot/threads', [\App\Http\Controllers\Api\CopilotController::class, 'createThread']);
+    Route::get('copilot/threads/{id}', [\App\Http\Controllers\Api\CopilotController::class, 'showThread']);
+    Route::patch('copilot/threads/{id}', [\App\Http\Controllers\Api\CopilotController::class, 'updateThread']);
+    Route::delete('copilot/threads/{id}', [\App\Http\Controllers\Api\CopilotController::class, 'deleteThread']);
+    Route::post('copilot/threads/{id}/messages', [\App\Http\Controllers\Api\CopilotController::class, 'sendMessage'])
+        ->middleware('throttle:ai-chat');
+    Route::post('copilot/messages/{id}/feedback', [\App\Http\Controllers\Api\CopilotController::class, 'feedback']);
+    Route::get('copilot/suggestions', [\App\Http\Controllers\Api\CopilotController::class, 'suggestions']);
 });
 
 // ---- Report downloads (signed, unauthenticated) ----------------------------
@@ -315,6 +367,10 @@ Route::prefix('connector/v1')->middleware(['connector.auth', 'throttle:connector
     Route::post('sync/performance/runs', [SyncV2Controller::class, 'performanceRuns']);
     Route::post('sync/engagement/daily', [SyncV2Controller::class, 'engagementDaily']);
     Route::post('sync/broken-links', [SyncV2Controller::class, 'brokenLinks']);
+
+    // Connector v2 — WordPress content → AI knowledge base (opt-in,
+    // plugin-side privacy toggle; ingestion is queued + idempotent).
+    Route::post('content/bulk', [\App\Http\Controllers\Api\Connector\ContentSyncController::class, 'contentBulk']);
 });
 
 // ---- Stripe webhook (no tenant, signature-verified) -----------------------

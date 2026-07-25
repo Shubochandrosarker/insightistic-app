@@ -3,7 +3,7 @@ name: insightistic
 x-api-env: &api_env
   APP_ENV: production
   APP_DEBUG: "false"
-  APP_KEY: base64:WkabxlKyJvbSVsSHCwAf3Fv88UqY8BOdkfRAnwAwZpo=
+  APP_KEY: ${APP_KEY:?Set APP_KEY in the Docker Manager environment panel}
   APP_URL: https://api.insightistic.com
   INSIGHTISTIC_APP_URL: https://app.insightistic.com
   INSIGHTISTIC_TRIAL_DAYS: "7"
@@ -13,7 +13,7 @@ x-api-env: &api_env
   DB_PORT: "5432"
   DB_DATABASE: insightistic
   DB_USERNAME: insightistic
-  DB_PASSWORD: 7281cb7aff2cbf4a75b6e38e0e6a81b05ce1939df813e8d1cde1c477c3119097
+  DB_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in the Docker Manager environment panel}
 
   QUEUE_CONNECTION: database
   CACHE_STORE: database
@@ -32,8 +32,7 @@ x-api-env: &api_env
 
   RUN_MIGRATIONS: "true"
   SEED_PLANS: "true"
-  SUPER_ADMIN_EMAIL: ${SUPER_ADMIN_EMAIL:-}
-
+  
 services:
   db:
     image: postgres:16-alpine
@@ -41,7 +40,7 @@ services:
     environment:
       POSTGRES_DB: insightistic
       POSTGRES_USER: insightistic
-      POSTGRES_PASSWORD: 7281cb7aff2cbf4a75b6e38e0e6a81b05ce1939df813e8d1cde1c477c3119097
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in the Docker Manager environment panel}
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:

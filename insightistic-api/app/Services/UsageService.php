@@ -55,4 +55,106 @@ class UsageService
     {
         return max(0, $this->reportLimit($org) - $this->counter($org)->reports_generated);
     }
+
+    // ------------------------------------------------------------------
+    // Knowledge base + Copilot entitlements (spec Phase 8). Every limit is
+    // resolved from plans.limits_json (Plan::limit) and enforced HERE, on
+    // the server — never in the frontend.
+    // ------------------------------------------------------------------
+
+    /** Resolve a limits_json entitlement for an org (code defaults backstop). */
+    public function limit(Organization $org, string $key): int
+    {
+        return $org->plan?->limit($key) ?? (int) (\App\Models\Plan::LIMIT_DEFAULTS[$key] ?? 0);
+    }
+
+    /**
+     * Structured 402 payload the SPA turns into an upgrade prompt. Shared by
+     * every knowledge/AI limit denial so clients get one consistent shape.
+     */
+    public function limitError(Organization $org, string $key, int $used): array
+    {
+        return [
+            'code'    => 'limit_reached',
+            'limit'   => ['key' => $key, 'max' => $this->limit($org, $key), 'used' => $used],
+            'message' => 'Your plan limit for ' . str_replace('_', ' ', $key) . ' has been reached. Upgrade to continue.',
+        ];
+    }
+
+    public function knowledgeBasesUsed(Organization $org): int
+    {
+        return \App\Models\KnowledgeBase::withoutGlobalScope('organization')
+            ->where('organization_id', $org->id)->count();
+    }
+
+    public function knowledgeSourcesUsed(Organization $org): int
+    {
+        return \App\Models\KnowledgeSource::withoutGlobalScope('organization')
+            ->where('organization_id', $org->id)
+            ->where('status', '!=', 'disabled')
+            ->count();
+    }
+
+    public function knowledgeStorageBytesUsed(Organization $org): int
+    {
+        return (int) \App\Models\KnowledgeSource::withoutGlobalScope('organization')
+            ->where('organization_id', $org->id)->sum('size_bytes');
+    }
+
+    public function indexedChunksUsed(Organization $org): int
+    {
+        return \App\Models\KnowledgeChunk::withoutGlobalScope('organization')
+            ->where('organization_id', $org->id)->count();
+    }
+
+    public function canCreateKnowledgeBase(Organization $org): bool
+    {
+        return $this->knowledgeBasesUsed($org) < $this->limit($org, 'knowledge_bases');
+    }
+
+    public function canAddKnowledgeSource(Organization $org, int $additionalBytes = 0): bool
+    {
+        if ($this->knowledgeSourcesUsed($org) >= $this->limit($org, 'knowledge_sources')) {
+            return false;
+        }
+
+        $maxBytes = $this->limit($org, 'storage_mb') * 1024 * 1024;
+
+        return $this->knowledgeStorageBytesUsed($org) + $additionalBytes <= $maxBytes;
+    }
+
+    public function canSendAiMessage(Organization $org): bool
+    {
+        return $this->counter($org)->ai_messages_used < $this->limit($org, 'monthly_ai_messages');
+    }
+
+    public function recordAiMessage(Organization $org): void
+    {
+        $this->counter($org)->increment('ai_messages_used');
+    }
+
+    public function canEmbed(Organization $org, int $count = 1): bool
+    {
+        return $this->counter($org)->embeddings_used + $count <= $this->limit($org, 'monthly_embeddings');
+    }
+
+    public function recordEmbeddings(Organization $org, int $count): void
+    {
+        $this->counter($org)->increment('embeddings_used', $count);
+    }
+
+    /** Everything the usage meters UI needs, in one payload. */
+    public function knowledgeUsageSummary(Organization $org): array
+    {
+        $counter = $this->counter($org);
+
+        return [
+            'knowledge_bases'     => ['used' => $this->knowledgeBasesUsed($org), 'limit' => $this->limit($org, 'knowledge_bases')],
+            'knowledge_sources'   => ['used' => $this->knowledgeSourcesUsed($org), 'limit' => $this->limit($org, 'knowledge_sources')],
+            'storage_mb'          => ['used' => (int) round($this->knowledgeStorageBytesUsed($org) / 1048576), 'limit' => $this->limit($org, 'storage_mb')],
+            'indexed_chunks'      => ['used' => $this->indexedChunksUsed($org), 'limit' => $this->limit($org, 'indexed_chunks')],
+            'monthly_embeddings'  => ['used' => (int) $counter->embeddings_used, 'limit' => $this->limit($org, 'monthly_embeddings')],
+            'monthly_ai_messages' => ['used' => (int) $counter->ai_messages_used, 'limit' => $this->limit($org, 'monthly_ai_messages')],
+        ];
+    }
 }

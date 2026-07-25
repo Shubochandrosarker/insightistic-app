@@ -29,6 +29,25 @@ class AppServiceProvider extends ServiceProvider
                 default => new RuleProvider(),
             };
         });
+
+        // Embedding provider for the knowledge base. 'none' (or a missing
+        // key) binds the null provider: retrieval degrades to full-text
+        // search — real results, no fabricated vectors.
+        $this->app->bind(\App\Services\Knowledge\EmbeddingProvider::class, function () {
+            $cfg = config('insightistic.embeddings');
+
+            return ($cfg['provider'] ?? 'none') === 'openai' && ! empty($cfg['api_key'])
+                ? new \App\Services\Knowledge\OpenAiEmbeddingProvider($cfg)
+                : new \App\Services\Knowledge\NullEmbeddingProvider();
+        });
+
+        // SSRF-guarded fetcher with configured crawl limits.
+        $this->app->bind(\App\Services\Knowledge\SafeUrlFetcher::class, function () {
+            return new \App\Services\Knowledge\SafeUrlFetcher(
+                (int) config('insightistic.knowledge.crawl_timeout', 20),
+                (int) config('insightistic.knowledge.crawl_max_bytes', 10_485_760),
+            );
+        });
     }
 
     public function boot(): void
@@ -63,6 +82,27 @@ class AppServiceProvider extends ServiceProvider
         // (e.g. the public plans manifest) — generous, per-IP only.
         \Illuminate\Support\Facades\RateLimiter::for('public', function (\Illuminate\Http\Request $request) {
             return \Illuminate\Cache\RateLimiting\Limit::perMinute(60)->by($request->ip());
+        });
+        // ai-chat: Copilot messages — each one is a real model call.
+        \Illuminate\Support\Facades\RateLimiter::for('ai-chat', function (\Illuminate\Http\Request $request) {
+            return \Illuminate\Cache\RateLimiting\Limit::perMinute(20)
+                ->by('ai-chat:' . ($request->user()?->id ?: $request->ip()));
+        });
+        // knowledge-upload: file/manual source creation (parsing + embedding cost).
+        \Illuminate\Support\Facades\RateLimiter::for('knowledge-upload', function (\Illuminate\Http\Request $request) {
+            return \Illuminate\Cache\RateLimiting\Limit::perMinute(20)
+                ->by('kb-up:' . ($request->user()?->id ?: $request->ip()));
+        });
+        // knowledge-crawl: URL/sitemap ingestion — outbound crawling is the
+        // most abusable surface (SSRF probing), so it is the tightest.
+        \Illuminate\Support\Facades\RateLimiter::for('knowledge-crawl', function (\Illuminate\Http\Request $request) {
+            return \Illuminate\Cache\RateLimiting\Limit::perMinute(6)
+                ->by('kb-crawl:' . ($request->user()?->id ?: $request->ip()));
+        });
+        // exports: bounded CSV generation still hits the database hard.
+        \Illuminate\Support\Facades\RateLimiter::for('exports', function (\Illuminate\Http\Request $request) {
+            return \Illuminate\Cache\RateLimiting\Limit::perMinute(10)
+                ->by('exports:' . ($request->user()?->id ?: $request->ip()));
         });
 
         // Password reset / invite links should open the SPA, not a web route.

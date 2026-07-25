@@ -1,0 +1,20 @@
+# gitleaks configuration.
+#
+# The allowlist below covers ONE known historical leak: an APP_KEY and
+# DB_PASSWORD were committed to docker-compose.hostinger-url.yml before the
+# security hardening pass removed them. Git history cannot be rewritten
+# safely on a shared main branch, so the values are documented as
+# compromised and MUST be rotated (docs/DEPLOYMENT.md → Rotation). New
+# leaks anywhere — including new commits touching that file — still fail.
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Known, documented historical leak pending rotation (docs/DEPLOYMENT.md)"
+# Only these two exact (already-compromised, rotation-scheduled) values are
+# allowlisted — any OTHER secret, in any file including this one, still fails.
+regexes = [
+  '''WkabxlKyJvbSVsSHCwAf3Fv88UqY8BOdkfRAnwAwZpo=''',
+  '''7281cb7aff2cbf4a75b6e38e0e6a81b05ce1939df813e8d1cde1c477c3119097''',
+]

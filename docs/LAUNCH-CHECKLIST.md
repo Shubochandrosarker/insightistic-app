@@ -7,7 +7,7 @@
 - [ ] Postgres provisioned; `php artisan migrate` run; `PlanSeeder` run
 - [ ] Queue worker running (`php artisan queue:work`) + cron `schedule:run`
 - [ ] `storage:link` done; reports disk writable
-- [ ] `SUPER_ADMIN_EMAIL` set so `/admin` is reachable without a manual command (see `docs/SUPER-ADMIN.md`)
+- [ ] First super admin created via `php artisan insightistic:make-super-admin` (see `docs/SUPER-ADMIN.md` — the old SUPER_ADMIN_EMAIL flow was removed as a security fix)
 
 ## Billing
 - [ ] Stripe products/prices created; price IDs saved on `plans` rows

@@ -40,25 +40,27 @@ class AuthController extends Controller
 
         $rawLicenseKey = null;
 
-        // If this is the designated platform owner's email (SUPER_ADMIN_EMAIL),
-        // grant super admin on first signup so /admin is reachable without a
-        // separate manual `artisan insightistic:make-super-admin` step.
-        $superAdminEmail = strtolower(trim((string) config('insightistic.super_admin_email', '')));
-        $isSuperAdmin    = $superAdminEmail !== '' && $data['email'] === $superAdminEmail;
-
-        [$user, $org] = DB::transaction(function () use ($data, $isSuperAdmin, &$rawLicenseKey) {
+        // SECURITY: public registration NEVER grants platform (super admin)
+        // privileges — regardless of email address or any env configuration.
+        // Super admins are created only via the protected artisan commands
+        // (insightistic:super-admin:*) or promoted by an existing super admin
+        // through POST /api/admin/users/{id}/promote. See docs/SUPER-ADMIN.md.
+        [$user, $org] = DB::transaction(function () use ($data, &$rawLicenseKey) {
             $user = User::create([
-                'name'           => $data['name'],
-                'email'          => $data['email'],
-                'password'       => $data['password'], // hashed cast
-                'status'         => 'active',
-                'is_super_admin' => $isSuperAdmin,
+                'name'     => $data['name'],
+                'email'    => $data['email'],
+                'password' => $data['password'], // hashed cast
+                'status'   => 'active',
             ]);
 
             $org = $this->provisioner->bootstrapOrganization($user, $data['organization_name'], $rawLicenseKey);
 
             return [$user, $org];
         });
+
+        // Reload so DB-defaulted columns (is_super_admin=false, …) are present
+        // on the model — the response must never report null for them.
+        $user->refresh();
 
         $token = $user->createToken('spa')->plainTextToken;
 
@@ -184,5 +186,49 @@ class AuthController extends Controller
         $request->user()->currentAccessToken()->delete();
 
         return response()->json(['message' => 'Logged out.']);
+    }
+
+    /** Active sessions (personal access tokens) for the signed-in user. */
+    public function sessions(Request $request)
+    {
+        $currentId = $request->user()->currentAccessToken()?->id;
+
+        return response()->json([
+            'sessions' => $request->user()->tokens()
+                ->orderByDesc('last_used_at')
+                ->get(['id', 'name', 'last_used_at', 'created_at', 'expires_at'])
+                ->map(fn ($t) => [
+                    'id'           => $t->id,
+                    'name'         => $t->name,
+                    'last_used_at' => $t->last_used_at,
+                    'created_at'   => $t->created_at,
+                    'expires_at'   => $t->expires_at,
+                    'current'      => $t->id === $currentId,
+                ]),
+        ]);
+    }
+
+    /** Revoke one session. 404 for ids that are not the caller's own. */
+    public function revokeSession(Request $request, int $tokenId)
+    {
+        $deleted = $request->user()->tokens()->where('id', $tokenId)->delete();
+
+        if (! $deleted) {
+            return response()->json(['message' => 'Session not found.'], 404);
+        }
+
+        return response()->json(['message' => 'Session revoked.']);
+    }
+
+    /** Revoke every session except the one making this call. */
+    public function revokeOtherSessions(Request $request)
+    {
+        $currentId = $request->user()->currentAccessToken()?->id;
+
+        $count = $request->user()->tokens()
+            ->when($currentId, fn ($q) => $q->where('id', '!=', $currentId))
+            ->delete();
+
+        return response()->json(['message' => 'Other sessions revoked.', 'revoked' => $count]);
     }
 }

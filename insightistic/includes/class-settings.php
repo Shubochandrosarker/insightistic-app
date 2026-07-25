@@ -47,6 +47,22 @@ class Settings
             'sync_products'     => 1,
             'sync_customers'    => 1,
             'sync_site_health'  => 1,
+            // AI knowledge base content sharing — privacy-first, OFF until opted in.
+            'sync_content'      => 0,
+
+            // Incremental sync state (v1.1): per-entity checkpoints — ISO datetime
+            // of the newest date_modified confirmed received by the server. Only
+            // advanced after a page POST succeeds (a failed page never advances).
+            'cursor_orders'        => '',
+            'cursor_products'      => '',
+            'cursor_customers'     => '', // reserved — customers only sync on the weekly full pass
+            'cursor_content'       => '',
+            // Idempotency: uuid of the currently running full/delta sync, echoed
+            // as sync_batch_id in every bulk payload (server upserts are idempotent).
+            'current_batch_id'     => '',
+            // Start time of a complete (non date-filtered) full pass; used to
+            // fast-forward the delta cursors when the reconciliation finishes.
+            'current_sync_started' => '',
         ];
     }
 

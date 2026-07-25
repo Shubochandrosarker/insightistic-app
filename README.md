@@ -4,9 +4,14 @@ Insightistic is a multi-tenant WooCommerce analytics SaaS. This repo holds the t
 deployable parts of the **app** (dashboard + API) — WordPress-side code lives in
 sibling repos, kept fully separate so each ships and versions independently:
 
-- `insightistic-app/` - Next.js frontend for auth and the customer dashboard.
-- `insightistic-api/` - Laravel API overlay files. Scaffold a fresh Laravel app first, then copy these files over it.
-- `docs/` - install, launch, and VPS deployment runbooks.
+- `insightistic-app/` - Next.js frontend for auth and the customer dashboard
+  (incl. the AI Copilot and Knowledge pages).
+- `insightistic-api/` - complete Laravel 12 application (committed
+  composer.json/composer.lock, tests). `composer install && php artisan test`
+  works from a plain checkout — see `docs/TESTING.md`.
+- `insightistic/` - the WordPress/WooCommerce connector & licensing plugin.
+- `docs/` - architecture, AI knowledge base/security, environment variables,
+  testing, privacy, install/launch/deployment runbooks.
 
 WordPress-side code (not in this repo):
 
@@ -23,7 +28,7 @@ npm run build
 npm start
 ```
 
-For the backend, follow `insightistic-api/README.md` or `docs/HOSTINGER-VPS.md`. The API folder intentionally does not include Laravel core or `vendor/`; those are generated on the server with Composer.
+For the backend: `cd insightistic-api && composer install && cp .env.example .env && php artisan key:generate && php artisan migrate --seed`. Requires PostgreSQL 16 (pgvector recommended) and Redis — see `docs/ENVIRONMENT-VARIABLES.md`.
 
 ## API connection (avoids "Failed to fetch")
 

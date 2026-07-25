@@ -32,6 +32,33 @@ return [
         'disk' => env('INSIGHTISTIC_REPORTS_DISK', 'public'),
     ],
 
+    // ---- AI Knowledge Base (Phase 4) --------------------------------------
+    'embeddings' => [
+        // 'openai' = any OpenAI-compatible /embeddings endpoint (OpenAI, the
+        // WordPressistic gateway passthrough, etc). 'none' = no embeddings:
+        // ingestion still indexes content and retrieval runs on PostgreSQL
+        // full-text search only — honest degradation, never fake vectors.
+        'provider'  => env('INSIGHTISTIC_EMBEDDINGS_PROVIDER', 'none'),
+        'model'     => env('INSIGHTISTIC_EMBEDDINGS_MODEL', 'text-embedding-3-small'),
+        // Canonical supported dimension — must match the vector(1536) column.
+        'dimension' => (int) env('INSIGHTISTIC_EMBEDDINGS_DIMENSION', 1536),
+        'api_key'   => env('INSIGHTISTIC_EMBEDDINGS_API_KEY', env('OPENAI_API_KEY')),
+        'base_url'  => env('INSIGHTISTIC_EMBEDDINGS_BASE_URL', env('OPENAI_BASE_URL', 'https://api.openai.com/v1')),
+        'timeout'   => (int) env('INSIGHTISTIC_EMBEDDINGS_TIMEOUT', 30),
+    ],
+
+    'knowledge' => [
+        // Disk for uploaded source files ('local' default; set an s3 disk in
+        // production — see config/filesystems.php and docs/DEPLOYMENT.md).
+        'disk'            => env('INSIGHTISTIC_KNOWLEDGE_DISK', 'local'),
+        'max_file_mb'     => (int) env('INSIGHTISTIC_KNOWLEDGE_MAX_FILE_MB', 20),
+        // Hard cap on extracted text per source (defense against zip-bomb-ish
+        // documents; ~4 chars/token puts 2 MB ≈ 500k tokens).
+        'max_content_bytes' => (int) env('INSIGHTISTIC_KNOWLEDGE_MAX_CONTENT_BYTES', 2_000_000),
+        'crawl_timeout'   => (int) env('INSIGHTISTIC_KNOWLEDGE_CRAWL_TIMEOUT', 20),
+        'crawl_max_bytes' => (int) env('INSIGHTISTIC_KNOWLEDGE_CRAWL_MAX_BYTES', 10_485_760),
+    ],
+
     // Frontend app base (Stripe redirects, invite links).
     'app_url' => env('INSIGHTISTIC_APP_URL', 'https://app.insightistic.com'),
 
@@ -53,8 +80,8 @@ return [
         'webhook_secret' => env('STRIPE_WEBHOOK_SECRET'),
     ],
 
-    // Email that should always be a super admin. New signups matching this
-    // are promoted at registration time; SuperAdminSeeder heals any account
-    // that registered before this was set. Empty = feature disabled.
-    'super_admin_email' => env('SUPER_ADMIN_EMAIL'),
+    // NOTE: the old `super_admin_email` / SUPER_ADMIN_EMAIL auto-promotion
+    // was removed as a security fix. Super admins are created only via the
+    // insightistic:super-admin:* artisan commands or promotion by an existing
+    // super admin. See docs/SUPER-ADMIN.md.
 ];

@@ -12,8 +12,14 @@ class User extends Authenticatable
 {
     use HasApiTokens, Notifiable;
 
+    /**
+     * SECURITY: `is_super_admin` is deliberately NOT mass-assignable. Every
+     * promotion goes through an explicit forceFill/property write in the
+     * audited paths (Admin\UserController, the insightistic:super-admin:*
+     * commands) — never through request-shaped input.
+     */
     protected $fillable = [
-        'name', 'email', 'password', 'status', 'is_super_admin',
+        'name', 'email', 'password', 'status',
         'provider', 'provider_id', 'avatar_url', 'email_verified_at', 'last_login_at',
         'archived_at',
     ];

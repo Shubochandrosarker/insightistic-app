@@ -28,8 +28,56 @@ const API_PROXY_TARGET = (
   "http://127.0.0.1:8000"
 ).replace(/\/$/, "");
 
+// Direct mode needs the API origin in connect-src; proxy mode is same-origin.
+const API_ORIGIN = (process.env.NEXT_PUBLIC_API_URL || "").replace(/\/$/, "");
+
+/**
+ * Content-Security-Policy.
+ *
+ * 'unsafe-inline' in script-src is required today by (a) the pre-paint theme
+ * snippet in app/layout.tsx and (b) Next.js's own inline RSC/hydration
+ * scripts on statically prerendered pages. Tightening to nonces requires
+ * dynamic rendering via middleware — tracked as a follow-up. Everything else
+ * is locked down: no foreign script origins, no framing, no plugins.
+ */
+const csp = [
+  "default-src 'self'",
+  "script-src 'self' 'unsafe-inline'",
+  "style-src 'self' 'unsafe-inline'",
+  // data:/blob: for chart exports + inline SVG; https: for OAuth avatars and
+  // white-label logos served from the API/storage origin.
+  "img-src 'self' data: blob: https:",
+  "font-src 'self' data:",
+  `connect-src 'self'${API_ORIGIN ? ` ${API_ORIGIN}` : ""}`,
+  "object-src 'none'",
+  "base-uri 'self'",
+  "form-action 'self'",
+  "frame-ancestors 'none'",
+  "upgrade-insecure-requests",
+].join("; ");
+
+const securityHeaders = [
+  { key: "Content-Security-Policy", value: csp },
+  // 2 years, preload-eligible. Served behind Traefik/nginx TLS termination.
+  { key: "Strict-Transport-Security", value: "max-age=63072000; includeSubDomains; preload" },
+  { key: "X-Content-Type-Options", value: "nosniff" },
+  { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+  { key: "X-Frame-Options", value: "DENY" }, // legacy agents; CSP frame-ancestors is authoritative
+  {
+    key: "Permissions-Policy",
+    value: "camera=(), microphone=(), geolocation=(), payment=(), usb=(), magnetometer=()",
+  },
+];
+
 const nextConfig = {
   reactStrictMode: true,
+  poweredByHeader: false,
+  // No next/image usage in this app; keep the optimizer (and its native sharp
+  // pipeline) explicitly out of the request path.
+  images: { unoptimized: true },
+  async headers() {
+    return [{ source: "/:path*", headers: securityHeaders }];
+  },
   async rewrites() {
     return [
       // Same-origin API proxy (proxy mode). Harmless in direct mode since the

@@ -367,6 +367,10 @@ Route::prefix('connector/v1')->middleware(['connector.auth', 'throttle:connector
     Route::post('sync/performance/runs', [SyncV2Controller::class, 'performanceRuns']);
     Route::post('sync/engagement/daily', [SyncV2Controller::class, 'engagementDaily']);
     Route::post('sync/broken-links', [SyncV2Controller::class, 'brokenLinks']);
+
+    // Connector v2 — WordPress content → AI knowledge base (opt-in,
+    // plugin-side privacy toggle; ingestion is queued + idempotent).
+    Route::post('content/bulk', [\App\Http\Controllers\Api\Connector\ContentSyncController::class, 'contentBulk']);
 });
 
 // ---- Stripe webhook (no tenant, signature-verified) -----------------------

@@ -2,7 +2,7 @@
 import {
   LayoutGrid, Sparkles, TrendingUp, Package, Users, ShoppingCart, Mail,
   Bell, FileText, Activity, Globe, UsersRound, CreditCard, Settings, KeyRound,
-  Search, Gauge, Plug,
+  Search, Gauge, Plug, Bot, BookOpen,
 } from "lucide-react";
 import { TrialBanner } from "@/components/dashboard/TrialBanner";
 import { ImpersonationBanner } from "@/components/dashboard/ImpersonationBanner";
@@ -18,6 +18,8 @@ import { useAuth } from "@/lib/auth";
 const NAV: NavItem[] = [
   { href: "/dashboard", label: "Overview", icon: LayoutGrid },
   { href: "/dashboard/insights", label: "AI Insights", icon: Sparkles },
+  { href: "/dashboard/copilot", label: "AI Copilot", icon: Bot },
+  { href: "/dashboard/knowledge", label: "Knowledge", icon: BookOpen },
   { href: "/dashboard/traffic", label: "Traffic", icon: TrendingUp },
   { href: "/dashboard/seo", label: "SEO", icon: Search },
   { href: "/dashboard/performance", label: "Performance", icon: Gauge },
@@ -48,6 +50,8 @@ const BOTTOM_NAV: NavItem[] = [
 
 // Everything else lives in the mobile "More" sheet.
 const MORE: NavItem[] = [
+  { href: "/dashboard/copilot", label: "AI Copilot", icon: Bot },
+  { href: "/dashboard/knowledge", label: "Knowledge", icon: BookOpen },
   { href: "/dashboard/seo", label: "SEO", icon: Search },
   { href: "/dashboard/performance", label: "Performance", icon: Gauge },
   { href: "/dashboard/revenue", label: "Revenue", icon: TrendingUp },

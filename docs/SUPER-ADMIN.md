@@ -1,116 +1,50 @@
-# Super Admin, Root Redirect & Mobile App Shell
+# Super Admin
 
-This covers the platform-owner admin area, the app-root redirect behavior, and
-the mobile dashboard experience.
+Platform-owner access (`/admin`, `/api/admin/*`). `is_super_admin` is a
+backend-only flag — it is **never** grantable from public surfaces.
 
-## Root redirect (app.insightistic.com/)
+> **Security change (2026-07):** the old `SUPER_ADMIN_EMAIL` auto-promotion
+> (at signup, via OAuth, and via `SuperAdminSeeder` on every deploy) was
+> removed — it let whoever registered the configured address first become
+> platform admin. The seeder is now a no-op; the env var does nothing.
 
-The app subdomain is the SaaS app only — the marketing site lives on WordPress at
-`insightistic.com`. The root route never renders a marketing page; it shows a
-brief "Preparing your workspace…" loader, then redirects:
-
-| State | Redirect |
-|---|---|
-| Not logged in | `/login` |
-| Logged-in normal user | `/dashboard` |
-| Logged-in super admin | `/admin` |
-
-Authenticated users who hit `/login` or `/register` are bounced to their
-dashboard (or `/admin`) automatically.
-
-## Create the first Super Admin
-
-Super admin is a backend-only elevation (never togglable from the UI). Two ways
-to grant it:
-
-**Recommended: `SUPER_ADMIN_EMAIL` (automatic, no server access needed).** Set
-this env var (see `.env.production.example` / `insightistic-api/.env.example`)
-to the email you'll register with. New signups matching it are promoted at
-registration time; `SuperAdminSeeder` runs on every deploy (`docker/api/entrypoint.sh`)
-and heals any account that registered before the var was set. It's idempotent
-and a no-op until the account actually exists, so it's safe to set before you've
-signed up.
-
-**Manual fallback:** run the artisan command directly on the API server —
+## Creating the first super admin (server shell, once)
 
 ```bash
-# Promote an existing user
 php artisan insightistic:make-super-admin owner@example.com
-
-# Create the user and promote in one step
-php artisan insightistic:make-super-admin owner@example.com \
-  --create --name="Shuvo Sarkar" --password="strong-password"
+# or create the account at the same time:
+php artisan insightistic:make-super-admin owner@example.com --create --name="Owner" --password="..."
 ```
 
-If `--password` is omitted with `--create`, a strong password is generated and
-printed once. Either way, sign in at `https://app.insightistic.com/login` and
-open **`/admin`**.
+Once an active super admin exists, this command refuses further promotions
+unless `--force` (break-glass). Every path writes to `admin_audit_logs`.
 
-## Admin area (`/admin`)
+## Promoting additional admins
 
-Guarded by `is_super_admin`. Normal users, owners, admins, analysts and client
-viewers are blocked (redirect to `/login` if unauthenticated, 403 screen if
-authenticated but not a super admin).
+- **Dashboard (preferred):** an existing super admin calls
+  `POST /api/admin/users/{id}/promote` (audited; demote/archive respect the
+  last-active-super-admin guard).
+- **Bootstrap token (no shell-into-DB):**
+  ```bash
+  php artisan insightistic:super-admin:issue-token person@example.com --ttl=15
+  ```
+  Prints a single-use token (hash-stored, expiring). The target user, while
+  signed in as that exact account, redeems it via
+  `POST /api/auth/super-admin/redeem {"token": "..."}`. First redemption
+  attempt burns it; mismatched users are rejected and audited.
 
-Pages: Overview, Organizations (+ detail), Users, Sites (+ detail),
-Subscriptions, Sync Logs, Reports, Usage, System Health, Settings.
+## Guarantees (regression-tested)
 
-What you can do: change an org's plan, suspend/reactivate an org, enable/disable
-a user, search/filter/paginate every list, and read platform health. Secrets
-(passwords, connector secrets, Stripe secret keys) are never returned.
+- Public registration and OAuth signup can never set `is_super_admin`
+  (`RegistrationSecurityTest`, `OAuthSecurityTest`).
+- `is_super_admin` is not mass-assignable.
+- Bootstrap tokens are single-use, expiring, bound to one user
+  (`SuperAdminBootstrapTest`).
+- The last active super admin cannot be demoted/disabled/archived.
 
-## Admin API (`/api/admin/*`)
+## Routing
 
-All endpoints require `auth:sanctum` + the `super_admin` middleware and are
-**cross-tenant** (no org scope). Lists are paginated with `search`, filters and
-`sort`/`dir`.
-
-```
-GET   /api/admin/overview
-GET   /api/admin/system-health
-GET   /api/admin/organizations            ?search=&plan=&status=&page=
-GET   /api/admin/organizations/{id}
-PATCH /api/admin/organizations/{id}        { plan?, status? }
-GET   /api/admin/users                     ?search=&super_admin=&status=&organization_id=&role=
-GET   /api/admin/users/{id}
-PATCH /api/admin/users/{id}                 { status }   # enable/disable only
-GET   /api/admin/sites                      ?search=&organization_id=&connection_status=
-GET   /api/admin/sites/{id}
-GET   /api/admin/subscriptions              ?status=&organization_id=&canceled=
-GET   /api/admin/sync-logs                  ?site_id=&organization_id=&status=&job=&search=
-GET   /api/admin/reports                    ?organization_id=&site_id=&report_type=&from=&to=
-GET   /api/admin/usage                      ?search=&plan=
-```
-
-## Mobile dashboard (app-style)
-
-The dashboard and admin areas share one responsive shell
-(`components/app-shell/*`):
-
-- **Desktop (≥1024px):** left sidebar + top bar + content.
-- **Mobile (<1024px):** sticky compact header (brand, site switcher, period,
-  theme, avatar), single-column content, and a **fixed bottom tab bar** (5
-  items, the 5th opens a slide-up "More" sheet). Safe-area aware
-  (`padding-bottom: calc(80px + env(safe-area-inset-bottom))`), 44px+ tap
-  targets, glassy blur, animated active states.
-- **Tables** render as stacked cards on mobile (`ResponsiveTable`) so nothing
-  overflows; metric cards use a 2-column grid; charts use responsive containers.
-
-## Deploy
-
-```bash
-# API
-cd insightistic-api && php artisan migrate --force && php artisan optimize
-
-# App
-cd insightistic-app && npm install && npm run build && pm2 restart insightistic-app
-```
-
-Smoke test:
-
-```bash
-curl -I https://app.insightistic.com/login
-curl -I https://app.insightistic.com/dashboard
-curl -I https://app.insightistic.com/admin
-curl    https://app.insightistic.com/api/auth/oauth/providers
-```
+`/` → logged-out: `/login`; user: `/dashboard`; super admin: `/admin`.
+All `/api/admin/*` routes require `auth:sanctum` + `super_admin` and are
+cross-tenant by design. Impersonation requires a reason, is audited, and
+impersonated tokens are write-restricted (`RestrictImpersonation`).

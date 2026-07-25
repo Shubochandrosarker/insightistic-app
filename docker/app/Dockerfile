@@ -1,4 +1,4 @@
-FROM node:20-alpine AS deps
+FROM node:26-alpine AS deps
 
 WORKDIR /app
 ENV NEXT_TELEMETRY_DISABLED=1
@@ -15,7 +15,7 @@ ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
 ENV API_PROXY_TARGET=${API_PROXY_TARGET}
 RUN npm run build && npm prune --omit=dev
 
-FROM node:20-alpine AS runner
+FROM node:26-alpine AS runner
 
 WORKDIR /app
 ENV NODE_ENV=production

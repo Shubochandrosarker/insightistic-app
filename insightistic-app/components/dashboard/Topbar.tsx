@@ -4,6 +4,7 @@ import { useAuth } from "@/lib/auth";
 import { useDashboard } from "@/lib/dashboard";
 import { ChevronDown, LogOut, Check } from "lucide-react";
 import { ThemeToggle } from "./ThemeToggle";
+import { NotificationCenter } from "@/components/app-shell/NotificationCenter";
 import { initials, timeAgo } from "@/lib/format";
 
 const TOPBAR_PERIODS = [
@@ -77,6 +78,7 @@ export function Topbar() {
             Synced {timeAgo(active.last_sync_at)}
           </span>
         )}
+        <NotificationCenter />
         <ThemeToggle />
         <span className="flex h-9 w-9 items-center justify-center rounded-full bg-violet text-xs font-bold text-white">
           {initials(user?.name)}

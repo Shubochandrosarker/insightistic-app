@@ -8,6 +8,7 @@ import { AreaTrend, Donut } from "@/components/dashboard/Charts";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { PageHeader } from "@/components/dashboard/PageHeader";
+import { OnboardingChecklist } from "@/components/dashboard/OnboardingChecklist";
 import { EmptyState } from "@/components/dashboard/EmptyState";
 import { Spinner } from "@/components/ui/Spinner";
 import { money0, money, num, timeAgo } from "@/lib/format";
@@ -30,6 +31,7 @@ export default function Overview() {
   const ins = useApi<any>(siteId ? `/sites/${siteId}/insights` : null);
 
   const [busy, setBusy] = useState(false);
+  const [genErr, setGenErr] = useState<string | null>(null);
 
   if (!siteId)
     return (
@@ -68,13 +70,25 @@ export default function Overview() {
 
   async function generateSummary() {
     setBusy(true);
-    try { await apiPost(`/sites/${siteId}/insights/generate`, { type: "weekly" }); ins.reload(); }
-    catch {}
-    finally { setBusy(false); }
+    setGenErr(null);
+    try {
+      await apiPost(`/sites/${siteId}/insights/generate`, { type: "weekly" });
+      ins.reload();
+    } catch (e: any) {
+      // Plan limits return a structured 402 here. Swallowing it left the
+      // button looking like it had worked while nothing was generated.
+      setGenErr(e?.message || "Could not generate a summary right now.");
+    } finally {
+      setBusy(false);
+    }
   }
 
   return (
     <div>
+      <OnboardingChecklist />
+      {genErr && (
+        <div className="mb-4 rounded-xl border border-bad/25 bg-bad/10 px-4 py-3 text-sm text-bad">{genErr}</div>
+      )}
       <PageHeader
         title="Overview"
         subtitle={`${site?.name || ""} · ${PERIOD_LABEL[period] || period}${site?.last_sync_at ? ` · last synced ${timeAgo(site.last_sync_at)}` : ""}`}

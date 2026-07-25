@@ -21,10 +21,21 @@ export default function AdminOrgDetail() {
   const { id } = useParams<{ id: string }>();
   const { data, loading, reload } = useApi<any>(`/admin/organizations/${id}`);
   const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
 
   async function patch(payload: any) {
     setBusy(true);
-    try { await apiPatch(`/admin/organizations/${id}`, payload); reload(); } catch {} finally { setBusy(false); }
+    setErr(null);
+    try {
+      await apiPatch(`/admin/organizations/${id}`, payload);
+      reload();
+    } catch (e: any) {
+      // Swallowing this silently reloaded the page unchanged and looked like
+      // the edit had applied — a false success on an admin mutation.
+      setErr(e?.message || "That change could not be saved.");
+    } finally {
+      setBusy(false);
+    }
   }
 
   if (loading || !data) return <Spinner />;
@@ -32,6 +43,9 @@ export default function AdminOrgDetail() {
 
   return (
     <div>
+      {err && (
+        <div className="mb-4 rounded-xl border border-bad/25 bg-bad/10 px-4 py-3 text-sm text-bad">{err}</div>
+      )}
       <Link href="/admin/organizations" className="mb-3 inline-flex items-center gap-1.5 text-sm text-muted hover:text-fg">
         <ArrowLeft size={15} /> Organizations
       </Link>

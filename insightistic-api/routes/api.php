@@ -30,6 +30,7 @@ use App\Http\Controllers\Api\LicenseController;
 use App\Http\Controllers\Api\MfaController;
 use App\Http\Controllers\Api\NotificationController;
 use App\Http\Controllers\Api\OAuthController;
+use App\Http\Controllers\Api\OnboardingController;
 use App\Http\Controllers\Api\OrganizationController;
 use App\Http\Controllers\Api\PerformanceController;
 use App\Http\Controllers\Api\PluginAiController;
@@ -167,6 +168,12 @@ Route::middleware(['auth:sanctum', 'tenant', 'restrict.impersonation'])->group(f
     Route::delete('activations/{activation}', [LicenseController::class, 'deactivateActivation'])->middleware('role:owner,admin');
 
     // Notifications / conversion prompts.
+    // Guided setup (spec §9). Progress is derived from real state, so the
+    // checklist resumes correctly on any device with nothing stored.
+    Route::get('onboarding', [OnboardingController::class, 'index']);
+    Route::post('onboarding/dismiss', [OnboardingController::class, 'dismiss']);
+    Route::delete('onboarding/dismiss', [OnboardingController::class, 'restore']);
+
     Route::get('notifications', [NotificationController::class, 'index']);
     Route::patch('notifications/{notification}', [NotificationController::class, 'update']);
 

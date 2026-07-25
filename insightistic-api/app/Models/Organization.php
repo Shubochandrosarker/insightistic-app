@@ -22,6 +22,7 @@ class Organization extends Model
             'archived_at'            => 'datetime',
             'deletion_requested_at'  => 'datetime',
             'deletion_scheduled_for' => 'datetime',
+            'onboarding_dismissed_at' => 'datetime',
         ];
     }
 

@@ -15,7 +15,11 @@ export function ThemeToggle() {
     document.documentElement.classList.toggle("dark", next);
     try {
       localStorage.setItem("ins_theme", next ? "dark" : "light");
-    } catch {}
+    } catch {
+      // Private browsing and some embedded webviews block localStorage.
+      // The toggle still works for this session; only the preference is
+      // lost, so there is genuinely nothing to report to the user here.
+    }
   }
 
   return (

@@ -11,6 +11,7 @@ import { Topbar } from "@/components/dashboard/Topbar";
 import { PlanCard } from "@/components/dashboard/PlanCard";
 import { DashboardMobileControls } from "@/components/dashboard/DashboardMobileControls";
 import { AppShell } from "@/components/app-shell/AppShell";
+import { CommandPalette } from "@/components/app-shell/CommandPalette";
 import type { NavItem } from "@/components/app-shell/DesktopSidebar";
 import { DashboardProvider } from "@/lib/dashboard";
 import { useAuth } from "@/lib/auth";
@@ -88,6 +89,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           mobileHeader={<DashboardMobileControls />}
           onLogout={logout}
         >
+          {/* Cmd/Ctrl-K jump-to. Mounted inside the shell so it can reach
+              the same nav model the sidebar uses. */}
+          <CommandPalette items={NAV} />
           <ImpersonationBanner />
           <TrialBanner />
           {children}

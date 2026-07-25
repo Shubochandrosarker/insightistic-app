@@ -3,17 +3,19 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Jobs\RunPageSpeedTest;
 use App\Models\PerformanceRun;
 use App\Models\Site;
+use App\Services\Performance\PageSpeedClient;
 use Illuminate\Http\Request;
 
 /**
- * Performance Tracking (spec §9, §10.5) — read-only for now. Runs are
- * collected by the plugin's existing PageSpeed Insights integration and
- * will arrive via the connector v2 `sync/performance/runs` endpoint
- * (Milestone 3, not yet built) — so a manual "Run test" action isn't wired
- * up here yet either; queueing a test only makes sense once there's a
- * write path that can fulfill it. Deferred, not faked.
+ * Performance tracking (spec §9, §10.5, Phase 3.3).
+ *
+ * Runs now come from two places: the SaaS runs PageSpeed Insights itself
+ * (on a schedule, or on demand from `runNow`), and the plugin can still
+ * push its own via connector v2 `sync/performance/runs`. Both write the
+ * same tables, so a site keeps history whether or not the plugin is active.
  */
 class PerformanceController extends Controller
 {
@@ -61,6 +63,36 @@ class PerformanceController extends Controller
             'run'      => $run,
             'issues'   => $run->issues()->orderByDesc('savings_ms')->limit(10)->get(),
         ]);
+    }
+
+    /**
+     * POST /sites/{site}/analytics/performance/run
+     *
+     * Queue a run rather than executing inline — Lighthouse routinely takes
+     * 20-60s, well past any sane HTTP timeout. The job carries the quota
+     * guards, so a user hammering this button cannot exhaust the API key.
+     */
+    public function runNow(Request $request)
+    {
+        $site = $this->site($request);
+
+        $data = $request->validate([
+            'strategy' => ['nullable', 'string', 'in:mobile,desktop'],
+            'url'      => ['nullable', 'url', 'max:1000'],
+        ]);
+
+        $strategies = isset($data['strategy'])
+            ? [$data['strategy']]
+            : PageSpeedClient::STRATEGIES;
+
+        foreach ($strategies as $strategy) {
+            RunPageSpeedTest::dispatch($site->id, $strategy, $data['url'] ?? null);
+        }
+
+        return response()->json([
+            'status'     => 'queued',
+            'strategies' => $strategies,
+        ], 202);
     }
 
     private function site(Request $request): Site

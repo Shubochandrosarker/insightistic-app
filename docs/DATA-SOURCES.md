@@ -10,7 +10,7 @@ each integration.
 | WordPress content → AI knowledge | **Live (opt-in)** | Plugin `content/bulk` → site-scoped knowledge base |
 | Traffic (GA4) | **Live** | Server-side Google OAuth → `Ga4Client` → `traffic_daily` (source `ga4`) + landing-page snapshots. Also accepts connector `sync/traffic/*` payloads. |
 | SEO (GSC) | **Live** | Server-side Google OAuth → `GscClient` → `seo_daily`, `seo_query_snapshots`, `seo_page_snapshots` (with previous-period deltas). Also accepts connector `sync/seo/*`. |
-| Performance (PageSpeed) | **Ingest-ready** | `sync/performance/runs` + tables; SaaS-side scheduled Lighthouse runner remaining |
+| Performance (PageSpeed) | **Live** | SaaS runs PageSpeed Insights itself (`PageSpeedClient`) — on demand via `POST .../performance/run` and daily at 04:10; the plugin can still push runs via `sync/performance/runs`. Both write the same tables. |
 | Cloudflare traffic | **Live (BYO token)** | Per-site zone + API token (encrypted) → `CloudflareTrafficService`; connect/verify/zone-picker on `/dashboard/integrations`; daily rows into `traffic_daily` (source `cloudflare`); plugin proxy endpoint `plugin/cloudflare-traffic` |
 | Email analytics | **Live** | Mailchimp/Klaviyo pulled by the SaaS via per-site API key; FluentCRM/AutomateWoo/WooCommerce pushed by the plugin → `email_campaigns` → `/dashboard/emails` |
 | Alerts | **Live** | Deterministic `AlertDetector` rules, scheduled 6-hourly |
@@ -89,3 +89,35 @@ admin. Disconnecting removes the credential but keeps reporting history.
 
 Rules of the platform: no mock analytics, no fabricated AI responses, no
 invented citations — a source with no data shows an honest empty state.
+
+## PageSpeed Insights
+
+Runs are executed by the SaaS (`PageSpeedClient`), not only pushed by the
+plugin — a site with the plugin disabled now still gets performance data,
+and runs can be scheduled centrally.
+
+- **Field data beats lab data.** Core Web Vitals come from CrUX when Google
+  has a sample for the URL, because a lab run on Google's hardware is not
+  what real visitors experience. When CrUX has no sample — normal for low
+  traffic — lab figures are stored and `field_data_available` records which
+  it was, so the dashboard can say so rather than implying real-user
+  measurement. CrUX reports CLS scaled by 100; the column stores the real
+  value.
+- **Metric audits are excluded from the issues list.** LCP, CLS, TBT and
+  friends score below the pass threshold on any slow page, but they are
+  measurements, not things to fix, and each is already a first-class column.
+  Listing them would restate the vitals as if they were actions and bury the
+  opportunities that say what to change.
+- **Quota is guarded twice**: a global per-minute throttle across all sites
+  (jobs are *released*, not dropped, so a busy window delays rather than
+  loses runs) and a per-site daily cap so one site cannot starve the rest.
+  The daily counter increments only after a successful run, so failures
+  don't burn quota.
+- Regression alerting is not duplicated here — `AlertDetector` already owns
+  that rule and consumes these runs. The scheduled run at 04:10 sits ahead
+  of the 6-hourly alert scan so the comparison uses two recent runs.
+
+`POST /api/sites/{site}/analytics/performance/run` queues a run (owner or
+admin; both strategies unless one is named). Configuration:
+`PAGESPEED_API_KEY` (optional — keyless works at a much lower quota),
+`PAGESPEED_MAX_PER_MINUTE`, `PAGESPEED_MAX_PER_SITE_PER_DAY`.

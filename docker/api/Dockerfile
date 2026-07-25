@@ -23,7 +23,7 @@ COPY insightistic-api/ ./
 RUN composer dump-autoload --optimize --no-dev --no-scripts
 
 # ---- Stage 2: runtime ---------------------------------------------------
-FROM php:8.4-fpm-alpine
+FROM php:8.5-fpm-alpine
 
 RUN apk add --no-cache \
         nginx supervisor curl \

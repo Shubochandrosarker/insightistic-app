@@ -36,8 +36,14 @@ class ReportScheduleController extends Controller
         return response()->json(['schedule' => $schedule], 201);
     }
 
+    /*
+     * {site} must be declared before {schedule}: route parameters are injected
+     * positionally, so dropping it binds the *site* id to $scheduleId and the
+     * wrong schedule gets edited or deleted whenever the two ids differ.
+     */
+
     /** PATCH /sites/{site}/report-schedules/{schedule} */
-    public function update(Request $request, int $scheduleId)
+    public function update(Request $request, int $siteId, int $scheduleId)
     {
         $schedule = $this->find($request, $scheduleId);
         $schedule->update($this->validated($request, partial: true));
@@ -46,7 +52,7 @@ class ReportScheduleController extends Controller
     }
 
     /** DELETE /sites/{site}/report-schedules/{schedule} */
-    public function destroy(Request $request, int $scheduleId)
+    public function destroy(Request $request, int $siteId, int $scheduleId)
     {
         $this->find($request, $scheduleId)->delete();
 

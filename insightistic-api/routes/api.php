@@ -253,6 +253,13 @@ Route::middleware(['auth:sanctum', 'tenant', 'restrict.impersonation'])->group(f
         Route::post('sites/{site}/insights/generate', [InsightController::class, 'generate']);
         Route::get('sites/{site}/insights/{insight}', [InsightController::class, 'show']);
         Route::post('sites/{site}/insights/{insight}/mark-read', [InsightController::class, 'markRead']);
+        // Lifecycle (spec Phase 6). Saving and dismissing are orthogonal to
+        // read/done, so they are separate verbs rather than more statuses.
+        Route::post('sites/{site}/insights/{insight}/save', [InsightController::class, 'save']);
+        Route::delete('sites/{site}/insights/{insight}/save', [InsightController::class, 'unsave']);
+        Route::post('sites/{site}/insights/{insight}/dismiss', [InsightController::class, 'dismiss']);
+        Route::delete('sites/{site}/insights/{insight}/dismiss', [InsightController::class, 'restore']);
+        Route::post('sites/{site}/insights/{insight}/action', [InsightController::class, 'action']);
 
         // Reports (Week 4)
         Route::get('sites/{site}/reports', [ReportController::class, 'index']);

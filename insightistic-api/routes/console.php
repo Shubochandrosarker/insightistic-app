@@ -69,3 +69,13 @@ Schedule::command('insightistic:alerts-scan')
 Schedule::command('insightistic:reports-deliver')
     ->hourly()
     ->withoutOverlapping();
+
+/*
+ * Proactive insight generation (spec Phase 6). Daily at 05:00 — last in the
+ * nightly chain, so the AI reads freshly synced sources (01:20), rebuilt
+ * snapshots (02:00) and the night's PageSpeed run (04:10) rather than
+ * yesterday's numbers. Plan limits and freshness dedup live in the command.
+ */
+Schedule::command('insightistic:insights-generate')
+    ->dailyAt('05:00')
+    ->withoutOverlapping();

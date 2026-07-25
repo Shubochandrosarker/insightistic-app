@@ -37,8 +37,15 @@ class AlertController extends Controller
         return response()->json(['created' => count($created), 'alerts' => $created]);
     }
 
+    /*
+     * {site} must be declared before {alert}: route parameters are injected
+     * positionally, so dropping it binds the *site* id to $alert. That only
+     * misbehaves once a tenant has an alert whose id differs from its site's
+     * — which is why it survived unnoticed.
+     */
+
     /** POST /sites/{site}/alerts/{alert}/resolve */
-    public function resolve(Request $request, int $alert)
+    public function resolve(Request $request, int $siteId, int $alert)
     {
         $row = $this->find($request, $alert);
         $row->update(['is_resolved' => true]);
@@ -47,7 +54,7 @@ class AlertController extends Controller
     }
 
     /** POST /sites/{site}/alerts/{alert}/reopen */
-    public function reopen(Request $request, int $alert)
+    public function reopen(Request $request, int $siteId, int $alert)
     {
         $row = $this->find($request, $alert);
         $row->update(['is_resolved' => false]);

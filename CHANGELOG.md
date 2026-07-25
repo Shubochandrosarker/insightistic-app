@@ -126,3 +126,33 @@ All notable changes to the Insightistic platform (app + API + plugin).
 - The 10 contextual insight types the API already supported (executive,
   traffic, seo, performance, commerce, products, customers, content,
   alerts, report) are now generatable and filterable from the dashboard.
+- **Insight lifecycle.** Insights can be saved, dismissed and restored, and
+  exported as task-ready markdown. Saved and dismissed are timestamps rather
+  than `status` values, because they are orthogonal to how far through an
+  insight you are — a thing can be read *and* saved, and "not now" is not
+  "done". Dismissal hides without deleting, so nothing is unrecoverable.
+- **Freshness is queryable.** `expires_at` was already being written into the
+  generator's JSON contract but nothing could filter or sort on it there; it
+  is now a real column, backfilled from the existing JSON, and insights past
+  their window render as stale instead of quietly looking current.
+- **Proactive generation** (`insightistic:insights-generate`, 05:00 daily).
+  Insights previously only existed when someone pressed the button, so the
+  feature meant to tell you something changed only spoke once you already
+  suspected it had. Guarded three ways: plan limits are checked before every
+  generation and the run stops at the limit rather than borrowing against the
+  quota a user wants for their own questions; a type is skipped while a live
+  insight of that type is still fresh; and evidence is assembled before
+  metering, so a site with nothing to say costs nothing. A dismissed insight
+  does not suppress the next cycle — the user said "not now", not "never".
+
+### Fixed — nested route parameters bound the wrong record
+- Controllers on `sites/{site}/…/{id}` routes read the Site off the request
+  and declared only the second id. Laravel injects route parameters
+  positionally, so the **site** id was landing in the record id: saving,
+  dismissing or actioning an insight, resolving or reopening an alert, and
+  updating or deleting a report schedule all operated on whichever record
+  happened to share the site's id. It is invisible on a single-site tenant
+  whose first record is id 1 — the shape of most dev data — which is why it
+  survived. All three controllers now declare `{site}` first, and
+  `NestedRouteBindingTest` pins each endpoint against a target whose id is
+  guaranteed to differ from its site's.

@@ -80,6 +80,41 @@ return [
         'webhook_secret' => env('STRIPE_WEBHOOK_SECRET'),
     ],
 
+    /*
+     * Direct SaaS integrations (spec Phase 3.2). These credentials belong to
+     * the SaaS, never to a WordPress site — refresh tokens are exchanged and
+     * stored server-side only, and are never sent to the browser or written
+     * into the WordPress options table.
+     *
+     * The Google client is the same OAuth app used for social login, but with
+     * its own redirect URI and read-only analytics scopes, so consent for
+     * "sign in with Google" never silently grants analytics access.
+     */
+    'integrations' => [
+        'google' => [
+            'client_id'     => env('GOOGLE_CLIENT_ID'),
+            'client_secret' => env('GOOGLE_CLIENT_SECRET'),
+            'redirect'      => env(
+                'INTEGRATIONS_GOOGLE_REDIRECT_URI',
+                rtrim(env('APP_URL', 'http://localhost'), '/') . '/api/integrations/google/callback',
+            ),
+            'scopes' => [
+                'ga4' => ['https://www.googleapis.com/auth/analytics.readonly'],
+                'gsc' => ['https://www.googleapis.com/auth/webmasters.readonly'],
+            ],
+        ],
+
+        // Cloudflare uses a scoped API token (Analytics:Read), not OAuth.
+        'cloudflare' => [
+            'api_base' => env('CLOUDFLARE_API_BASE', 'https://api.cloudflare.com/client/v4'),
+        ],
+
+        'timeout' => (int) env('INTEGRATIONS_HTTP_TIMEOUT', 20),
+
+        // How stale a source may get before the dashboard calls it degraded.
+        'stale_after_hours' => (int) env('INTEGRATIONS_STALE_AFTER_HOURS', 48),
+    ],
+
     // NOTE: the old `super_admin_email` / SUPER_ADMIN_EMAIL auto-promotion
     // was removed as a security fix. Super admins are created only via the
     // insightistic:super-admin:* artisan commands or promotion by an existing

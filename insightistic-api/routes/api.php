@@ -71,6 +71,15 @@ Route::prefix('auth')->group(function () {
     Route::get('oauth/{provider}/callback', [OAuthController::class, 'callback'])->middleware('throttle:auth');
 });
 
+// ---- Data-source OAuth callback (spec Phase 3.2) --------------------------
+// Public because Google redirects the *browser* here, so no bearer token is
+// present. Safe because the single-use `state` nonce — minted server-side in
+// authorizeUrl() — is what identifies the site, source and user; an
+// unrecognised state is rejected outright. Throttled like any credential
+// endpoint. Not under /auth: this grants a data scope, never a login.
+Route::get('integrations/google/callback', [IntegrationsController::class, 'googleCallback'])
+    ->middleware('throttle:auth');
+
 // ---- Authenticated identity (no organization required) --------------------
 // `me`/`logout` only need to know who the token belongs to, not which org is
 // active — gating them behind `tenant` would 403 any authenticated user with
@@ -163,7 +172,20 @@ Route::middleware(['auth:sanctum', 'tenant', 'restrict.impersonation'])->group(f
         Route::get('sites/{site}/analytics/performance/history', [PerformanceController::class, 'history']);
         Route::get('sites/{site}/analytics/performance/latest', [PerformanceController::class, 'latest']);
 
+        // Data-source health + direct connection workflow (spec Phase 3.2).
+        // Reading status is open to anyone with site access; connecting or
+        // disconnecting a data source is an owner/admin action.
         Route::get('sites/{site}/integrations', [IntegrationsController::class, 'index']);
+
+        Route::middleware('role:owner,admin')->group(function () {
+            Route::post('sites/{site}/integrations/cloudflare/connect', [IntegrationsController::class, 'connectCloudflare']);
+            Route::post('sites/{site}/integrations/{source}/authorize-url', [IntegrationsController::class, 'authorizeUrl']);
+            Route::get('sites/{site}/integrations/{source}/resources', [IntegrationsController::class, 'resources']);
+            Route::post('sites/{site}/integrations/{source}/select', [IntegrationsController::class, 'select']);
+            Route::post('sites/{site}/integrations/{source}/test', [IntegrationsController::class, 'test']);
+            Route::post('sites/{site}/integrations/{source}/resync', [IntegrationsController::class, 'resync']);
+            Route::delete('sites/{site}/integrations/{source}', [IntegrationsController::class, 'disconnect']);
+        });
 
         // Alerts (Milestone 5, spec §12) — deterministic rules, run on a
         // schedule (routes/console.php) or on demand via scan().

@@ -127,6 +127,12 @@ class CloudflareTrafficService
                 'requests'        => (int) ($sum['requests'] ?? 0),
                 'cached_requests' => (int) ($sum['cachedRequests'] ?? 0),
                 'threats'         => (int) ($sum['threats'] ?? 0),
+                // Per-day page views/uniques were already being fetched but
+                // only accumulated into $totals. The daily figures are what
+                // the Cloudflare→traffic_daily sync stores, so surface them
+                // here too; existing timeline consumers are unaffected.
+                'page_views'      => (int) ($sum['pageViews'] ?? 0),
+                'uniques'         => (int) ($row['uniq']['uniques'] ?? 0),
             ];
 
             $totals['requests']           += (int) ($sum['requests'] ?? 0);

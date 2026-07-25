@@ -13,6 +13,16 @@ Schedule::command('insightistic:snapshots')
     ->withoutOverlapping();
 
 /*
+ * Direct data sources (GA4, Search Console, Cloudflare — spec Phase 3.2).
+ * Runs before the 02:00 snapshot build so the night's snapshots are computed
+ * over data that was just refreshed rather than yesterday's. Each source is
+ * queued as its own job, so one provider being down can't stall the others.
+ */
+Schedule::command('insightistic:sync-data-sources')
+    ->dailyAt('01:20')
+    ->withoutOverlapping();
+
+/*
  * Trial lifecycle: reminders (T-2, T-0), expiry enforcement (locks advanced
  * features, keeps free plugin working), and the day-7 win-back. Hourly; all
  * sends dedupe through email_logs so re-runs never double-send.

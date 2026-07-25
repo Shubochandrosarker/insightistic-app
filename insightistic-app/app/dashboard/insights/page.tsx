@@ -18,7 +18,7 @@ const SEV_TONE: Record<string, "red" | "amber" | "green" | "slate"> = {
 // Contextual insight types (each looks at one slice of the data) + legacy digests.
 const CONTEXTUAL_TYPES = [
   "executive", "traffic", "seo", "performance", "commerce",
-  "products", "customers", "content", "alerts",
+  "products", "customers", "content", "alerts", "report",
 ];
 const LEGACY_TYPES = ["weekly", "monthly"];
 const GENERATE_TYPES = [...CONTEXTUAL_TYPES, ...LEGACY_TYPES];

@@ -4,6 +4,29 @@ All notable changes to the Insightistic platform (app + API + plugin).
 
 ## [Unreleased] — Advanced SaaS + AI Knowledge Base upgrade (2026-07)
 
+### Fixed — build/runtime blockers found in post-merge audit
+- **`IngestionFailure` was unloadable**, taking the whole knowledge ingestion
+  pipeline with it: it promoted a `public readonly string $code`, and
+  redeclaring `Exception::$code` (inherited, non-readonly) as readonly is a
+  fatal error. Every ingestion path throws this class, so no source could ever
+  be indexed. The property is now `errorCode`.
+- **Knowledge migration aborted without pgvector.** `CREATE EXTENSION` was
+  wrapped in a `try/catch`, but migrations run inside a transaction and a
+  failed statement poisons it — every later statement died with SQLSTATE
+  25P02, so the documented "FTS-only degradation" never worked and migrating
+  onto a plain PostgreSQL image failed outright. It now probes
+  `pg_available_extensions` first and guards the `CREATE` with a savepoint.
+- **Frontend build was broken by two unvalidated major bumps.** Tailwind was on
+  4.3.3 while every file still used v3 (`@tailwind` directives +
+  `tailwind.config.ts`), and TypeScript 7.0.2 is not recognised by Next 16's
+  TypeScript integration. Pinned back to `tailwindcss@3.4.17` and
+  `typescript@5.9.3`; `tsconfig.json` picks up the `jsx: react-jsx` Next 16
+  requires. A deliberate Tailwind v4 migration remains open follow-up work.
+- API runtime image moved from `php:8.5-fpm-alpine` to `php:8.4-fpm-alpine` so
+  production matches CI and `composer.json`'s `config.platform.php` (8.4.1).
+- The `report` contextual insight type was supported by `ContextAssembler` but
+  missing from the dashboard's type list — all 10 are now selectable.
+
 ### Security (breaking where noted)
 - **Removed `SUPER_ADMIN_EMAIL` auto-promotion** from registration, OAuth
   signup, the seeder and the Docker entrypoint. Public signup can never mint
@@ -24,7 +47,7 @@ All notable changes to the Insightistic platform (app + API + plugin).
 - Security headers everywhere: CSP, HSTS, nosniff, Referrer-Policy,
   Permissions-Policy, frame-ancestors on both the Next.js app and the API.
 - New rate limiters: `ai-chat`, `knowledge-upload`, `knowledge-crawl`, `exports`.
-- `npm audit`: 0 vulnerabilities (Next 15.5.21; postcss + sharp overrides).
+- `npm audit`: 0 vulnerabilities (Next 16.2.11; postcss + sharp overrides).
 - **Removed committed production secrets** from
   `docker-compose.hostinger-url.yml`. The old `APP_KEY` and `DB_PASSWORD`
   must be treated as compromised — see docs/DEPLOYMENT.md → Rotation.
@@ -43,7 +66,9 @@ All notable changes to the Insightistic platform (app + API + plugin).
   queue worker runs with retries + exponential backoff; dedicated one-shot
   `migrate` compose service (migrations no longer run on every container
   start).
-- Database image switched to `pgvector/pgvector:pg16`.
+- Database image switched to `pgvector/pgvector:pg16` across every compose file
+  (production and both Hostinger variants). Without the `vector` extension the
+  schema still migrates, but retrieval degrades to full-text search only.
 - CI pipeline (`.github/workflows/ci.yml`): frontend typecheck/build/audit,
   backend Pest with migrate up/rollback/up, plugin syntax + WPCS checks,
   docker builds, secret scan. GHCR publishing is gated on the full suite.

@@ -128,13 +128,34 @@ return new class extends Migration {
 
     private function ensureVectorExtension(): bool
     {
+        // Migrations run inside a transaction on PostgreSQL, and a failed
+        // statement poisons it — every later statement then dies with 25P02.
+        // So probe first (these reads never error) and only issue CREATE
+        // EXTENSION when it can actually succeed; the savepoint keeps a
+        // privilege failure from taking the rest of the migration with it.
+        if (DB::selectOne("SELECT 1 AS ok FROM pg_extension WHERE extname = 'vector'")) {
+            return true;
+        }
+
+        if (! DB::selectOne("SELECT 1 AS ok FROM pg_available_extensions WHERE name = 'vector'")) {
+            logger()->warning('pgvector is not available on this server; knowledge retrieval will use full-text search only.');
+
+            return false;
+        }
+
+        DB::statement('SAVEPOINT insightistic_vector_ext');
+
         try {
             DB::statement('CREATE EXTENSION IF NOT EXISTS vector');
+            DB::statement('RELEASE SAVEPOINT insightistic_vector_ext');
 
             return true;
         } catch (\Throwable $e) {
-            // Not installable here (missing package or insufficient privilege).
-            // Proceed without the embedding column — FTS-only retrieval.
+            // Available but not installable here (insufficient privilege).
+            // Roll back to the savepoint so the transaction stays usable and
+            // proceed without the embedding column — FTS-only retrieval.
+            DB::statement('ROLLBACK TO SAVEPOINT insightistic_vector_ext');
+
             logger()->warning('pgvector unavailable; knowledge retrieval will use full-text search only.', [
                 'error' => $e->getMessage(),
             ]);

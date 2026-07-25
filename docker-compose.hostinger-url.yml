@@ -35,7 +35,10 @@ x-api-env: &api_env
   
 services:
   db:
-    image: postgres:16-alpine
+    # pgvector/pgvector ships PostgreSQL 16 plus the `vector` extension the AI
+    # knowledge base needs. On plain postgres:16-alpine the schema still
+    # migrates, but retrieval silently degrades to full-text search only.
+    image: pgvector/pgvector:pg16
     restart: unless-stopped
     environment:
       POSTGRES_DB: insightistic

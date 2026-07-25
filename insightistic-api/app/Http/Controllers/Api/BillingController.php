@@ -141,8 +141,11 @@ class BillingController extends Controller
             return response()->json(['message' => 'Invalid signature.'], 400);
         }
 
-        $this->processor->process($event);
+        // Idempotent: Stripe retries and dashboard replays deliver the same
+        // event id more than once. A duplicate is acknowledged with 200 —
+        // returning an error would only make Stripe retry it again.
+        $processed = $this->processor->processOnce($event);
 
-        return response()->json(['received' => true]);
+        return response()->json(['received' => true, 'duplicate' => ! $processed]);
     }
 }

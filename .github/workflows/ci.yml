@@ -29,6 +29,11 @@ jobs:
         run: npm ci
       - name: Type check
         run: npx tsc --noEmit
+      # Component tests run before the build: a failing assertion is far
+      # cheaper to read than a broken bundle, and catches the render-level
+      # regressions (null vs 0, MFA step, error states) a build cannot.
+      - name: Component tests (vitest)
+        run: npm test
       - name: Production build
         run: npm run build
       # Fail on high/critical vulnerabilities in production dependencies.
@@ -86,8 +91,24 @@ jobs:
           php artisan migrate:rollback --force
           php artisan migrate --force
           php artisan db:seed --class=Database\\Seeders\\PlanSeeder --force
+      # Migrating an *already-populated* schema is the case that actually
+      # happens on deploy. Running only the empty-database path would miss a
+      # migration that works on a fresh install but fails against real rows.
+      - name: Migration test — populated database
+        run: |
+          php artisan db:seed --class=Database\\Seeders\\PlanSeeder --force
+          php artisan migrate --force
+          php artisan migrate:status
       - name: Pest test suite
         run: php artisan test --compact
+      # Informational only. The codebase deliberately aligns `=>` in arrays
+      # and uses a brace style Pint's default Laravel preset rewrites, so a
+      # blocking check today would fail on ~180 pre-existing files. Making it
+      # gate would mean a mass reformat — a huge, unreviewable diff that
+      # belongs in its own change, not bundled with a test-infrastructure PR.
+      # Adopt a pint.json matching house style, then flip this to blocking.
+      - name: Coding standards (Pint, informational)
+        run: ./vendor/bin/pint --test || true
 
   plugin:
     name: WordPress plugin checks
@@ -154,3 +175,20 @@ jobs:
       - uses: gitleaks/gitleaks-action@v3
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # Flags known-vulnerable dependencies introduced by a pull request, across
+  # npm and composer. Separate from the npm audit in the frontend job: that
+  # only sees the JS tree, and only after a lockfile change lands.
+  dependency-review:
+    name: Dependency review
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/dependency-review-action@v4
+        with:
+          fail-on-severity: high
+          # Advisories with no fix available would otherwise block every PR
+          # until upstream ships one, which is not something a PR author can act on.
+          warn-only: false
+          comment-summary-in-pr: always

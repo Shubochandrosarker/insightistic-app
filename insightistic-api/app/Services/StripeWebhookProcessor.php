@@ -23,6 +23,48 @@ class StripeWebhookProcessor
         private LifecycleMailer $mailer,
     ) {}
 
+    /**
+     * Handle a live webhook delivery exactly once.
+     *
+     * Stripe retries on its own schedule and an operator can replay a
+     * delivery from the dashboard, so the same event id arrives more than
+     * once in normal operation. The unique index on stripe_event_id decides
+     * the winner: a duplicate insert throws and we return without
+     * reprocessing. A SELECT-then-INSERT check would leave a race window
+     * between two concurrent deliveries.
+     *
+     * Deliberately NOT applied to process() itself — Super Admin's "replay
+     * this event" tool calls the public projection methods directly and is
+     * *meant* to re-run, which is safe because each converges to the same
+     * state.
+     *
+     * @return bool false when this delivery was a duplicate
+     */
+    public function processOnce(\Stripe\Event $event): bool
+    {
+        // insertOrIgnore rather than create()-and-catch: on PostgreSQL a
+        // failed INSERT aborts the surrounding transaction, so catching the
+        // unique violation would leave every later query failing with 25P02.
+        // ON CONFLICT DO NOTHING never raises, and the returned row count
+        // still tells us who won the race between concurrent deliveries.
+        $inserted = \Illuminate\Support\Facades\DB::table('stripe_webhook_events')->insertOrIgnore([
+            'stripe_event_id' => $event->id,
+            'type'            => $event->type,
+            'created_at'      => now(),
+        ]);
+
+        if ($inserted === 0) {
+            return false;
+        }
+
+        $this->process($event);
+
+        \App\Models\StripeWebhookEvent::where('stripe_event_id', $event->id)
+            ->update(['processed_at' => now()]);
+
+        return true;
+    }
+
     public function process(\Stripe\Event $event): void
     {
         switch ($event->type) {

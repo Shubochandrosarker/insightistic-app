@@ -48,6 +48,25 @@ and mail is arrayed in tests.
   (cross-org and cross-user), cascade deletion, feedback upsert.
 - SSRF unit matrix: private/loopback/link-local/CGN/metadata IPs, IPv6,
   internal hostnames, schemes, ports, credentials — all offline.
+- Direct integrations (GA4/GSC/Cloudflare): consent-URL state binding and
+  single-use burn, server-side code exchange with no token in the redirect,
+  access-revoked-mid-consent, provider syncs into `traffic_daily`/`seo_daily`,
+  token refresh preserving the refresh token, revoked-grant handling,
+  Cloudflare token verification, disconnect cleanup, cross-tenant 404s.
+- Email analytics: encrypted-at-rest API keys never echoed, Mailchimp
+  data-centre validation before any outbound call, derived delivered count,
+  re-sync idempotency, connector-pushed campaigns, and the null-vs-zero rule
+  for unreported counters.
+- MFA: two-step enrolment, hashed recovery codes, TOTP replay refusal,
+  two-phase login with a burn-on-first-attempt challenge, reauth bound to a
+  single access token, and new-device login notifications.
+- Stripe webhooks: forged and stale signatures rejected, redelivery
+  processed exactly once, a duplicate cannot drag state backwards, and the
+  Super Admin replay path still re-runs deliberately.
+- Licensing: activation, idempotent re-activation with secret rotation,
+  revoked keys, trial expiry, the payment grace window either side of its
+  boundary, cancelled-until-period-end, entitlement override precedence, and
+  production-only activation limits.
 
 ## Frontend
 
@@ -55,13 +74,30 @@ and mail is arrayed in tests.
 cd insightistic-app
 npm ci
 npx tsc --noEmit     # type check
+npm test             # component tests (vitest + testing-library, jsdom)
 npm run build        # production build
 npm audit --omit=dev # dependency audit (CI fails on high/critical)
 ```
 
-Component/E2E test frameworks are not yet installed — see
-docs/ADVANCED-UPGRADE-PLAN.md §11 for the planned Vitest + Playwright
-suites (tracked as remaining work).
+Component tests live in `insightistic-app/tests/` and render the real
+components with the API layer stubbed per test — components are not
+rewritten for testability. Next's router and search params are stubbed in
+`tests/setup.ts`.
+
+### What is covered
+
+- **Emails page**: unreported metrics render as an em dash and never as
+  `0`/`0%`; a genuinely reported zero stays a zero; both connection routes
+  are offered when nothing is connected; an API failure shows the message
+  and a retry rather than a blank page.
+- **Login with MFA**: a correct password alone never navigates to the
+  dashboard when two-factor is on; the code step exchanges for a session; an
+  expired challenge returns to the password form while a merely wrong code
+  keeps the code step open; recovery codes are mentioned so a lost device
+  is not a dead end.
+
+Playwright E2E is still outstanding — it needs the API, the app and
+PostgreSQL running together, which is a harness rather than a test file.
 
 ## WordPress plugin
 
@@ -73,8 +109,25 @@ find insightistic -name '*.php' -exec php -l {} \;   # syntax
 
 ## CI
 
-`.github/workflows/ci.yml` runs on every push/PR: frontend typecheck +
-build + audit, backend Pest with a migration up/rollback/up pass from an
-empty pgvector database + Redis, plugin checks, both Docker builds, and
-gitleaks secret scanning. GHCR image publishing
-(`docker-ghcr.yml`) is gated on this entire suite.
+`.github/workflows/ci.yml` runs on every push/PR:
+
+| Job | Covers |
+|---|---|
+| Frontend | typecheck, **component tests**, production build, npm audit (fails on high/critical in production deps) |
+| Backend | Pest on pgvector PostgreSQL + Redis, migration up/rollback/up from an **empty** database, migration against an **already-populated** one, informational Pint |
+| Plugin | PHP syntax, ABSPATH guards, informational WPCS |
+| Docker | both images build |
+| Secret scanning | gitleaks |
+| Dependency review | flags known-vulnerable dependencies a PR introduces, across npm and composer |
+
+GHCR image publishing (`docker-ghcr.yml`) is gated on this entire suite.
+
+The populated-database migration step exists because that is the case that
+actually happens on deploy; the empty-database path alone would miss a
+migration that works on a fresh install but fails against real rows.
+
+Pint is informational rather than blocking: the codebase deliberately aligns
+`=>` in arrays and uses a brace style Pint's default Laravel preset
+rewrites, so gating today would fail on ~180 pre-existing files. Adopting a
+`pint.json` that matches house style, then flipping the step to blocking, is
+tracked follow-up work.

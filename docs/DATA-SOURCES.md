@@ -12,7 +12,7 @@ each integration.
 | SEO (GSC) | **Live** | Server-side Google OAuth → `GscClient` → `seo_daily`, `seo_query_snapshots`, `seo_page_snapshots` (with previous-period deltas). Also accepts connector `sync/seo/*`. |
 | Performance (PageSpeed) | **Ingest-ready** | `sync/performance/runs` + tables; SaaS-side scheduled Lighthouse runner remaining |
 | Cloudflare traffic | **Live (BYO token)** | Per-site zone + API token (encrypted) → `CloudflareTrafficService`; connect/verify/zone-picker on `/dashboard/integrations`; daily rows into `traffic_daily` (source `cloudflare`); plugin proxy endpoint `plugin/cloudflare-traffic` |
-| Email analytics | **Honest empty state** | `/dashboard/emails` shows the integration setup state; Mailchimp/Klaviyo/FluentCRM adapters are remaining work |
+| Email analytics | **Live** | Mailchimp/Klaviyo pulled by the SaaS via per-site API key; FluentCRM/AutomateWoo/WooCommerce pushed by the plugin → `email_campaigns` → `/dashboard/emails` |
 | Alerts | **Live** | Deterministic `AlertDetector` rules, scheduled 6-hourly |
 | AI insights / Copilot | **Live** | `ContextAssembler` + knowledge retrieval; provider-configurable |
 
@@ -59,6 +59,33 @@ grant is terminal and surfaces on the Integrations page as
 Required configuration: `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` and
 `INTEGRATIONS_GOOGLE_REDIRECT_URI` (must match the redirect URI registered in
 the Google Cloud console). See `docs/ENVIRONMENT-VARIABLES.md`.
+
+## Email analytics
+
+Two ingestion paths land in the same `email_campaigns` table, so a site can
+run several providers at once and the dashboard aggregates across them:
+
+| Provider | Path | Credential |
+|---|---|---|
+| Mailchimp | SaaS pulls `/reports` (one call returns the whole funnel + ecommerce revenue) | Per-site API key; the data centre comes from the key's `-us14` suffix |
+| Klaviyo | SaaS lists `/campaigns`, then a campaign-values report for statistics | Per-site private API key |
+| FluentCRM, AutomateWoo, WooCommerce mail | Plugin pushes `POST connector/v1/sync/email/campaigns` over HMAC | None — these live inside WordPress and are not reachable from the SaaS |
+
+API keys reuse `data_source_credentials` (source `email`), so they inherit
+the same encrypted-at-rest, never-serialised handling as the Google and
+Cloudflare grants. Both paths upsert on `(site_id, provider, external_id)`
+through one shared `EmailAnalyticsService::store()`, so a retried batch or a
+repeated sync converges instead of duplicating.
+
+**Counters are nullable on purpose.** "This provider does not report opens"
+and "nobody opened it" are different facts, and the dashboard has to be able
+to tell them apart. Unreported metrics stay `null` end to end and render as
+`—`, never as a confident `0%`. Aggregates follow the same rule: a total is
+null unless at least one campaign reported that counter.
+
+Endpoints under `/api/sites/{site}/emails`: `overview` and `campaigns` need
+site access; `connect`, `sync` and `DELETE connection` require owner or
+admin. Disconnecting removes the credential but keeps reporting history.
 
 Rules of the platform: no mock analytics, no fabricated AI responses, no
 invented citations — a source with no data shows an honest empty state.

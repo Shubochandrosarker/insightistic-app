@@ -107,6 +107,35 @@ performance/engagement tables are fed by connector v2 endpoints.
   Providers: OpenAI-compatible (streaming), WordPressistic AI Gateway,
   deterministic rule fallback. See docs/AI-SECURITY.md.
 
+## Business intelligence
+
+`App\Services\Intelligence\*` computes segments, cohorts, stock cover, search
+opportunities and anomalies from data already synced — no new sources, no
+stored derivations, no scheduled job. Four rules hold across all of it:
+
+- **Recomputed, not trusted.** Every commerce figure is derived from
+  `wc_orders` rather than the store's own `total_sales` / `total_spent`
+  counters, which never decrease on refund and include unpaid orders. Only
+  `completed` and `processing` count as revenue.
+- **Relative to the site, not to an industry.** RFM uses quintiles of this
+  store's own customers, CTR gaps compare against this site's median CTR per
+  position band, and churn is measured against each customer's own median gap
+  between orders. Fixed thresholds mislabel any business whose cycle differs
+  from the assumed one.
+- **Floors before findings.** RFM needs 20 customers, anomaly detection 14
+  days, correlation 10 paired days, affinity 3 co-occurrences. Below a floor
+  each report answers `has_data: false` with a machine-readable `reason`, so
+  the UI can say which kind of empty it is.
+- **Stated limits.** Channel data is labelled last-click, cannibalization is
+  labelled candidates (GSC aggregates do not pair queries with pages), and
+  speed-vs-revenue is labelled correlation. Anomaly detection uses median
+  absolute deviation rather than mean/stddev, so a spike cannot inflate the
+  baseline that is supposed to catch it.
+
+Churn risk is the one report naming individual customers and is restricted to
+owner/admin/analyst; `client_viewer` gets 403 from the route, not a hidden
+button.
+
 ## Billing & entitlements
 
 Stripe webhooks are the source of truth for subscriptions; the license

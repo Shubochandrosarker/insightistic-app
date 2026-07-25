@@ -41,3 +41,6 @@ bootstrap/cache/*.php
 coverage/
 tmp/
 temp/
+
+# TypeScript incremental build info
+tsconfig.tsbuildinfo

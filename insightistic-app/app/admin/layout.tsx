@@ -1,7 +1,7 @@
 "use client";
 import {
   LayoutGrid, Building2, Users, Globe, CreditCard, RefreshCw,
-  FileText, BarChart3, Activity, Settings, Tag,
+  FileText, BarChart3, Activity, Settings, Tag, Radar,
 } from "lucide-react";
 import { AdminProtected } from "@/components/admin/AdminProtected";
 import { AdminTopbar } from "@/components/admin/AdminTopbar";
@@ -22,6 +22,7 @@ const NAV: NavItem[] = [
   { href: "/admin/reports", label: "Reports", icon: FileText },
   { href: "/admin/usage", label: "Usage", icon: BarChart3 },
   { href: "/admin/system-health", label: "System Health", icon: Activity },
+  { href: "/admin/observability", label: "Observability", icon: Radar },
   { href: "/admin/settings", label: "Settings", icon: Settings },
 ];
 
@@ -39,6 +40,7 @@ const MORE: NavItem[] = [
   { href: "/admin/reports", label: "Reports", icon: FileText },
   { href: "/admin/usage", label: "Usage", icon: BarChart3 },
   { href: "/admin/system-health", label: "System Health", icon: Activity },
+  { href: "/admin/observability", label: "Observability", icon: Radar },
   { href: "/admin/settings", label: "Settings", icon: Settings },
 ];
 

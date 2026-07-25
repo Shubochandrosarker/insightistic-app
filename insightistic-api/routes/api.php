@@ -4,6 +4,7 @@ use App\Http\Controllers\Api\Admin\AuditLogController as AdminAuditLogController
 use App\Http\Controllers\Api\Admin\ImpersonationController as AdminImpersonationController;
 use App\Http\Controllers\Api\Admin\LicenseController as AdminLicenseController;
 use App\Http\Controllers\Api\Admin\OrganizationController as AdminOrganizationController;
+use App\Http\Controllers\Api\Admin\ObservabilityController as AdminObservabilityController;
 use App\Http\Controllers\Api\Admin\OverviewController as AdminOverviewController;
 use App\Http\Controllers\Api\Admin\PlanController as AdminPlanController;
 use App\Http\Controllers\Api\Admin\ReportController as AdminReportController;
@@ -366,6 +367,17 @@ Route::get('reports/{report}/html', [ReportController::class, 'downloadHtml'])
 Route::prefix('admin')->middleware(['auth:sanctum', 'super_admin'])->group(function () {
     Route::get('overview', [AdminOverviewController::class, 'overview']);
     Route::get('system-health', [AdminOverviewController::class, 'systemHealth']);
+
+    /*
+     * Observability (spec Phase 2.3). Platform-wide, not tenant-scoped:
+     * route latency spans every tenant's traffic and AI spend is aggregate,
+     * so surfacing either inside an organization's dashboard would leak the
+     * shape of other customers' usage.
+     */
+    Route::get('observability', [AdminObservabilityController::class, 'overview']);
+    Route::get('observability/requests', [AdminObservabilityController::class, 'requests']);
+    Route::get('observability/ai', [AdminObservabilityController::class, 'ai']);
+    Route::get('observability/queue', [AdminObservabilityController::class, 'queue']);
 
     Route::get('organizations', [AdminOrganizationController::class, 'index']);
     Route::get('organizations/{id}', [AdminOrganizationController::class, 'show']);

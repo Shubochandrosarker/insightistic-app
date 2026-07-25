@@ -113,8 +113,66 @@ Local disks remain the development default.
 `IMAGE_NAMESPACE`, `IMAGE_TAG`, `TRAEFIK_NETWORK/ENTRYPOINT/CERT_RESOLVER`,
 `APP_HOST`, `API_HOST`, `WATCHTOWER_SCOPE`, `COMPOSE_PROJECT_NAME`.
 
-## Monitoring (optional integration points)
+## Observability (spec Phase 2.3)
 
-`SENTRY_LARAVEL_DSN` (exception tracking; add `sentry/sentry-laravel` when
-enabling), `LOG_CHANNEL=stderr` for container log drivers. Never send
-secrets or raw tokens to monitoring.
+Everything here is off by default. A fresh install sends nothing to any third
+party until a DSN or collector endpoint is deliberately set.
+
+### Error tracking
+
+| Variable | Default | Notes |
+| --- | --- | --- |
+| `SENTRY_LARAVEL_DSN` | *(empty)* | Empty disables Sentry entirely. |
+| `SENTRY_ENVIRONMENT` | `APP_ENV` | Groups events per deployment. |
+| `SENTRY_RELEASE` | *(empty)* | Set to the image tag or commit SHA to tie errors to a deploy. |
+| `SENTRY_TRACES_SAMPLE_RATE` | `0.0` | Sentry performance traces. OpenTelemetry is the primary tracing path. |
+| `SENTRY_PROFILES_SAMPLE_RATE` | `0.0` | Requires the Excimer extension; leave at 0 without it. |
+| `SENTRY_TRACE_QUEUE_ENABLED` | `false` | One transaction per queued job — noisy on a busy queue. |
+
+Payloads are scrubbed by `App\Services\Observability\EventScrubber` before
+they leave the process: request bodies and cookies are dropped wholesale,
+headers and nested keys matching secret/PII name fragments are redacted, and
+URLs keep their shape but lose every query value. This matters because an
+exception carries the request that caused it, and for this API that can be a
+Google refresh token, a Cloudflare API token, a license key or a customer
+record. `send_default_pii` is forced off and SQL bindings are excluded from
+breadcrumbs — the statement shape is enough to debug, the values are the data.
+
+### Tracing
+
+| Variable | Default | Notes |
+| --- | --- | --- |
+| `OTEL_ENABLED` | `false` | Must be true *and* an endpoint set before anything exports. |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | *(empty)* | Full traces URL, e.g. `http://collector:4318/v1/traces`. |
+| `OTEL_EXPORTER_OTLP_HEADERS` | *(empty)* | `key=value,key2=value2` — where a vendor API key goes. |
+| `OTEL_SERVICE_NAME` | `insightistic-api` | |
+| `OTEL_SERVICE_VERSION` | `SENTRY_RELEASE` or `dev` | |
+| `OTEL_SAMPLE_RATE` | `0.05` | Head sampling. 1.0 is fine on a quiet install, ruinous on a busy one. |
+| `OTEL_EXPORTER_TIMEOUT` | `5` | Seconds. |
+
+OTLP over HTTP/protobuf, which every collector accepts (Tempo, Honeycomb,
+Jaeger, Datadog, Sentry). gRPC would need `ext-grpc`, which the runtime image
+does not carry. The auto-instrumentation package is deliberately *not* used —
+it needs `ext-opentelemetry`, so it would work on a laptop and silently do
+nothing in production.
+
+### Metrics and retention
+
+| Variable | Default | Notes |
+| --- | --- | --- |
+| `OTEL_REQUEST_METRICS` | `true` | Hourly per-route buckets in `telemetry_requests`; two integer writes per request. |
+| `OTEL_RETENTION_DAYS` | `30` | Pruned nightly at 03:50 by `insightistic:telemetry-prune`. |
+
+Request timings and AI spend are stored pre-aggregated into hourly buckets
+per route/model rather than one row per request — a busy site would write
+millions of rows a day, and the questions this data answers are all bucket
+questions. Per-request detail belongs in traces and errors, which are sampled
+and expire.
+
+Queue health (`/api/admin/observability/queue`) reads whichever driver is
+configured. Horizon is not used: the Hostinger compose stacks run
+`QUEUE_CONNECTION=database` while the main production stack runs Redis, and a
+dashboard that only works under one of those would leave the deployments most
+likely to be neglected uncovered.
+
+`LOG_CHANNEL=stderr` remains the right choice for container log drivers.

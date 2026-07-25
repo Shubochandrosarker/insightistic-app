@@ -79,3 +79,13 @@ Schedule::command('insightistic:reports-deliver')
 Schedule::command('insightistic:insights-generate')
     ->dailyAt('05:00')
     ->withoutOverlapping();
+
+/*
+ * Telemetry retention (spec Phase 2.3). 03:50 — after privacy maintenance
+ * (03:30) so the two deletion passes never contend, and before the day's
+ * traffic builds. Observability data that grows without bound eventually
+ * becomes the performance problem it was installed to detect.
+ */
+Schedule::command('insightistic:telemetry-prune')
+    ->dailyAt('03:50')
+    ->withoutOverlapping();

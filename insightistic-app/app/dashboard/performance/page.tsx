@@ -2,6 +2,7 @@
 import { useState } from "react";
 import { useDashboard } from "@/lib/dashboard";
 import { useApi } from "@/lib/useApi";
+import { apiPost } from "@/lib/api";
 import { LineTrend } from "@/components/dashboard/Charts";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
@@ -9,6 +10,7 @@ import { PageHeader } from "@/components/dashboard/PageHeader";
 import { EmptyState } from "@/components/dashboard/EmptyState";
 import { Spinner } from "@/components/ui/Spinner";
 import { Gauge } from "lucide-react";
+import { Button } from "@/components/ui/Button";
 
 const CWV_TONE: Record<string, "green" | "amber" | "red" | "slate"> = {
   good: "green",
@@ -35,6 +37,27 @@ export default function PerformancePage() {
   const latest = useApi<any>(base ? `${base}/latest?strategy=${strategy}` : null, [strategy]);
   const history = useApi<any>(base ? `${base}/history?strategy=${strategy}` : null, [strategy]);
 
+  // Runs are queued, not synchronous — Lighthouse takes far longer than a
+  // request. The banner says so rather than pretending results are instant.
+  const [running, setRunning] = useState(false);
+  const [runNote, setRunNote] = useState<string | null>(null);
+  const [runErr, setRunErr] = useState<string | null>(null);
+
+  async function runTest() {
+    if (!base) return;
+    setRunning(true);
+    setRunNote(null);
+    setRunErr(null);
+    try {
+      await apiPost(`${base}/run`, { strategy });
+      setRunNote("Test queued. Results usually appear within a minute — refresh to see them.");
+    } catch (e: any) {
+      setRunErr(e?.message || "Could not queue the test.");
+    } finally {
+      setRunning(false);
+    }
+  }
+
   if (!siteId)
     return (
       <EmptyState
@@ -59,6 +82,10 @@ export default function PerformancePage() {
         title="Performance Tracking"
         subtitle={`${site?.name || ""} · sourced from PageSpeed Insights / Lighthouse`}
         right={
+          <div className="flex items-center gap-2">
+            <Button variant="ghost" disabled={running} onClick={runTest}>
+              {running ? "Queuing…" : "Run test"}
+            </Button>
           <div className="flex gap-1 rounded-full bg-card2 p-1">
             {(["mobile", "desktop"] as const).map((s) => (
               <button
@@ -71,9 +98,21 @@ export default function PerformancePage() {
                 {s}
               </button>
             ))}
+            </div>
           </div>
         }
       />
+
+      {runNote && (
+        <div className="mb-4 rounded-xl border border-good/25 bg-good/10 px-4 py-3 text-sm text-good">
+          {runNote}
+        </div>
+      )}
+      {runErr && (
+        <div className="mb-4 rounded-xl border border-bad/25 bg-bad/10 px-4 py-3 text-sm text-bad">
+          {runErr}
+        </div>
+      )}
 
       {!run ? (
         <EmptyState

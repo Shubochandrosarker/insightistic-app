@@ -42,6 +42,16 @@ Schedule::command('insightistic:trials')
     ->withoutOverlapping();
 
 /*
+ * PageSpeed Insights from the SaaS backend (spec Phase 3.3). Daily at 04:10,
+ * ahead of the 6-hourly alert scan so AlertDetector's performance-regression
+ * rule compares two genuinely recent runs rather than yesterday's pair.
+ * Quota guards live in the job, not here.
+ */
+Schedule::command('insightistic:pagespeed')
+    ->dailyAt('04:10')
+    ->withoutOverlapping();
+
+/*
  * Deterministic alert rules (spec §12) — revenue/traffic/SEO changes,
  * performance regressions, low stock, stale/failed syncs, 404 spikes. Every
  * 6 hours: most rules compare 7-day windows, so more-frequent runs wouldn't

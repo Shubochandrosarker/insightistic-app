@@ -135,6 +135,27 @@ return [
      * hard deletion has no undo, and a mis-click is far more common than a
      * genuine need to erase a tenant within the hour.
      */
+    /*
+     * PageSpeed Insights, run from the SaaS backend (spec Phase 3.3).
+     *
+     * The API key is optional — Google allows keyless requests at a much
+     * lower quota, which is fine for a small install and useless for a busy
+     * one. Both caps below exist because a nightly sweep across every site
+     * would otherwise exhaust the allowance in minutes.
+     */
+    'pagespeed' => [
+        'api_key' => env('PAGESPEED_API_KEY'),
+        'timeout' => (int) env('PAGESPEED_TIMEOUT', 90),
+        // Global ceiling across all sites, per minute.
+        'max_per_minute' => (int) env('PAGESPEED_MAX_PER_MINUTE', 20),
+        // Per-site ceiling per day, so one site cannot starve the rest.
+        // 0 disables the cap.
+        'max_per_site_per_day' => (int) env('PAGESPEED_MAX_PER_SITE_PER_DAY', 8),
+        // Regression alerting is not configured here: AlertDetector already
+        // owns that rule (PERFORMANCE_REGRESSION_POINTS) and consumes these
+        // runs automatically. A second threshold would just be dead config.
+    ],
+
     'privacy' => [
         'deletion_grace_days' => (int) env('PRIVACY_DELETION_GRACE_DAYS', 7),
         'export_disk'         => env('PRIVACY_EXPORT_DISK', 'local'),

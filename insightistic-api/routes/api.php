@@ -204,6 +204,10 @@ Route::middleware(['auth:sanctum', 'tenant', 'restrict.impersonation'])->group(f
 
         Route::get('sites/{site}/analytics/performance/history', [PerformanceController::class, 'history']);
         Route::get('sites/{site}/analytics/performance/latest', [PerformanceController::class, 'latest']);
+        // Run PageSpeed from the SaaS backend (spec Phase 3.3). Queued, and
+        // owner/admin only — each run consumes shared API quota.
+        Route::post('sites/{site}/analytics/performance/run', [PerformanceController::class, 'runNow'])
+            ->middleware('role:owner,admin');
 
         // Email/campaign analytics (spec Phase 3.4). Reading is open to
         // anyone with site access; connecting a provider is owner/admin.

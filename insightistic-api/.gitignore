@@ -22,3 +22,7 @@
 Homestead.json
 Homestead.yaml
 Thumbs.db
+
+# Redis writes a snapshot here if a local server is started from this
+# directory during development; it is never part of the application.
+dump.rdb

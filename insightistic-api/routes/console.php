@@ -13,6 +13,16 @@ Schedule::command('insightistic:snapshots')
     ->withoutOverlapping();
 
 /*
+ * Privacy maintenance (spec Phase 10): enforce each plan's retention window,
+ * expire export archives past their TTL, and complete organization deletions
+ * whose grace window has elapsed. Runs at 03:30 — after the 02:00 snapshot
+ * build, so a purge never races the job that reads the same tables.
+ */
+Schedule::command('insightistic:privacy-maintenance')
+    ->dailyAt('03:30')
+    ->withoutOverlapping();
+
+/*
  * Direct data sources (GA4, Search Console, Cloudflare — spec Phase 3.2).
  * Runs before the 02:00 snapshot build so the night's snapshots are computed
  * over data that was just refreshed rather than yesterday's. Each source is

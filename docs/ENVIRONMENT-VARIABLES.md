@@ -34,6 +34,26 @@ TENANT/REDIRECT_URI`, `GITHUB_CLIENT_ID/SECRET/REDIRECT_URI`,
 > `SUPER_ADMIN_EMAIL` was **removed** (security fix). First super admin:
 > `php artisan insightistic:make-super-admin owner@example.com`.
 
+## Direct data-source integrations (GA4, Search Console, Cloudflare)
+
+| Variable | Required | Notes |
+|---|---|---|
+| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | for GA4 + GSC | Same OAuth client as social login; the Integrations page shows a "not configured" notice while unset |
+| `INTEGRATIONS_GOOGLE_REDIRECT_URI` | for GA4 + GSC | Defaults to `{APP_URL}/api/integrations/google/callback`. Register this **exact** URI in the Google Cloud console — it is separate from the login callback so analytics scopes are never granted by a plain sign-in |
+| `INTEGRATIONS_HTTP_TIMEOUT` | — | Provider HTTP timeout in seconds, default 20 |
+| `INTEGRATIONS_STALE_AFTER_HOURS` | — | Hours before a source's newest data is labelled stale, default 48 |
+| `CLOUDFLARE_API_BASE` | — | Default `https://api.cloudflare.com/client/v4` |
+
+Cloudflare needs **no server-level credential**: each site stores its own
+scoped API token (Zone → Analytics → Read), entered on
+`/dashboard/integrations` and encrypted with `APP_KEY`.
+
+Google scopes requested are read-only —
+`analytics.readonly` for GA4 and `webmasters.readonly` for Search Console.
+Consent is requested with `access_type=offline` so scheduled sync keeps
+working; without a refresh token the connect step fails loudly rather than
+dying silently an hour later.
+
 ## AI insights / Copilot
 
 | Variable | Notes |

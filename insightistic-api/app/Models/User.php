@@ -24,17 +24,33 @@ class User extends Authenticatable
         'archived_at',
     ];
 
-    protected $hidden = ['password', 'remember_token'];
+    /**
+     * MFA material is hidden as well as encrypted: an accidental toArray()
+     * must not be able to put a TOTP secret or a recovery code on the wire.
+     */
+    protected $hidden = ['password', 'remember_token', 'mfa_secret', 'mfa_recovery_codes'];
 
     protected function casts(): array
     {
         return [
-            'email_verified_at' => 'datetime',
-            'last_login_at'     => 'datetime',
-            'password'          => 'hashed',
-            'is_super_admin'    => 'boolean',
-            'archived_at'       => 'datetime',
+            'email_verified_at'  => 'datetime',
+            'last_login_at'      => 'datetime',
+            'password'           => 'hashed',
+            'is_super_admin'     => 'boolean',
+            'archived_at'        => 'datetime',
+            'mfa_secret'         => 'encrypted',
+            'mfa_recovery_codes' => 'encrypted:array',
+            'mfa_confirmed_at'   => 'datetime',
         ];
+    }
+
+    /**
+     * MFA is active only once a generated code has been verified — a secret
+     * on its own means enrolment was started and never finished.
+     */
+    public function hasMfa(): bool
+    {
+        return $this->mfa_secret !== null && $this->mfa_confirmed_at !== null;
     }
 
     /**

@@ -42,6 +42,31 @@ via `SuperAdmin` (`is_super_admin`, never tenant-scoped).
 - OAuth (Google/Microsoft/GitHub): cache-backed single-use state nonce,
   account-state enforcement identical to password login, verified-email
   linking policy. Never grants super admin.
+- **Two-factor (TOTP)**: enrolment is two-step — a secret is written on
+  `POST /auth/mfa/setup`, and only a working code on `/auth/mfa/confirm`
+  sets `mfa_confirmed_at` and switches MFA on. Enabling on first write would
+  lock out anyone whose authenticator failed to scan. Secret and recovery
+  codes are encrypted at rest and `$hidden` on the model; recovery codes are
+  additionally stored **hashed**, so a database dump cannot be turned into a
+  working second factor. A used TOTP code is burned for its window
+  (`verifyKeyNewer` + a cached last-used timestamp), so an observed code
+  cannot be replayed for the rest of its 30-second step.
+- **MFA login is two-phase**: the password alone never mints a token. When
+  MFA is on, `/auth/login` returns a single-use 5-minute `challenge`;
+  `/auth/mfa/challenge` exchanges it plus a TOTP or recovery code for a
+  session. The challenge is burned on the first attempt regardless of
+  outcome, so it cannot be used to brute-force codes.
+- **Reauthentication** (`reauth` middleware, 428 Precondition Required):
+  billing checkout/cancel, license regeneration, super-admin
+  promotion/demotion, impersonation start, and every MFA setting change
+  require a password confirmation within the last 10 minutes. The mark is
+  bound to the **specific access token** that confirmed, not to the user —
+  confirming on your laptop must not unlock a token someone else stole.
+- **Login notifications**: a sign-in from an unseen device emails the
+  account. The device fingerprint is an APP_KEY-salted HMAC of (IP, user
+  agent) — the raw values are never stored, so "is this new?" is answerable
+  without keeping a log of where people sign in from. The first tracked
+  login records silently, so shipping this does not alert every user at once.
 - Super admin: artisan bootstrap or audited promotion by an existing super
   admin; single-use expiring bootstrap tokens for break-glass.
 - Connector: per-site `ik_…`/`sk_…` HMAC credentials (secret encrypted at

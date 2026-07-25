@@ -27,6 +27,7 @@ use App\Http\Controllers\Api\ImpersonationController;
 use App\Http\Controllers\Api\InsightController;
 use App\Http\Controllers\Api\IntegrationsController;
 use App\Http\Controllers\Api\LicenseController;
+use App\Http\Controllers\Api\MfaController;
 use App\Http\Controllers\Api\NotificationController;
 use App\Http\Controllers\Api\OAuthController;
 use App\Http\Controllers\Api\OrganizationController;
@@ -70,6 +71,12 @@ Route::prefix('auth')->group(function () {
     Route::get('oauth/providers', [OAuthController::class, 'providers'])->middleware('throttle:public');
     Route::get('oauth/{provider}/redirect', [OAuthController::class, 'redirect'])->middleware('throttle:auth');
     Route::get('oauth/{provider}/callback', [OAuthController::class, 'callback'])->middleware('throttle:auth');
+
+    // Second step of an MFA login. Public because the caller has no token
+    // yet — the single-use challenge minted by login() is what identifies
+    // the user, and it is burned on first attempt so it cannot be used to
+    // brute-force codes. Throttled like every other credential endpoint.
+    Route::post('mfa/challenge', [AuthController::class, 'mfaChallenge'])->middleware('throttle:auth');
 });
 
 // ---- Data-source OAuth callback (spec Phase 3.2) --------------------------
@@ -94,6 +101,18 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::get('auth/sessions', [AuthController::class, 'sessions']);
     Route::delete('auth/sessions/{tokenId}', [AuthController::class, 'revokeSession']);
     Route::post('auth/sessions/revoke-others', [AuthController::class, 'revokeOtherSessions']);
+
+    // Two-factor authentication (spec Phase 1.4). Reading status is free;
+    // every state change requires a recent password confirmation, so a live
+    // stolen session cannot swap the second factor for the attacker's own.
+    Route::get('auth/mfa', [MfaController::class, 'status']);
+    Route::post('auth/reauthenticate', [MfaController::class, 'reauthenticate'])->middleware('throttle:auth');
+    Route::middleware('reauth')->group(function () {
+        Route::post('auth/mfa/setup', [MfaController::class, 'setup']);
+        Route::post('auth/mfa/confirm', [MfaController::class, 'confirm']);
+        Route::post('auth/mfa/recovery-codes', [MfaController::class, 'regenerateRecoveryCodes']);
+        Route::delete('auth/mfa', [MfaController::class, 'disable']);
+    });
 
     // Single-use super-admin bootstrap token redemption (issued via
     // `php artisan insightistic:super-admin:issue-token`). Throttled hard:
@@ -122,14 +141,14 @@ Route::middleware(['auth:sanctum', 'tenant', 'restrict.impersonation'])->group(f
 
     // Billing (Week 5) — owner manages payment; owner/admin can view status.
     Route::get('billing/subscription', [BillingController::class, 'subscription'])->middleware('role:owner,admin');
-    Route::post('billing/checkout', [BillingController::class, 'checkout'])->middleware('role:owner');
+    Route::post('billing/checkout', [BillingController::class, 'checkout'])->middleware(['role:owner', 'reauth']);
     Route::post('billing/portal', [BillingController::class, 'portal'])->middleware('role:owner');
-    Route::post('billing/cancel', [BillingController::class, 'cancel'])->middleware('role:owner');
+    Route::post('billing/cancel', [BillingController::class, 'cancel'])->middleware(['role:owner', 'reauth']);
     Route::post('billing/reactivate', [BillingController::class, 'reactivate'])->middleware('role:owner');
 
     // Licenses tab (spec §2). Raw keys only ever appear in regenerate/register responses.
     Route::get('licenses', [LicenseController::class, 'index']);
-    Route::post('licenses/{license}/regenerate', [LicenseController::class, 'regenerate'])->middleware('role:owner');
+    Route::post('licenses/{license}/regenerate', [LicenseController::class, 'regenerate'])->middleware(['role:owner', 'reauth']);
     Route::get('licenses/{license}/activations', [LicenseController::class, 'activations']);
     Route::get('licenses/{license}/events', [LicenseController::class, 'events']);
     Route::delete('activations/{activation}', [LicenseController::class, 'deactivateActivation'])->middleware('role:owner,admin');
@@ -299,8 +318,10 @@ Route::prefix('admin')->middleware(['auth:sanctum', 'super_admin'])->group(funct
     Route::get('users', [AdminUserController::class, 'index']);
     Route::get('users/{id}', [AdminUserController::class, 'show']);
     Route::patch('users/{id}', [AdminUserController::class, 'update']);
-    Route::post('users/{id}/promote', [AdminUserController::class, 'promote']);
-    Route::post('users/{id}/demote', [AdminUserController::class, 'demote']);
+    // Super-admin promotion/demotion is the highest-privilege change in
+    // the platform — always behind a fresh password confirmation.
+    Route::post('users/{id}/promote', [AdminUserController::class, 'promote'])->middleware('reauth');
+    Route::post('users/{id}/demote', [AdminUserController::class, 'demote'])->middleware('reauth');
     Route::post('users/{id}/archive', [AdminUserController::class, 'archive']);
     Route::post('users/{id}/restore', [AdminUserController::class, 'restore']);
 
@@ -329,7 +350,9 @@ Route::prefix('admin')->middleware(['auth:sanctum', 'super_admin'])->group(funct
     // the controller's validation — there's no way to start a session
     // without one.
     Route::get('impersonations', [AdminImpersonationController::class, 'index']);
-    Route::post('impersonate', [AdminImpersonationController::class, 'start']);
+    // Starting a support session reads another tenant's data as them —
+    // a stolen super-admin token must not be enough on its own.
+    Route::post('impersonate', [AdminImpersonationController::class, 'start'])->middleware('reauth');
 
     // Licenses (spec §13.6). Destructive actions (revoke, disconnect-all)
     // require an explicit `confirm: true` in the request body — checked by

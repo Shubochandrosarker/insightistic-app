@@ -10,11 +10,20 @@ interface RegisterInput {
   organization_name: string;
 }
 
+export type LoginResult =
+  | { mfaRequired: false; user: User }
+  | { mfaRequired: true; challenge: string };
+
 interface AuthState {
   user: User | null;
   orgs: Org[];
   loading: boolean;
-  login: (email: string, password: string) => Promise<User>;
+  /**
+   * Resolves to the signed-in user, or to an MFA challenge when the account
+   * has two-factor enabled — the password alone never yields a session.
+   */
+  login: (email: string, password: string) => Promise<LoginResult>;
+  completeMfa: (challenge: string, code: string) => Promise<User>;
   register: (p: RegisterInput) => Promise<void>;
   applyToken: (token: string) => Promise<User>;
   logout: () => void;
@@ -41,8 +50,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     })();
   }, []);
 
-  async function login(email: string, password: string): Promise<User> {
+  async function login(email: string, password: string): Promise<LoginResult> {
     const res = await apiPost("/auth/login", { email, password });
+
+    // MFA accounts get a short-lived challenge instead of a token.
+    if (res.mfa_required) return { mfaRequired: true, challenge: res.challenge };
+
+    return { mfaRequired: false, user: adoptSession(res) };
+  }
+
+  async function completeMfa(challenge: string, code: string): Promise<User> {
+    return adoptSession(await apiPost("/auth/mfa/challenge", { challenge, code }));
+  }
+
+  /** Store the token and user from a successful sign-in response. */
+  function adoptSession(res: any): User {
     setToken(res.token);
     setUser(res.user);
     setOrgs(res.organizations || []);
@@ -81,7 +103,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <Ctx.Provider value={{ user, orgs, loading, login, register, applyToken, logout }}>
+    <Ctx.Provider value={{ user, orgs, loading, login, completeMfa, register, applyToken, logout }}>
       {children}
     </Ctx.Provider>
   );

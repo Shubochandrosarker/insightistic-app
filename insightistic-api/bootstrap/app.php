@@ -23,6 +23,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'role'                   => \App\Http\Middleware\EnsureRole::class,
             'super_admin'            => \App\Http\Middleware\SuperAdmin::class,
             'restrict.impersonation' => \App\Http\Middleware\RestrictImpersonation::class,
+            'reauth'                 => \App\Http\Middleware\RequireReauth::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions) {

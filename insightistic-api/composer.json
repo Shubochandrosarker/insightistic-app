@@ -12,6 +12,10 @@
     "license": "MIT",
     "require": {
         "php": "^8.3",
+        "ext-gd": "*",
+        "ext-mbstring": "*",
+        "ext-pdo_pgsql": "*",
+        "bacon/bacon-qr-code": "^3.1",
         "barryvdh/laravel-dompdf": "^3.1",
         "laravel/framework": "^12.0",
         "laravel/sanctum": "^4.3",
@@ -20,13 +24,11 @@
         "league/flysystem-aws-s3-v3": "^3.35",
         "league/html-to-markdown": "^5.1",
         "phpoffice/phpword": "^1.4",
+        "pragmarx/google2fa": "^9.0",
         "predis/predis": "^3.5",
         "smalot/pdfparser": "^2.12",
         "socialiteproviders/microsoft": "^4.10",
-        "stripe/stripe-php": "^21.0",
-        "ext-pdo_pgsql": "*",
-        "ext-mbstring": "*",
-        "ext-gd": "*"
+        "stripe/stripe-php": "^21.0"
     },
     "require-dev": {
         "fakerphp/faker": "^1.23",

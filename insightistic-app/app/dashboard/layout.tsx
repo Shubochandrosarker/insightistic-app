@@ -2,7 +2,7 @@
 import {
   LayoutGrid, Sparkles, TrendingUp, Package, Users, ShoppingCart, Mail,
   Bell, FileText, Activity, Globe, UsersRound, CreditCard, Settings, KeyRound,
-  Search, Gauge, Plug, Bot, BookOpen,
+  Search, Gauge, Plug, Bot, BookOpen, ShieldCheck,
 } from "lucide-react";
 import { TrialBanner } from "@/components/dashboard/TrialBanner";
 import { ImpersonationBanner } from "@/components/dashboard/ImpersonationBanner";
@@ -36,6 +36,7 @@ const NAV: NavItem[] = [
   { href: "/dashboard/branding", label: "White Label", icon: Globe },
   { href: "/dashboard/team", label: "Team", icon: UsersRound },
   { href: "/dashboard/billing", label: "Billing", icon: CreditCard },
+  { href: "/dashboard/security", label: "Security", icon: ShieldCheck },
   { href: "/dashboard/settings", label: "Settings", icon: Settings },
 ];
 
@@ -67,6 +68,7 @@ const MORE: NavItem[] = [
   { href: "/dashboard/branding", label: "White Label", icon: Globe },
   { href: "/dashboard/team", label: "Team", icon: UsersRound },
   { href: "/dashboard/billing", label: "Billing", icon: CreditCard },
+  { href: "/dashboard/security", label: "Security", icon: ShieldCheck },
   { href: "/dashboard/settings", label: "Settings", icon: Settings },
 ];
 

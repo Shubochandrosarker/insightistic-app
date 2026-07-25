@@ -17,6 +17,8 @@ class AuthController extends Controller
     public function __construct(
         private AccountProvisioner $provisioner,
         private \App\Services\LifecycleMailer $lifecycleMailer,
+        private \App\Services\Auth\MfaService $mfa,
+        private \App\Services\Auth\LoginNotifier $loginNotifier,
     ) {}
 
     /**
@@ -149,12 +151,76 @@ class AuthController extends Controller
             return response()->json(['message' => 'This account has been disabled. Contact your organization owner or support.'], 403);
         }
 
-        $user->forceFill(['last_login_at' => now()])->save();
-        $token = $user->createToken('spa')->plainTextToken;
+        // MFA: the password alone must not mint a session token. Hand back a
+        // short-lived challenge instead; it identifies the user server-side
+        // so the second step never has to re-accept a password over the wire.
+        if ($user->hasMfa()) {
+            $challenge = \Illuminate\Support\Str::random(48);
 
-        return response()->json([
-            'token'         => $token,
+            \Illuminate\Support\Facades\Cache::put(
+                $this->mfaChallengeKey($challenge),
+                $user->id,
+                now()->addMinutes(5),
+            );
+
+            return response()->json([
+                'mfa_required' => true,
+                'challenge'    => $challenge,
+                'expires_in'   => 300,
+            ], 200);
+        }
+
+        return response()->json($this->issueSession($request, $user));
+    }
+
+    /**
+     * POST /auth/mfa/challenge — second step of an MFA login.
+     *
+     * Accepts a TOTP code or an unused recovery code. The challenge is burned
+     * on the first attempt regardless of outcome, so it can't be used to
+     * brute-force codes; a wrong code means starting the login again.
+     */
+    public function mfaChallenge(Request $request)
+    {
+        $data = $request->validate([
+            'challenge' => ['required', 'string'],
+            'code'      => ['required', 'string', 'max:20'],
+        ]);
+
+        $userId = \Illuminate\Support\Facades\Cache::pull($this->mfaChallengeKey($data['challenge']));
+
+        if (! $userId) {
+            return response()->json([
+                'message' => 'That sign-in attempt expired. Please sign in again.',
+                'code'    => 'challenge_expired',
+            ], 422);
+        }
+
+        $user = User::find($userId);
+
+        if (! $user || $user->status !== 'active' || ! $user->hasMfa()) {
+            return response()->json(['message' => 'Invalid credentials.'], 422);
+        }
+
+        if (! $this->mfa->verify($user, $data['code'])) {
+            return response()->json([
+                'message' => 'That code is not valid. Please sign in again.',
+                'code'    => 'invalid_code',
+            ], 422);
+        }
+
+        return response()->json($this->issueSession($request, $user));
+    }
+
+    /** Shared success payload for both the direct and MFA login paths. */
+    private function issueSession(Request $request, User $user): array
+    {
+        $this->loginNotifier->handle($request, $user);
+
+        return [
+            'token'         => $user->createToken('spa')->plainTextToken,
             'user'          => $user->only(['id', 'name', 'email', 'is_super_admin']),
+            'mfa_enabled'   => $user->hasMfa(),
             'organizations' => $user->organizations()->get(['organizations.id', 'name', 'slug'])
                 ->map(fn ($o) => [
                     'id'   => $o->id,
@@ -162,7 +228,12 @@ class AuthController extends Controller
                     'slug' => $o->slug,
                     'role' => $o->pivot->role,
                 ]),
-        ]);
+        ];
+    }
+
+    private function mfaChallengeKey(string $challenge): string
+    {
+        return 'mfa_challenge:' . hash('sha256', $challenge);
     }
 
     public function me(Request $request)

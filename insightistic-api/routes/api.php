@@ -21,6 +21,7 @@ use App\Http\Controllers\Api\Connector\HandshakeController;
 use App\Http\Controllers\Api\Connector\PingController;
 use App\Http\Controllers\Api\Connector\SyncController;
 use App\Http\Controllers\Api\Connector\SyncV2Controller;
+use App\Http\Controllers\Api\EmailController;
 use App\Http\Controllers\Api\ExportController;
 use App\Http\Controllers\Api\ImpersonationController;
 use App\Http\Controllers\Api\InsightController;
@@ -171,6 +172,16 @@ Route::middleware(['auth:sanctum', 'tenant', 'restrict.impersonation'])->group(f
 
         Route::get('sites/{site}/analytics/performance/history', [PerformanceController::class, 'history']);
         Route::get('sites/{site}/analytics/performance/latest', [PerformanceController::class, 'latest']);
+
+        // Email/campaign analytics (spec Phase 3.4). Reading is open to
+        // anyone with site access; connecting a provider is owner/admin.
+        Route::get('sites/{site}/emails/overview', [EmailController::class, 'overview']);
+        Route::get('sites/{site}/emails/campaigns', [EmailController::class, 'campaigns']);
+        Route::middleware('role:owner,admin')->group(function () {
+            Route::post('sites/{site}/emails/connect', [EmailController::class, 'connect']);
+            Route::post('sites/{site}/emails/sync', [EmailController::class, 'sync']);
+            Route::delete('sites/{site}/emails/connection', [EmailController::class, 'disconnect']);
+        });
 
         // Data-source health + direct connection workflow (spec Phase 3.2).
         // Reading status is open to anyone with site access; connecting or
@@ -389,6 +400,10 @@ Route::prefix('connector/v1')->middleware(['connector.auth', 'throttle:connector
     Route::post('sync/performance/runs', [SyncV2Controller::class, 'performanceRuns']);
     Route::post('sync/engagement/daily', [SyncV2Controller::class, 'engagementDaily']);
     Route::post('sync/broken-links', [SyncV2Controller::class, 'brokenLinks']);
+
+    // Email analytics from WordPress-side platforms (FluentCRM, AutomateWoo,
+    // WooCommerce mail) — the SaaS can't reach these, so the plugin pushes.
+    Route::post('sync/email/campaigns', [\App\Http\Controllers\Api\Connector\EmailSyncController::class, 'campaigns']);
 
     // Connector v2 — WordPress content → AI knowledge base (opt-in,
     // plugin-side privacy toggle; ingestion is queued + idempotent).

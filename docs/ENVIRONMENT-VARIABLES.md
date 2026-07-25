@@ -48,6 +48,18 @@ Cloudflare needs **no server-level credential**: each site stores its own
 scoped API token (Zone → Analytics → Read), entered on
 `/dashboard/integrations` and encrypted with `APP_KEY`.
 
+## Email analytics
+
+| Variable | Notes |
+|---|---|
+| `EMAIL_ANALYTICS_TIMEOUT` | Provider HTTP timeout in seconds, default 20 |
+| `EMAIL_ANALYTICS_CAMPAIGN_LIMIT` | Campaigns pulled per sync, default 50 |
+
+Like Cloudflare, email providers need **no server-level credential**:
+Mailchimp and Klaviyo keys are entered per site on `/dashboard/emails` and
+stored encrypted. FluentCRM, AutomateWoo and WooCommerce mail need no key at
+all — the plugin pushes those over the existing HMAC connector contract.
+
 Google scopes requested are read-only —
 `analytics.readonly` for GA4 and `webmasters.readonly` for Search Console.
 Consent is requested with `access_type=offline` so scheduled sync keeps

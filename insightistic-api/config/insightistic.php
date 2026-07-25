@@ -115,6 +115,18 @@ return [
         'stale_after_hours' => (int) env('INTEGRATIONS_STALE_AFTER_HOURS', 48),
     ],
 
+    /*
+     * Email analytics (spec Phase 3.4). Mailchimp and Klaviyo are pulled by
+     * the SaaS using a per-site API key entered in the dashboard, so there is
+     * no server-level credential to configure here. FluentCRM, AutomateWoo
+     * and WooCommerce mail are pushed by the WordPress connector instead,
+     * because their data is not reachable from outside the site.
+     */
+    'email' => [
+        'timeout'        => (int) env('EMAIL_ANALYTICS_TIMEOUT', 20),
+        'campaign_limit' => (int) env('EMAIL_ANALYTICS_CAMPAIGN_LIMIT', 50),
+    ],
+
     // NOTE: the old `super_admin_email` / SUPER_ADMIN_EMAIL auto-promotion
     // was removed as a security fix. Super admins are created only via the
     // insightistic:super-admin:* artisan commands or promotion by an existing

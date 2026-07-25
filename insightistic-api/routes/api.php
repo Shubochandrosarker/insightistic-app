@@ -80,6 +80,11 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::get('auth/me', [AuthController::class, 'me']);
     Route::post('auth/logout', [AuthController::class, 'logout']);
 
+    // Active session/device management (security hardening).
+    Route::get('auth/sessions', [AuthController::class, 'sessions']);
+    Route::delete('auth/sessions/{tokenId}', [AuthController::class, 'revokeSession']);
+    Route::post('auth/sessions/revoke-others', [AuthController::class, 'revokeOtherSessions']);
+
     // Single-use super-admin bootstrap token redemption (issued via
     // `php artisan insightistic:super-admin:issue-token`). Throttled hard:
     // failed attempts burn nothing but time.

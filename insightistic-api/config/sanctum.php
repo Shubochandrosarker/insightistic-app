@@ -22,7 +22,11 @@ return [
 
     'guard' => ['web'],
 
-    'expiration' => null,
+    // Short-lived sessions (security hardening): tokens expire after this
+    // many minutes and the SPA re-authenticates. Set 0/empty to disable
+    // (not recommended). Existing long-lived tokens issued before this
+    // change expire `expiration` minutes after their creation date.
+    'expiration' => ((int) env('SANCTUM_EXPIRATION_MINUTES', 720)) ?: null,
 
     'token_prefix' => env('SANCTUM_TOKEN_PREFIX', ''),
 

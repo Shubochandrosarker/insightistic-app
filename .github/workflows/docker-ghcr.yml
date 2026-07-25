@@ -20,63 +20,16 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  test:
-    runs-on: ubuntu-latest
-    # Mirrors docker/api/Dockerfile's build steps against a real Postgres
-    # service so a migration that doesn't apply cleanly fails CI here,
-    # instead of being executed for the first time by entrypoint.sh in
-    # production.
-    services:
-      postgres:
-        image: postgres:16-alpine
-        env:
-          POSTGRES_DB: insightistic_test
-          POSTGRES_USER: insightistic
-          POSTGRES_PASSWORD: insightistic
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U insightistic"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 10
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set up PHP
-        uses: shivammathur/setup-php@v2
-        with:
-          php-version: "8.3"
-          extensions: pdo_pgsql, zip, bcmath, gd
-          coverage: none
-
-      - name: Build a throwaway Laravel skeleton (same steps as docker/api/Dockerfile)
-        run: |
-          composer create-project laravel/laravel /tmp/insightistic-api-ci "12.*" --no-interaction --prefer-dist
-          cd /tmp/insightistic-api-ci
-          composer require laravel/sanctum barryvdh/laravel-dompdf stripe/stripe-php \
-            laravel/socialite socialiteproviders/microsoft --no-interaction --no-scripts
-          php artisan package:discover --ansi
-
-      - name: Overlay insightistic-api/ and run migrations
-        env:
-          APP_ENV: testing
-          DB_CONNECTION: pgsql
-          DB_HOST: 127.0.0.1
-          DB_PORT: 5432
-          DB_DATABASE: insightistic_test
-          DB_USERNAME: insightistic
-          DB_PASSWORD: insightistic
-        run: |
-          cp -a insightistic-api/. /tmp/insightistic-api-ci/
-          cd /tmp/insightistic-api-ci
-          php artisan key:generate --force --no-interaction
-          php artisan migrate --force --no-interaction
-          php artisan db:seed --class=Database\\Seeders\\PlanSeeder --force --no-interaction
+  # Publishing is gated on the FULL CI suite (frontend typecheck/build/audit,
+  # backend Pest on PostgreSQL+Redis, migration up/rollback/up, plugin
+  # checks, docker build, secret scan) — see .github/workflows/ci.yml.
+  ci:
+    uses: ./.github/workflows/ci.yml
+    permissions:
+      contents: read
 
   docker:
-    needs: test
+    needs: ci
     runs-on: ubuntu-latest
     steps:
       - name: Checkout

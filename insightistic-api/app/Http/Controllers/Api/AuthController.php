@@ -187,4 +187,48 @@ class AuthController extends Controller
 
         return response()->json(['message' => 'Logged out.']);
     }
+
+    /** Active sessions (personal access tokens) for the signed-in user. */
+    public function sessions(Request $request)
+    {
+        $currentId = $request->user()->currentAccessToken()?->id;
+
+        return response()->json([
+            'sessions' => $request->user()->tokens()
+                ->orderByDesc('last_used_at')
+                ->get(['id', 'name', 'last_used_at', 'created_at', 'expires_at'])
+                ->map(fn ($t) => [
+                    'id'           => $t->id,
+                    'name'         => $t->name,
+                    'last_used_at' => $t->last_used_at,
+                    'created_at'   => $t->created_at,
+                    'expires_at'   => $t->expires_at,
+                    'current'      => $t->id === $currentId,
+                ]),
+        ]);
+    }
+
+    /** Revoke one session. 404 for ids that are not the caller's own. */
+    public function revokeSession(Request $request, int $tokenId)
+    {
+        $deleted = $request->user()->tokens()->where('id', $tokenId)->delete();
+
+        if (! $deleted) {
+            return response()->json(['message' => 'Session not found.'], 404);
+        }
+
+        return response()->json(['message' => 'Session revoked.']);
+    }
+
+    /** Revoke every session except the one making this call. */
+    public function revokeOtherSessions(Request $request)
+    {
+        $currentId = $request->user()->currentAccessToken()?->id;
+
+        $count = $request->user()->tokens()
+            ->when($currentId, fn ($q) => $q->where('id', '!=', $currentId))
+            ->delete();
+
+        return response()->json(['message' => 'Other sessions revoked.', 'revoked' => $count]);
+    }
 }

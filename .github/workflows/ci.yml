@@ -44,6 +44,12 @@ jobs:
     defaults:
       run:
         working-directory: insightistic-api
+    env:
+      DB_CONNECTION: pgsql
+      DB_HOST: 127.0.0.1
+      DB_DATABASE: insightistic_test
+      DB_USERNAME: insightistic
+      DB_PASSWORD: insightistic
     services:
       postgres:
         image: pgvector/pgvector:pg16
@@ -73,12 +79,6 @@ jobs:
       - name: Install (locked)
         run: composer install --no-interaction --no-progress --prefer-dist
       - name: Migration test — empty database up/rollback/up
-        env: &db-env
-          DB_CONNECTION: pgsql
-          DB_HOST: 127.0.0.1
-          DB_DATABASE: insightistic_test
-          DB_USERNAME: insightistic
-          DB_PASSWORD: insightistic
         run: |
           cp .env.example .env
           php artisan key:generate --force
@@ -87,7 +87,6 @@ jobs:
           php artisan migrate --force
           php artisan db:seed --class=Database\\Seeders\\PlanSeeder --force
       - name: Pest test suite
-        env: *db-env
         run: php artisan test --compact
 
   plugin:

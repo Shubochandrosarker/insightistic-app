@@ -53,8 +53,8 @@ return [
         'webhook_secret' => env('STRIPE_WEBHOOK_SECRET'),
     ],
 
-    // Email that should always be a super admin. New signups matching this
-    // are promoted at registration time; SuperAdminSeeder heals any account
-    // that registered before this was set. Empty = feature disabled.
-    'super_admin_email' => env('SUPER_ADMIN_EMAIL'),
+    // NOTE: the old `super_admin_email` / SUPER_ADMIN_EMAIL auto-promotion
+    // was removed as a security fix. Super admins are created only via the
+    // insightistic:super-admin:* artisan commands or promotion by an existing
+    // super admin. See docs/SUPER-ADMIN.md.
 ];

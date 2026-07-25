@@ -12,6 +12,9 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware) {
+        // Baseline security headers on every response (API serves JSON only).
+        $middleware->append(\App\Http\Middleware\SecurityHeaders::class);
+
         // Insightistic route-middleware aliases.
         $middleware->alias([
             'tenant'                 => \App\Http\Middleware\ResolveOrganization::class,

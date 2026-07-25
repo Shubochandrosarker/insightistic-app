@@ -65,9 +65,10 @@ Route::prefix('auth')->group(function () {
 
     // Social login (Google / Microsoft / GitHub). Buttons appear in the SPA
     // only for providers returned by the `oauth/providers` endpoint.
-    Route::get('oauth/providers', [OAuthController::class, 'providers']);
-    Route::get('oauth/{provider}/redirect', [OAuthController::class, 'redirect']);
-    Route::get('oauth/{provider}/callback', [OAuthController::class, 'callback']);
+    // Redirect/callback are credential endpoints — brute-force throttled.
+    Route::get('oauth/providers', [OAuthController::class, 'providers'])->middleware('throttle:public');
+    Route::get('oauth/{provider}/redirect', [OAuthController::class, 'redirect'])->middleware('throttle:auth');
+    Route::get('oauth/{provider}/callback', [OAuthController::class, 'callback'])->middleware('throttle:auth');
 });
 
 // ---- Authenticated identity (no organization required) --------------------
@@ -78,6 +79,12 @@ Route::prefix('auth')->group(function () {
 Route::middleware(['auth:sanctum'])->group(function () {
     Route::get('auth/me', [AuthController::class, 'me']);
     Route::post('auth/logout', [AuthController::class, 'logout']);
+
+    // Single-use super-admin bootstrap token redemption (issued via
+    // `php artisan insightistic:super-admin:issue-token`). Throttled hard:
+    // failed attempts burn nothing but time.
+    Route::post('auth/super-admin/redeem', [\App\Http\Controllers\Api\SuperAdminBootstrapController::class, 'redeem'])
+        ->middleware('throttle:auth');
 
     // The "clear exit" from impersonation (spec §13.9) — called by the
     // impersonated session's own token, so it can't sit behind `tenant` or
@@ -177,10 +184,12 @@ Route::middleware(['auth:sanctum', 'tenant', 'restrict.impersonation'])->group(f
         Route::delete('sites/{site}/report-schedules/{schedule}', [ReportScheduleController::class, 'destroy']);
 
         // Bounded CSV exports (Milestone 5, spec §12).
-        Route::get('sites/{site}/exports/traffic.csv', [ExportController::class, 'traffic']);
-        Route::get('sites/{site}/exports/seo.csv', [ExportController::class, 'seo']);
-        Route::get('sites/{site}/exports/performance.csv', [ExportController::class, 'performance']);
-        Route::get('sites/{site}/exports/commerce.csv', [ExportController::class, 'commerce']);
+        Route::middleware('throttle:exports')->group(function () {
+            Route::get('sites/{site}/exports/traffic.csv', [ExportController::class, 'traffic']);
+            Route::get('sites/{site}/exports/seo.csv', [ExportController::class, 'seo']);
+            Route::get('sites/{site}/exports/performance.csv', [ExportController::class, 'performance']);
+            Route::get('sites/{site}/exports/commerce.csv', [ExportController::class, 'commerce']);
+        });
     });
 
     // Report view + send (not site-scoped in the URL; access checked in controller).

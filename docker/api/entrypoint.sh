@@ -33,8 +33,8 @@ if [ "${SEED_PLANS:-true}" = "true" ]; then
   php artisan db:seed --class=Database\\Seeders\\PlanSeeder --force --no-interaction || true
 fi
 
-if [ -n "${SUPER_ADMIN_EMAIL:-}" ]; then
-  php artisan db:seed --class=Database\\Seeders\\SuperAdminSeeder --force --no-interaction || true
-fi
+# SECURITY: the SUPER_ADMIN_EMAIL auto-promotion seeder was removed. Create
+# the first super admin explicitly (one time, from a server shell):
+#   docker compose exec api php artisan insightistic:make-super-admin owner@example.com
 
 exec "$@"

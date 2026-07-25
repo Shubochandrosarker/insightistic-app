@@ -40,25 +40,27 @@ class AuthController extends Controller
 
         $rawLicenseKey = null;
 
-        // If this is the designated platform owner's email (SUPER_ADMIN_EMAIL),
-        // grant super admin on first signup so /admin is reachable without a
-        // separate manual `artisan insightistic:make-super-admin` step.
-        $superAdminEmail = strtolower(trim((string) config('insightistic.super_admin_email', '')));
-        $isSuperAdmin    = $superAdminEmail !== '' && $data['email'] === $superAdminEmail;
-
-        [$user, $org] = DB::transaction(function () use ($data, $isSuperAdmin, &$rawLicenseKey) {
+        // SECURITY: public registration NEVER grants platform (super admin)
+        // privileges — regardless of email address or any env configuration.
+        // Super admins are created only via the protected artisan commands
+        // (insightistic:super-admin:*) or promoted by an existing super admin
+        // through POST /api/admin/users/{id}/promote. See docs/SUPER-ADMIN.md.
+        [$user, $org] = DB::transaction(function () use ($data, &$rawLicenseKey) {
             $user = User::create([
-                'name'           => $data['name'],
-                'email'          => $data['email'],
-                'password'       => $data['password'], // hashed cast
-                'status'         => 'active',
-                'is_super_admin' => $isSuperAdmin,
+                'name'     => $data['name'],
+                'email'    => $data['email'],
+                'password' => $data['password'], // hashed cast
+                'status'   => 'active',
             ]);
 
             $org = $this->provisioner->bootstrapOrganization($user, $data['organization_name'], $rawLicenseKey);
 
             return [$user, $org];
         });
+
+        // Reload so DB-defaulted columns (is_super_admin=false, …) are present
+        // on the model — the response must never report null for them.
+        $user->refresh();
 
         $token = $user->createToken('spa')->plainTextToken;
 

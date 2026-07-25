@@ -2,39 +2,31 @@
 
 namespace Database\Seeders;
 
-use App\Models\User;
 use Illuminate\Database\Seeder;
 
 /**
- * Idempotently promotes SUPER_ADMIN_EMAIL to super admin if that account
- * already exists. Safe to run on every deploy/seed — it only ever flips an
- * existing user's flag, never creates an account or touches a password, so
- * a misconfigured or absent SUPER_ADMIN_EMAIL is a silent no-op.
+ * DEPRECATED — intentionally a no-op.
  *
- * New signups matching SUPER_ADMIN_EMAIL are already granted super admin at
- * registration time (see AuthController::register()); this seeder exists so
- * an account that registered BEFORE that env var was set (or before this
- * feature existed) gets healed on the next deploy, without anyone having to
- * remember to run `artisan insightistic:make-super-admin` by hand.
+ * This seeder used to promote whichever account matched the SUPER_ADMIN_EMAIL
+ * env var on every deploy. That meant anyone who registered the configured
+ * address (or could influence the env) gained platform-wide admin — a
+ * privilege-escalation vector, removed in the security hardening pass.
+ *
+ * Create super admins explicitly instead:
+ *   php artisan insightistic:make-super-admin owner@example.com [--create]
+ *   php artisan insightistic:super-admin:issue-token owner@example.com
+ * or promote from the dashboard (POST /api/admin/users/{id}/promote).
+ *
+ * The class is kept (as a no-op) so existing deploy scripts that call
+ * `db:seed --class=SuperAdminSeeder` keep working while operators migrate.
  */
 class SuperAdminSeeder extends Seeder
 {
     public function run(): void
     {
-        $email = strtolower(trim((string) config('insightistic.super_admin_email', '')));
-
-        if ($email === '') {
-            return;
-        }
-
-        $user = User::where('email', $email)->first();
-
-        if (! $user || $user->is_super_admin) {
-            return;
-        }
-
-        $user->forceFill(['is_super_admin' => true])->save();
-
-        $this->command?->info("SuperAdminSeeder: promoted {$email} to super admin.");
+        $this->command?->warn(
+            'SuperAdminSeeder is deprecated and does nothing. ' .
+            'Use `php artisan insightistic:make-super-admin` instead (see docs/SUPER-ADMIN.md).'
+        );
     }
 }

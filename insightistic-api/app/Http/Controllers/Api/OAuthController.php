@@ -8,6 +8,8 @@ use App\Models\User;
 use App\Services\AccountProvisioner;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
 use Laravel\Socialite\Facades\Socialite;
@@ -15,17 +17,32 @@ use Laravel\Socialite\Facades\Socialite;
 /**
  * Social login for Google, Microsoft and GitHub.
  *
- * Flow (stateless, SPA-friendly):
+ * Flow (SPA-friendly, no server session — CSRF protection via a cache-backed
+ * single-use `state` nonce instead of Socialite's session state):
  *   1. Browser hits  GET /api/auth/oauth/{provider}/redirect  -> 302 to provider
- *   2. Provider calls GET /api/auth/oauth/{provider}/callback  with a code
- *   3. We find-or-create the user (+ bootstrap an org for new accounts),
- *      mint a Sanctum token, and 302 the browser to the SPA callback with the
- *      token in the URL fragment (never sent to a server / never logged).
+ *      (we mint a random `state`, cache it for 10 minutes, single use)
+ *   2. Provider calls GET /api/auth/oauth/{provider}/callback  with code+state
+ *   3. We validate + burn the state, find-or-create the user (+ bootstrap an
+ *      org for new accounts), mint a Sanctum token, and 302 the browser to the
+ *      SPA callback with the token in the URL fragment.
+ *
+ * SECURITY INVARIANTS (tests in tests/Feature/OAuthSecurityTest.php):
+ *   - No token is ever issued to a user whose status is not `active` or whose
+ *     account is archived. Invited users must accept their invite; disabled /
+ *     suspended / archived accounts are refused outright — OAuth must never
+ *     be a side door around AuthController::login()'s checks.
+ *   - OAuth NEVER grants super admin (see docs/SUPER-ADMIN.md).
+ *   - A social identity is linked to an existing local account by email only
+ *     when the provider asserts the email as verified AND the account has no
+ *     other social identity bound. Otherwise the user is sent back with
+ *     guidance to sign in with their password first.
  */
 class OAuthController extends Controller
 {
     /** Providers this build supports. */
     private const SUPPORTED = ['google', 'microsoft', 'github'];
+
+    private const STATE_TTL_SECONDS = 600;
 
     public function __construct(private AccountProvisioner $provisioner) {}
 
@@ -39,15 +56,32 @@ class OAuthController extends Controller
     {
         abort_unless($this->isEnabled($provider), 404, 'Provider not enabled.');
 
-        return Socialite::driver($provider)->stateless()->redirect();
+        // Anti-CSRF `state`: random nonce, cached server-side, validated and
+        // burned on callback. We manage it ourselves because the API issues
+        // no session cookie for Socialite's built-in state to live in.
+        $state = Str::random(40);
+        Cache::put($this->stateCacheKey($state), $provider, self::STATE_TTL_SECONDS);
+
+        return Socialite::driver($provider)
+            ->stateless()
+            ->with(['state' => $state])
+            ->redirect();
     }
 
-    public function callback(string $provider): RedirectResponse
+    public function callback(string $provider, Request $request): RedirectResponse
     {
         $app = rtrim((string) config('insightistic.app_url'), '/');
 
         if (! $this->isEnabled($provider)) {
             return redirect($app . '/auth/callback#error=provider_unavailable');
+        }
+
+        // Validate + burn the state nonce (single use). A missing or unknown
+        // state means the flow didn't start on our redirect endpoint.
+        $state = (string) $request->query('state', '');
+        $cachedProvider = $state !== '' ? Cache::pull($this->stateCacheKey($state)) : null;
+        if ($cachedProvider !== $provider) {
+            return redirect($app . '/auth/callback#error=invalid_state');
         }
 
         try {
@@ -65,25 +99,38 @@ class OAuthController extends Controller
 
         $isNew = false;
 
+        // Exact identity match first (provider + provider id) — always allowed.
         $user = User::where('provider', $provider)
             ->where('provider_id', (string) $oauthUser->getId())
-            ->first()
-            ?? User::where('email', $email)->first();
+            ->first();
+
+        if (! $user) {
+            // Fall back to email linking, but ONLY under the linking policy:
+            // provider-verified email + no other social identity on the account.
+            $byEmail = User::where('email', strtolower(trim($email)))->first();
+
+            if ($byEmail) {
+                if (! $this->providerEmailVerified($provider, $oauthUser)) {
+                    return redirect($app . '/auth/callback#error=email_unverified');
+                }
+                if ($byEmail->provider && $byEmail->provider !== $provider) {
+                    // Bound to a different provider — require an authenticated
+                    // "connect account" flow rather than silent takeover.
+                    return redirect($app . '/auth/callback#error=account_exists');
+                }
+                $user = $byEmail;
+            }
+        }
 
         if (! $user) {
             $isNew = true;
 
-            // Same auto-promotion as the standard registration form (see
-            // AuthController::register()) — OAuth is just another signup path.
-            $superAdminEmail = strtolower(trim((string) config('insightistic.super_admin_email', '')));
-            $isSuperAdmin    = $superAdminEmail !== '' && strtolower($email) === $superAdminEmail;
-
+            // SECURITY: OAuth signup never grants super admin (docs/SUPER-ADMIN.md).
             $user = User::create([
                 'name'              => $oauthUser->getName() ?: Str::before($email, '@'),
                 'email'             => $email,
                 'password'          => null,
                 'status'            => 'active',
-                'is_super_admin'    => $isSuperAdmin,
                 'email_verified_at' => now(),
                 'provider'          => $provider,
                 'provider_id'       => (string) $oauthUser->getId(),
@@ -111,13 +158,21 @@ class OAuthController extends Controller
                 report($e);
             }
         } else {
-            // Link the social identity onto an existing email/account, and make
-            // sure the account is usable (has at least one organization).
+            // SECURITY: enforce the same account-state rules as password login.
+            // No token for invited (must accept invite), disabled, suspended,
+            // archived or otherwise non-active accounts — and never silently
+            // reactivate them here.
+            if ($user->status === 'invited') {
+                return redirect($app . '/auth/callback#error=invite_pending');
+            }
+            if ($user->status !== 'active' || $user->archived_at !== null) {
+                return redirect($app . '/auth/callback#error=account_not_active');
+            }
+
             $user->forceFill([
                 'provider'      => $user->provider ?: $provider,
                 'provider_id'   => $user->provider_id ?: (string) $oauthUser->getId(),
                 'avatar_url'    => $user->avatar_url ?: $oauthUser->getAvatar(),
-                'status'        => $user->status === 'invited' ? 'active' : $user->status,
                 'last_login_at' => now(),
             ])->save();
 
@@ -132,6 +187,33 @@ class OAuthController extends Controller
     }
 
     // --- helpers -----------------------------------------------------------
+
+    private function stateCacheKey(string $state): string
+    {
+        return 'oauth_state:' . hash('sha256', $state);
+    }
+
+    /**
+     * Whether the provider asserts this email address as verified.
+     *
+     *  - google: explicit `email_verified` claim in the userinfo payload.
+     *  - github: Socialite's GitHub provider resolves the email via
+     *    /user/emails and only returns the primary VERIFIED address, so a
+     *    non-null email is verified by construction.
+     *  - microsoft: Graph only returns provisioned mailbox/UPN addresses for
+     *    the authenticated account; treated as verified (documented policy).
+     */
+    private function providerEmailVerified(string $provider, \Laravel\Socialite\Contracts\User $oauthUser): bool
+    {
+        $raw = method_exists($oauthUser, 'getRaw') ? (array) $oauthUser->getRaw() : (array) ($oauthUser->user ?? []);
+
+        return match ($provider) {
+            'google'    => (bool) ($raw['email_verified'] ?? false),
+            'github'    => $oauthUser->getEmail() !== null,
+            'microsoft' => $oauthUser->getEmail() !== null,
+            default     => false,
+        };
+    }
 
     private function enabledProviders(): array
     {

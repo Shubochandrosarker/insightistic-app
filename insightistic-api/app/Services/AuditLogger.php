@@ -15,6 +15,34 @@ use Illuminate\Support\Str;
  */
 class AuditLogger
 {
+    /**
+     * Audit entry for actions performed outside an HTTP request (artisan
+     * commands, bootstrap flows). `actor_user_id` may be null (system).
+     */
+    public function logConsole(
+        string $action,
+        string $targetType,
+        ?int $targetId,
+        ?array $before = null,
+        ?array $after = null,
+        ?string $reason = null,
+        ?int $actorUserId = null,
+    ): AdminAuditLog {
+        return AdminAuditLog::create([
+            'actor_user_id'   => $actorUserId,
+            'action'          => $action,
+            'target_type'     => $targetType,
+            'target_id'       => $targetId,
+            'before_json'     => $before,
+            'after_json'      => $after,
+            'reason'          => $reason,
+            'ip_address'      => null,
+            'user_agent'      => 'console',
+            'correlation_id'  => (string) Str::uuid(),
+            'created_at'      => now(),
+        ]);
+    }
+
     public function log(
         Request $request,
         string $action,

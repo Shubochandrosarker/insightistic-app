@@ -3,16 +3,23 @@
 namespace App\Console\Commands;
 
 use App\Models\User;
+use App\Services\AuditLogger;
 use Illuminate\Console\Command;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rules\Password;
 use Illuminate\Support\Facades\Validator;
 
 /**
- * Promote (or create) the platform owner.
+ * Promote (or create) the platform owner. Server-shell access required —
+ * this is the ONLY unauthenticated way to obtain super admin, by design.
  *
  *   php artisan insightistic:make-super-admin owner@example.com
  *   php artisan insightistic:make-super-admin owner@example.com --create --name="Shuvo Sarkar" --password="strong-pass"
+ *
+ * Once at least one active super admin exists, further promotions should go
+ * through POST /api/admin/users/{id}/promote (audited, requires an existing
+ * super admin). This command then refuses unless --force is passed, so a
+ * compromised deploy pipeline can't quietly mint admins as a matter of course.
  */
 class MakeSuperAdmin extends Command
 {
@@ -20,9 +27,15 @@ class MakeSuperAdmin extends Command
         {email : Email of the user to promote}
         {--create : Create the user if they do not exist}
         {--name= : Name to use when creating a new user}
-        {--password= : Password to use when creating a new user (generated if omitted)}';
+        {--password= : Password to use when creating a new user (generated if omitted)}
+        {--force : Allow promotion even though an active super admin already exists}';
 
     protected $description = 'Mark a user as platform super admin (optionally creating them).';
+
+    public function __construct(private AuditLogger $audit)
+    {
+        parent::__construct();
+    }
 
     public function handle(): int
     {
@@ -30,6 +43,19 @@ class MakeSuperAdmin extends Command
 
         if (! filter_var($email, FILTER_VALIDATE_EMAIL)) {
             $this->error("“{$email}” is not a valid email address.");
+            return self::FAILURE;
+        }
+
+        $existingSuperAdmins = User::where('is_super_admin', true)
+            ->where('status', 'active')
+            ->whereNull('archived_at')
+            ->count();
+
+        if ($existingSuperAdmins > 0 && ! $this->option('force')) {
+            $this->error('An active super admin already exists.');
+            $this->line('Promote further admins from the dashboard (POST /api/admin/users/{id}/promote),');
+            $this->line('or issue a single-use bootstrap token: php artisan insightistic:super-admin:issue-token');
+            $this->line('To override anyway (break-glass), re-run with --force.');
             return self::FAILURE;
         }
 
@@ -50,13 +76,15 @@ class MakeSuperAdmin extends Command
                 return self::FAILURE;
             }
 
-            $user = User::create([
-                'name'           => $name,
-                'email'          => $email,
-                'password'       => $password, // hashed by cast
-                'status'         => 'active',
-                'is_super_admin' => true,
+            $user = new User([
+                'name'     => $name,
+                'email'    => $email,
+                'password' => $password, // hashed by cast
+                'status'   => 'active',
             ]);
+            $user->forceFill(['is_super_admin' => true])->save();
+
+            $this->audit->logConsole('user.bootstrap_super_admin', 'User', $user->id, null, ['is_super_admin' => true, 'created' => true], 'artisan insightistic:make-super-admin --create');
 
             $this->info("Created super admin {$email}.");
             if (! $this->option('password')) {
@@ -73,6 +101,9 @@ class MakeSuperAdmin extends Command
         }
 
         $user->forceFill(['is_super_admin' => true])->save();
+
+        $this->audit->logConsole('user.promote_super_admin', 'User', $user->id, ['is_super_admin' => false], ['is_super_admin' => true], 'artisan insightistic:make-super-admin' . ($this->option('force') ? ' --force' : ''));
+
         $this->info("{$email} is now a super admin. They can sign in and open /admin.");
 
         return self::SUCCESS;

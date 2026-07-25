@@ -17,7 +17,18 @@ class Organization extends Model
 
     protected function casts(): array
     {
-        return ['trial_ends_at' => 'datetime', 'archived_at' => 'datetime'];
+        return [
+            'trial_ends_at'          => 'datetime',
+            'archived_at'            => 'datetime',
+            'deletion_requested_at'  => 'datetime',
+            'deletion_scheduled_for' => 'datetime',
+        ];
+    }
+
+    /** A deletion has been requested and the grace window has not elapsed. */
+    public function isPendingDeletion(): bool
+    {
+        return $this->deletion_scheduled_for !== null;
     }
 
     public function owner(): BelongsTo

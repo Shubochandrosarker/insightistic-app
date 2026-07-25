@@ -35,6 +35,7 @@ use App\Http\Controllers\Api\PerformanceController;
 use App\Http\Controllers\Api\PluginAiController;
 use App\Http\Controllers\Api\PluginCloudflareController;
 use App\Http\Controllers\Api\PluginLicenseController;
+use App\Http\Controllers\Api\PrivacyController;
 use App\Http\Controllers\Api\PublicPlanController;
 use App\Http\Controllers\Api\ReportController;
 use App\Http\Controllers\Api\ReportScheduleController;
@@ -138,6 +139,18 @@ Route::middleware(['auth:sanctum', 'tenant', 'restrict.impersonation'])->group(f
     Route::post('organizations/users/invite', [TeamController::class, 'invite'])->middleware('role:owner,admin');
     Route::patch('organizations/users/{user}/role', [TeamController::class, 'updateRole'])->middleware('role:owner');
     Route::delete('organizations/users/{user}', [TeamController::class, 'remove'])->middleware('role:owner');
+
+    // Privacy and compliance (spec Phase 10). Owner-only, and every
+    // mutation is behind a fresh password confirmation — an export is a
+    // portable copy of the whole tenant and deletion is irreversible.
+    Route::get('privacy/overview', [PrivacyController::class, 'overview'])->middleware('role:owner,admin');
+    Route::middleware(['role:owner', 'reauth'])->group(function () {
+        Route::post('privacy/exports', [PrivacyController::class, 'requestExport']);
+        Route::get('privacy/exports/{export}/download', [PrivacyController::class, 'downloadExport']);
+        Route::post('privacy/deletion', [PrivacyController::class, 'requestDeletion']);
+        Route::delete('privacy/deletion', [PrivacyController::class, 'cancelDeletion']);
+        Route::patch('privacy/ai-processing', [PrivacyController::class, 'updateAiProcessing']);
+    });
 
     // Billing (Week 5) — owner manages payment; owner/admin can view status.
     Route::get('billing/subscription', [BillingController::class, 'subscription'])->middleware('role:owner,admin');

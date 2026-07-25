@@ -127,6 +127,22 @@ return [
         'campaign_limit' => (int) env('EMAIL_ANALYTICS_CAMPAIGN_LIMIT', 50),
     ],
 
+    /*
+     * Privacy and compliance (spec Phase 10).
+     *
+     * Organization deletion is two-stage: a request schedules the purge
+     * `deletion_grace_days` out and can be cancelled until then. Immediate
+     * hard deletion has no undo, and a mis-click is far more common than a
+     * genuine need to erase a tenant within the hour.
+     */
+    'privacy' => [
+        'deletion_grace_days' => (int) env('PRIVACY_DELETION_GRACE_DAYS', 7),
+        'export_disk'         => env('PRIVACY_EXPORT_DISK', 'local'),
+        // How long a generated archive stays downloadable. A full tenant
+        // dump sitting on disk indefinitely is a liability.
+        'export_ttl_days'     => (int) env('PRIVACY_EXPORT_TTL_DAYS', 7),
+    ],
+
     // NOTE: the old `super_admin_email` / SUPER_ADMIN_EMAIL auto-promotion
     // was removed as a security fix. Super admins are created only via the
     // insightistic:super-admin:* artisan commands or promotion by an existing

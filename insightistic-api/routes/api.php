@@ -25,6 +25,7 @@ use App\Http\Controllers\Api\EmailController;
 use App\Http\Controllers\Api\ExportController;
 use App\Http\Controllers\Api\ImpersonationController;
 use App\Http\Controllers\Api\InsightController;
+use App\Http\Controllers\Api\IntelligenceController;
 use App\Http\Controllers\Api\IntegrationsController;
 use App\Http\Controllers\Api\LicenseController;
 use App\Http\Controllers\Api\MfaController;
@@ -260,6 +261,32 @@ Route::middleware(['auth:sanctum', 'tenant', 'restrict.impersonation'])->group(f
         Route::post('sites/{site}/insights/{insight}/dismiss', [InsightController::class, 'dismiss']);
         Route::delete('sites/{site}/insights/{insight}/dismiss', [InsightController::class, 'restore']);
         Route::post('sites/{site}/insights/{insight}/action', [InsightController::class, 'action']);
+
+        /*
+         * Advanced business intelligence (spec Phase 7). Split per report
+         * rather than one payload: cohorts walks the site's whole order
+         * history while channels is a single grouped read, and blocking the
+         * fast panels on the slow one makes the page feel broken.
+         */
+        Route::get('sites/{site}/intelligence/rfm', [IntelligenceController::class, 'rfm']);
+        Route::get('sites/{site}/intelligence/cohorts', [IntelligenceController::class, 'cohorts']);
+        Route::get('sites/{site}/intelligence/lifetime-value', [IntelligenceController::class, 'lifetimeValue']);
+        Route::get('sites/{site}/intelligence/affinity', [IntelligenceController::class, 'affinity']);
+        Route::get('sites/{site}/intelligence/stock-risk', [IntelligenceController::class, 'stockRisk']);
+        Route::get('sites/{site}/intelligence/discounts', [IntelligenceController::class, 'discountImpact']);
+        Route::get('sites/{site}/intelligence/declining-products', [IntelligenceController::class, 'decliningProducts']);
+        Route::get('sites/{site}/intelligence/cannibalization', [IntelligenceController::class, 'cannibalization']);
+        Route::get('sites/{site}/intelligence/ctr-opportunities', [IntelligenceController::class, 'ctrOpportunities']);
+        Route::get('sites/{site}/intelligence/content-decay', [IntelligenceController::class, 'contentDecay']);
+        Route::get('sites/{site}/intelligence/channels', [IntelligenceController::class, 'channels']);
+        Route::get('sites/{site}/intelligence/anomalies', [IntelligenceController::class, 'anomalies']);
+        Route::get('sites/{site}/intelligence/performance-correlation', [IntelligenceController::class, 'performanceCorrelation']);
+
+        // Churn risk is the one intelligence report that names individual
+        // customers, so it is not part of what a client_viewer is shown.
+        Route::middleware('role:owner,admin,analyst')->group(function () {
+            Route::get('sites/{site}/intelligence/churn-risk', [IntelligenceController::class, 'churnRisk']);
+        });
 
         // Reports (Week 4)
         Route::get('sites/{site}/reports', [ReportController::class, 'index']);

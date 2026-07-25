@@ -145,6 +145,52 @@ All notable changes to the Insightistic platform (app + API + plugin).
   metering, so a site with nothing to say costs nothing. A dismissed insight
   does not suppress the next cycle — the user said "not now", not "never".
 
+### Advanced business intelligence (new)
+Fourteen reports under `/sites/{site}/intelligence/*` and a new **Intelligence**
+dashboard section, computed from data already synced — no new sources and no
+stored derivations, so nothing can go stale against the orders it describes.
+
+- **Customers** — RFM segmentation, monthly acquisition cohorts, lifetime value
+  and repeat behaviour, and churn risk.
+- **Products** — frequently-bought-together, stock cover and stockout dates,
+  discount impact, and declining products.
+- **Search** — CTR opportunities, content decay, cannibalization candidates.
+- **Acquisition** — channel performance, traffic anomalies, and the
+  speed/revenue relationship.
+
+Four rules hold across all of them:
+
+- **Recomputed, not trusted.** Commerce figures come from `wc_orders`, not the
+  store's `total_sales` / `total_spent` counters — those never decrease on
+  refund and count unpaid orders. Only `completed` and `processing` are
+  revenue, so a refund actually moves every number on the page.
+- **Relative to the site, not an industry.** RFM scores quintiles of this
+  store's own customers; CTR gaps compare against this site's median CTR per
+  position band; churn is measured against each customer's own median gap
+  between orders. A fixed "90 days = churned" rule labels every customer of a
+  slow-cycle store as lost, and a published CTR curve manufactures
+  opportunities that are not there.
+- **Floors before findings.** RFM needs 20 customers, anomaly detection 14
+  days of history, correlation 10 paired days, product affinity 3
+  co-occurrences. Below a floor the report answers `has_data: false` with a
+  machine-readable `reason` and the UI says which kind of empty it is — "not
+  enough customers yet" and "no orders at all" send people to different places.
+- **Stated limits.** Channels are labelled last-click. Cannibalization is
+  labelled candidates, because Search Console aggregates do not pair queries
+  with pages. Speed-vs-revenue is labelled correlation, with the caveat kept
+  on screen. Anomaly detection uses median absolute deviation rather than
+  mean and standard deviation, so a launch-day spike cannot inflate the
+  baseline that is meant to catch it.
+
+Cohort rows are only as wide as the months each cohort has actually lived
+through. Padding them to a uniform width would print 0% for months that have
+not happened, and a reader cannot tell that apart from a cohort that never
+came back.
+
+Churn risk is the only report naming individual customers, so it is restricted
+to owner/admin/analyst — a `client_viewer` gets 403 from the route, not a
+hidden button.
+
 ### Fixed — nested route parameters bound the wrong record
 - Controllers on `sites/{site}/…/{id}` routes read the Site off the request
   and declared only the second id. Laravel injects route parameters

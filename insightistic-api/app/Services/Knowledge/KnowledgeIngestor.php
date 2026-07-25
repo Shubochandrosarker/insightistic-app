@@ -100,7 +100,7 @@ class KnowledgeIngestor
 
             $this->finish($source, $job, count($chunks), $tokenTotal, $startedAt);
         } catch (IngestionFailure $e) {
-            $this->fail($source, $job, $e->code, $e->getMessage(), $startedAt);
+            $this->fail($source, $job, $e->errorCode, $e->getMessage(), $startedAt);
         } catch (SsrfViolation $e) {
             $this->fail($source, $job, 'blocked_url', $e->getMessage(), $startedAt);
         } catch (\Throwable $e) {

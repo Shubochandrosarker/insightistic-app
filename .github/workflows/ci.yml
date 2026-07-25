@@ -128,7 +128,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v4
       - name: Build API image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: docker/api/Dockerfile
@@ -136,7 +136,7 @@ jobs:
           cache-from: type=gha,scope=ci-api
           cache-to: type=gha,mode=max,scope=ci-api
       - name: Build App image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: docker/app/Dockerfile

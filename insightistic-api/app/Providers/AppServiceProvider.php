@@ -29,6 +29,25 @@ class AppServiceProvider extends ServiceProvider
                 default => new RuleProvider(),
             };
         });
+
+        // Embedding provider for the knowledge base. 'none' (or a missing
+        // key) binds the null provider: retrieval degrades to full-text
+        // search — real results, no fabricated vectors.
+        $this->app->bind(\App\Services\Knowledge\EmbeddingProvider::class, function () {
+            $cfg = config('insightistic.embeddings');
+
+            return ($cfg['provider'] ?? 'none') === 'openai' && ! empty($cfg['api_key'])
+                ? new \App\Services\Knowledge\OpenAiEmbeddingProvider($cfg)
+                : new \App\Services\Knowledge\NullEmbeddingProvider();
+        });
+
+        // SSRF-guarded fetcher with configured crawl limits.
+        $this->app->bind(\App\Services\Knowledge\SafeUrlFetcher::class, function () {
+            return new \App\Services\Knowledge\SafeUrlFetcher(
+                (int) config('insightistic.knowledge.crawl_timeout', 20),
+                (int) config('insightistic.knowledge.crawl_max_bytes', 10_485_760),
+            );
+        });
     }
 
     public function boot(): void

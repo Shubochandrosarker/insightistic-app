@@ -195,6 +195,44 @@ Route::middleware(['auth:sanctum', 'tenant', 'restrict.impersonation'])->group(f
     // Report view + send (not site-scoped in the URL; access checked in controller).
     Route::get('reports/{report}', [ReportController::class, 'show']);
     Route::post('reports/{report}/send-email', [ReportController::class, 'sendEmail']);
+
+    // ---- AI Knowledge Base (Phase 4) — org-scoped via the tenant global
+    // scope; reads for working roles, mutations for owner/admin only; every
+    // plan limit enforced server-side in the controllers. -------------------
+    Route::middleware('role:owner,admin,analyst')->group(function () {
+        Route::get('knowledge-bases', [\App\Http\Controllers\Api\KnowledgeBaseController::class, 'index']);
+        Route::get('knowledge-bases/{id}', [\App\Http\Controllers\Api\KnowledgeBaseController::class, 'show']);
+        Route::get('knowledge-bases/{id}/sources', [\App\Http\Controllers\Api\KnowledgeSourceController::class, 'index']);
+        Route::get('knowledge-sources/{id}', [\App\Http\Controllers\Api\KnowledgeSourceController::class, 'show']);
+        Route::post('knowledge-bases/{id}/test-retrieval', [\App\Http\Controllers\Api\KnowledgeSearchController::class, 'testRetrieval']);
+        Route::get('knowledge/usage', [\App\Http\Controllers\Api\KnowledgeSearchController::class, 'usage']);
+    });
+
+    Route::middleware('role:owner,admin')->group(function () {
+        Route::post('knowledge-bases', [\App\Http\Controllers\Api\KnowledgeBaseController::class, 'store']);
+        Route::patch('knowledge-bases/{id}', [\App\Http\Controllers\Api\KnowledgeBaseController::class, 'update']);
+        Route::delete('knowledge-bases/{id}', [\App\Http\Controllers\Api\KnowledgeBaseController::class, 'destroy']);
+
+        Route::post('knowledge-bases/{id}/sources', [\App\Http\Controllers\Api\KnowledgeSourceController::class, 'store'])
+            ->middleware('throttle:knowledge-upload');
+        Route::post('knowledge-sources/{id}/retry', [\App\Http\Controllers\Api\KnowledgeSourceController::class, 'retry'])
+            ->middleware('throttle:knowledge-crawl');
+        Route::post('knowledge-sources/{id}/reindex', [\App\Http\Controllers\Api\KnowledgeSourceController::class, 'reindex'])
+            ->middleware('throttle:knowledge-crawl');
+        Route::post('knowledge-sources/{id}/disable', [\App\Http\Controllers\Api\KnowledgeSourceController::class, 'disable']);
+        Route::delete('knowledge-sources/{id}', [\App\Http\Controllers\Api\KnowledgeSourceController::class, 'destroy']);
+    });
+
+    // ---- AI Copilot (Phase 5) — personal threads within the org. ----------
+    Route::get('copilot/threads', [\App\Http\Controllers\Api\CopilotController::class, 'threads']);
+    Route::post('copilot/threads', [\App\Http\Controllers\Api\CopilotController::class, 'createThread']);
+    Route::get('copilot/threads/{id}', [\App\Http\Controllers\Api\CopilotController::class, 'showThread']);
+    Route::patch('copilot/threads/{id}', [\App\Http\Controllers\Api\CopilotController::class, 'updateThread']);
+    Route::delete('copilot/threads/{id}', [\App\Http\Controllers\Api\CopilotController::class, 'deleteThread']);
+    Route::post('copilot/threads/{id}/messages', [\App\Http\Controllers\Api\CopilotController::class, 'sendMessage'])
+        ->middleware('throttle:ai-chat');
+    Route::post('copilot/messages/{id}/feedback', [\App\Http\Controllers\Api\CopilotController::class, 'feedback']);
+    Route::get('copilot/suggestions', [\App\Http\Controllers\Api\CopilotController::class, 'suggestions']);
 });
 
 // ---- Report downloads (signed, unauthenticated) ----------------------------

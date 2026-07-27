@@ -12,6 +12,14 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware) {
+        /*
+         * Outermost, so the timing covers everything the application does —
+         * including the middleware below it. Measuring from further in hides
+         * exactly the layers most likely to be slow: tenancy resolution,
+         * rate limiting, auth.
+         */
+        $middleware->prepend(\App\Http\Middleware\RequestTelemetry::class);
+
         // Baseline security headers on every response (API serves JSON only).
         $middleware->append(\App\Http\Middleware\SecurityHeaders::class);
 
@@ -27,6 +35,14 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions) {
+        /*
+         * Error tracking (spec Phase 2.3). Inert unless SENTRY_LARAVEL_DSN is
+         * set, and everything that does go out passes through EventScrubber
+         * first — this API's exception payloads can carry OAuth refresh
+         * tokens, license keys and customer records.
+         */
+        \Sentry\Laravel\Integration::handles($exceptions);
+
         // Never let a database error leak schema/table/SQL details to an API
         // client — regardless of APP_DEBUG, which can be misconfigured on any
         // given environment. Laravel's default debug-mode renderer would

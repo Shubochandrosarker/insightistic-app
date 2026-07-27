@@ -16,18 +16,41 @@ class AppServiceProvider extends ServiceProvider
         // One Tenancy context per request.
         $this->app->scoped(Tenancy::class, fn () => new Tenancy());
 
+        // Observability (spec Phase 2.3). Singletons because Tracing holds the
+        // exporter's batch processor — one per process, not one per resolve,
+        // or spans end up split across providers that each flush separately.
+        $this->app->singleton(\App\Services\Observability\Tracing::class);
+        $this->app->singleton(\App\Services\Observability\Telemetry::class);
+        $this->app->singleton(\App\Services\Observability\QueueHealth::class);
+
         // AI provider: OpenAI or the wpistic-ai-gateway brain when fully
         // configured, else the $0 rule-based fallback so insights/reports
         // work end-to-end without any AI spend.
         $this->app->bind(AiProvider::class, function () {
             $cfg = config('insightistic.ai');
-            return match ($cfg['provider'] ?? 'openai') {
+            $configured = $cfg['provider'] ?? 'openai';
+
+            $provider = match ($configured) {
                 'wpistic_gateway' => ! empty(config('insightistic.wpistic_gateway.shared_secret'))
                     ? new WpisticGatewayProvider(config('insightistic.wpistic_gateway'))
                     : new RuleProvider(),
                 'openai' => ! empty($cfg['api_key']) ? new OpenAiProvider($cfg) : new RuleProvider(),
                 default => new RuleProvider(),
             };
+
+            /*
+             * Wrapped for latency/cost telemetry (spec Phase 2.3). The name
+             * recorded is the provider that actually ran, not the one that was
+             * configured — otherwise a missing API key silently falls back to
+             * the rule provider while the dashboard still claims OpenAI, and
+             * "the AI got worse" becomes impossible to diagnose.
+             */
+            return new \App\Services\Observability\MeteredAiProvider(
+                $provider,
+                $this->app->make(\App\Services\Observability\Telemetry::class),
+                $this->app->make(\App\Services\Observability\Tracing::class),
+                $provider instanceof RuleProvider ? 'rule' : $configured,
+            );
         });
 
         // Embedding provider for the knowledge base. 'none' (or a missing
@@ -104,6 +127,18 @@ class AppServiceProvider extends ServiceProvider
             return \Illuminate\Cache\RateLimiting\Limit::perMinute(10)
                 ->by('exports:' . ($request->user()?->id ?: $request->ip()));
         });
+
+        /*
+         * Queue worker heartbeat (spec Phase 2.3). Recording on JobProcessing
+         * means the signal costs one cache write per job instead of a separate
+         * supervisor process, and it proves a worker is actually *consuming*
+         * rather than merely running — a worker stuck on a poisoned job is
+         * alive to `ps` and useless to the queue.
+         */
+        \Illuminate\Support\Facades\Event::listen(
+            \Illuminate\Queue\Events\JobProcessing::class,
+            fn () => \App\Services\Observability\QueueHealth::recordHeartbeat(),
+        );
 
         // Password reset / invite links should open the SPA, not a web route.
         \Illuminate\Auth\Notifications\ResetPassword::createUrlUsing(function ($user, string $token) {

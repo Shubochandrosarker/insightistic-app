@@ -136,6 +136,43 @@ Churn risk is the one report naming individual customers and is restricted to
 owner/admin/analyst; `client_viewer` gets 403 from the route, not a hidden
 button.
 
+## Observability
+
+`App\Services\Observability\*`, surfaced at `/api/admin/observability` (super
+admin only — route latency spans every tenant and AI spend is aggregate).
+
+- **Errors** — Sentry, inert without a DSN. Every payload passes through
+  `EventScrubber` first: request bodies and cookies dropped wholesale, header
+  and nested keys matching secret/PII fragments redacted, URLs keeping their
+  shape but losing every query value. Error tracking is a data-exfiltration
+  path nobody thinks of as one; an exception carries the request that caused
+  it, which here can be a Google refresh token or a customer record.
+- **Tracing** — OpenTelemetry over OTLP/HTTP, off unless `OTEL_ENABLED` *and*
+  an endpoint are set. Built lazily and by hand rather than via the
+  auto-instrumentation package, which needs `ext-opentelemetry` — that would
+  trace on a laptop and silently do nothing in production.
+- **Metrics** — request timings and AI spend pre-aggregated into hourly
+  buckets per route/model, written with `INSERT … ON CONFLICT DO UPDATE` so
+  concurrent workers cannot lose each other's counts. Writes are wrapped in a
+  savepoint: they run inside the caller's transaction, and in PostgreSQL a
+  failed statement aborts the whole transaction, so an unguarded telemetry
+  error would take down the request it was measuring.
+- **AI cost** — a `MeteredAiProvider` decorator wraps whichever provider is
+  bound, so insight generation and the rule-based fallback are measured too,
+  not just Copilot. The recorded provider name is the one that actually ran:
+  a missing API key silently falls back to the rule provider, and a dashboard
+  still claiming OpenAI makes "the AI got worse" undiagnosable.
+- **Queue** — driver-agnostic (`database` and `redis`), because the Hostinger
+  stacks and the production stack differ. Horizon would only cover one of
+  them. The signal is *oldest pending age*, not depth: a queue 5,000 deep that
+  drains in a minute is healthy, three jobs waiting an hour is not, and depth
+  alone cannot tell them apart. A stale worker heartbeat with an empty queue
+  is a warning, not a page — idle and dead look identical.
+
+Buckets are pruned nightly at 03:50 (`insightistic:telemetry-prune`), so
+observability data cannot become the performance problem it was installed to
+detect.
+
 ## Billing & entitlements
 
 Stripe webhooks are the source of truth for subscriptions; the license

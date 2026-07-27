@@ -145,6 +145,57 @@ All notable changes to the Insightistic platform (app + API + plugin).
   metering, so a site with nothing to say costs nothing. A dismissed insight
   does not suppress the next cycle — the user said "not now", not "never".
 
+### Observability (new)
+Error tracking, distributed tracing, request/AI metrics and queue health,
+surfaced at **Admin → Observability**. All of it is off by default: a fresh
+install sends nothing to any third party until a DSN or collector endpoint is
+deliberately configured.
+
+- **Errors** — Sentry (`sentry/sentry-laravel`), inert without a DSN. Every
+  payload passes through `EventScrubber` first: request bodies and cookies
+  dropped wholesale, header and nested keys matching secret or PII fragments
+  redacted, URLs keeping their shape but losing every query value. Error
+  tracking is a data-exfiltration path nobody thinks of as one — an exception
+  carries the request that caused it, and here that can be a Google refresh
+  token, a Cloudflare API token, a license key or a customer record.
+- **Tracing** — OpenTelemetry over OTLP/HTTP, requiring both `OTEL_ENABLED`
+  and an endpoint, since an exporter with nowhere to send is just latency.
+  Built lazily by hand rather than through the auto-instrumentation package,
+  which needs `ext-opentelemetry` — that would trace on a developer laptop
+  and silently do nothing in production.
+- **Metrics** — request timings and AI spend pre-aggregated into hourly
+  buckets per route and model. A per-request table would write millions of
+  rows a day, and the questions this data answers are all bucket questions.
+- **AI cost** — a decorator wraps whichever provider is bound, so insight
+  generation and the rule-based fallback are measured too, not just Copilot.
+  The provider recorded is the one that actually ran: a missing API key falls
+  back to the rule provider, and a dashboard still claiming OpenAI would make
+  "the AI got worse" impossible to diagnose.
+- **Queue health** — works on both `database` and `redis`, because the
+  Hostinger stacks and the production stack differ and Horizon covers only
+  one of them. The signal is *oldest pending age*, not depth: 5,000 jobs that
+  drain in a minute is healthy, three that have waited an hour is not, and
+  depth alone cannot tell them apart. A silent worker with an empty queue is
+  a warning rather than a page — idle and dead look identical.
+
+Buckets are pruned nightly at 03:50, so observability data cannot become the
+performance problem it was installed to detect.
+
+Two bugs were found while building it:
+
+- **A telemetry write could poison the caller's transaction.** These writes
+  run inside whatever transaction the request is already in, and in
+  PostgreSQL a failed statement aborts the entire transaction — so a
+  telemetry error made every subsequent query fail with SQLSTATE 25P02, the
+  measurement killing the thing it measured while reporting the wrong error.
+  Writes are now wrapped in a savepoint, and `telemetry_ai_usage.organization_id`
+  is deliberately not a foreign key (a failing FK check was the trigger, and
+  `nullOnDelete` would have merged a departed customer's buckets into the
+  platform-level rows rather than removing them).
+- **`telemetry-prune --days=0` silently used the default.** `?:` treats the
+  string `"0"` as falsy, so a nonsense window fell through to 30 days instead
+  of being rejected.
+
 ### Advanced business intelligence (new)
 Fourteen reports under `/sites/{site}/intelligence/*` and a new **Intelligence**
 dashboard section, computed from data already synced — no new sources and no

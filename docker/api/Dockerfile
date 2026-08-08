@@ -27,7 +27,7 @@ RUN composer dump-autoload --optimize --no-dev --no-scripts
 # composer.json's `config.platform.php` — the lockfile is resolved for 8.4, so
 # shipping a different runtime major means production runs a PHP version the
 # dependency set was never tested against.
-FROM php:8.4-fpm-alpine
+FROM php:8.5-fpm-alpine
 
 RUN apk add --no-cache \
         nginx supervisor curl \

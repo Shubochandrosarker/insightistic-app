@@ -71,6 +71,11 @@ class AppServiceProvider extends ServiceProvider
                 (int) config('insightistic.knowledge.crawl_max_bytes', 10_485_760),
             );
         });
+
+        // Semantic Metric Registry (spec Phase 1): one versioned catalog of
+        // canonical metric definitions. Singleton because the catalog is
+        // static per-process — no request-scoped state, no DB round trip.
+        $this->app->singleton(\App\Metrics\MetricRegistry::class);
     }
 
     public function boot(): void

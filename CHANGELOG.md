@@ -4,6 +4,28 @@ All notable changes to the Insightistic platform (app + API + plugin).
 
 ## [Unreleased] — Advanced SaaS + AI Knowledge Base upgrade (2026-07)
 
+### Added — Semantic Metric Registry (Insightistic VNext P0)
+- **`App\Metrics\MetricRegistry`** — one versioned, canonical catalog of 19
+  metric definitions (id, label, unit, source, table/column, formula,
+  freshness, caveats) covering revenue, orders, AOV, refunds, products,
+  customers, GA4, GSC and Core Web Vitals. Metadata only — computation stays
+  in the existing `MetricsAssembler`/`MetricSnapshotService`/
+  `ContextAssembler` services. See `docs/SEMANTIC-METRICS.md`.
+- `GET /api/metrics` (+ `?source=`) and `GET /api/metrics/{id}` — read-only,
+  authenticated-tenant access to the catalog for the dashboard/Copilot.
+- `php artisan metrics:list` for manual/CI verification.
+- **Fixed order-status classification drift**: `MetricsAssembler`,
+  `MetricSnapshotService`, `CustomerIntelligence`, `ProductIntelligence` and
+  `AcquisitionIntelligence` each hand-typed their own paid/failed status
+  array; two of the five silently disagreed (on-hold orders included in
+  revenue KPIs but excluded from customer/product intelligence). All five
+  now read from `App\Metrics\CommerceStatus::REVENUE_PAID` /
+  `::CONFIRMED_PAID` / `::FAILED`. No metric value changed — see
+  `docs/CONVERSATIONAL-ANALYTICS-AUDIT.md` for the full before/after table
+  and the still-open product decision this surfaced.
+- `docs/CONVERSATIONAL-ANALYTICS-AUDIT.md` — Phase 0 current-state audit for
+  the VNext roadmap (analytics/AI/tenant-isolation/automation surfaces).
+
 ### Fixed — build/runtime blockers found in post-merge audit
 - **`IngestionFailure` was unloadable**, taking the whole knowledge ingestion
   pipeline with it: it promoted a `public readonly string $code`, and

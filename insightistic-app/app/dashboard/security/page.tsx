@@ -161,10 +161,22 @@ function MfaCard({ status, onChanged }: { status: MfaStatus; onChanged: () => vo
       {!status.enabled && enrolment && (
         <div className="mt-4">
           <p className="text-sm text-fg">1. Scan this with your authenticator app</p>
-          <div
-            className="mt-2 inline-block rounded-xl border border-line bg-white p-3"
-            dangerouslySetInnerHTML={{ __html: enrolment.qr_svg }}
-          />
+          <div className="mt-2 inline-block rounded-xl border border-line bg-white p-3">
+            {/* eslint-disable-next-line @next/next/no-img-element -- data:
+                URI, not an optimizable remote asset. Rendered as an <img>
+                src rather than dangerouslySetInnerHTML: a data:image/svg+xml
+                src is rasterized, not parsed as live DOM, so it can't
+                execute script/event-handler content even though this SVG
+                is server-generated (BaconQrCode) and not attacker input
+                today — this removes the injection vector regardless of
+                what generates it in the future. */}
+            <img
+              src={`data:image/svg+xml;base64,${btoa(unescape(encodeURIComponent(enrolment.qr_svg)))}`}
+              alt="Two-factor authentication QR code"
+              width={200}
+              height={200}
+            />
+          </div>
           <p className="mt-2 text-xs text-muted">
             Can’t scan? Enter this key manually: <span className="font-mono text-fg">{enrolment.secret}</span>
           </p>

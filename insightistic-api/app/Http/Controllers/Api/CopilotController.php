@@ -350,7 +350,15 @@ class CopilotController extends Controller
 
     public function feedback(Request $request, int $messageId)
     {
-        $message = AiMessage::find($messageId);
+        // Org scope via global scope + ownership of the *thread* the
+        // message belongs to — matches findThread() below. A message's own
+        // user_id only identifies the author of 'user'-role rows (it's null
+        // for 'assistant' replies), so it can't be used as the ownership
+        // check here; without this, any org member could rate/comment on
+        // another member's private Copilot thread by guessing/incrementing
+        // this numeric id.
+        $message = AiMessage::whereHas('thread', fn ($q) => $q->where('user_id', $request->user()->id))
+            ->find($messageId);
         if (! $message) {
             return response()->json(['message' => 'Message not found.'], 404);
         }

@@ -15,7 +15,7 @@ import { Field } from "@/components/ui/Field";
 import { Spinner } from "@/components/ui/Spinner";
 import { PageHeader } from "@/components/dashboard/PageHeader";
 import { ResponsiveTable, type Column } from "@/components/app-shell/ResponsiveTable";
-import { timeAgo, num } from "@/lib/format";
+import { timeAgo, num, isSafeHref } from "@/lib/format";
 import {
   ArrowLeft, ArrowRight, BookOpen, UploadCloud, Link2, Map, PenLine, Search,
   RotateCw, RefreshCw, Ban, Trash2, FileText, ExternalLink,
@@ -276,7 +276,7 @@ function TestRetrievalCard({ kbId }: { kbId: string }) {
                 <p className="whitespace-pre-wrap text-sm text-fg">{r.content}</p>
                 <div className="mt-2 flex items-center gap-2 text-xs text-muted">
                   <FileText size={12} />
-                  {r.source?.url ? (
+                  {r.source?.url && isSafeHref(r.source.url) ? (
                     <a href={r.source.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 hover:text-violet">
                       {r.source.title} <ExternalLink size={11} />
                     </a>

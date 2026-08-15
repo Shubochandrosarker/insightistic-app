@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useDashboard } from "@/lib/dashboard";
 import { useApi } from "@/lib/useApi";
 import { apiPost, apiPatch, apiDelete, apiDownload } from "@/lib/api";
+import { isSafeHref } from "@/lib/format";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -194,10 +195,10 @@ export default function ReportsPage() {
                   {!r.sent_to && (
                     <button onClick={() => send(r.id)} className="rounded-xl border border-line bg-card px-3.5 py-1.5 text-sm font-semibold text-fg hover:bg-card2">Send</button>
                   )}
-                  {r.pdf_link && (
+                  {r.pdf_link && isSafeHref(r.pdf_link) && (
                     <a href={r.pdf_link} target="_blank" rel="noreferrer" className="rounded-xl bg-brand px-3.5 py-1.5 text-sm font-semibold text-white hover:bg-brand2">PDF</a>
                   )}
-                  {r.html_link && (
+                  {r.html_link && isSafeHref(r.html_link) && (
                     <a href={r.html_link} target="_blank" rel="noreferrer" className="rounded-xl border border-line bg-card px-3.5 py-1.5 text-sm font-semibold text-fg hover:bg-card2">HTML</a>
                   )}
                 </div>

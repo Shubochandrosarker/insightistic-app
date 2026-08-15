@@ -8,7 +8,7 @@ import type { KnowledgeBase } from "@/lib/knowledge";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { PageHeader } from "@/components/dashboard/PageHeader";
-import { timeAgo } from "@/lib/format";
+import { timeAgo, isSafeHref } from "@/lib/format";
 import {
   Bot, Plus, Send, Square, Copy, Check, ThumbsUp, ThumbsDown, RotateCw,
   Pencil, Archive, Trash2, X, ExternalLink, BookOpen, ArrowRight, Sparkles,
@@ -865,7 +865,7 @@ export default function CopilotPage() {
                 <p className="text-sm text-muted">No snippet available for this citation.</p>
               )}
               <dl className="mt-4 space-y-2 text-sm">
-                {drawerCitation.url && (
+                {drawerCitation.url && isSafeHref(drawerCitation.url) && (
                   <div>
                     <dt className="text-[10px] font-bold uppercase tracking-wide text-muted">Link</dt>
                     <dd>

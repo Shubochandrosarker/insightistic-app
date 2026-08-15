@@ -33,6 +33,7 @@ use App\Http\Controllers\Api\MfaController;
 use App\Http\Controllers\Api\NotificationController;
 use App\Http\Controllers\Api\OAuthController;
 use App\Http\Controllers\Api\OnboardingController;
+use App\Http\Controllers\Api\MetricRegistryController;
 use App\Http\Controllers\Api\OrganizationController;
 use App\Http\Controllers\Api\PerformanceController;
 use App\Http\Controllers\Api\PluginAiController;
@@ -136,6 +137,12 @@ Route::middleware(['auth:sanctum'])->group(function () {
 Route::middleware(['auth:sanctum', 'tenant', 'restrict.impersonation'])->group(function () {
     Route::get('organizations/current', [OrganizationController::class, 'current']);
     Route::patch('organizations/current', [OrganizationController::class, 'update']);
+
+    // Semantic Metric Registry (spec Phase 1) — canonical metric metadata,
+    // not tenant data, so no site scope. Powers the dashboard/Copilot/report
+    // surfaces that need a metric's label/unit/formula/caveats.
+    Route::get('metrics', [MetricRegistryController::class, 'index']);
+    Route::get('metrics/{metric}', [MetricRegistryController::class, 'show']);
 
     // Team management (Week 5) — owner/admin can view & invite; owner-only mutations.
     Route::get('organizations/users', [TeamController::class, 'index'])->middleware('role:owner,admin');

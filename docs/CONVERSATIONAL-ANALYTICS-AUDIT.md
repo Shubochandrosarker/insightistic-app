@@ -4,8 +4,14 @@ Phase 0 audit for the Insightistic VNext roadmap (Semantic Metric Registry →
 Safe WooCommerce Query Engine → Analytical Evidence Ledger → Ask Insightistic
 V2 → …). Snapshot as of the P0 (Semantic Metric Registry) PR. This is a
 **point-in-time audit** — re-run the relevant sections before starting each
-later phase (P1 Safe Query Engine especially: several findings here are load-
-bearing for how that phase must be designed).
+later phase.
+
+> **Update — P1 shipped.** The Safe WooCommerce Query Engine described as a
+> "clean slate" in §2 below is now implemented — see
+> `docs/SAFE-QUERY-ENGINE.md` and `docs/SECURITY-TEST-MATRIX.md`. §2's
+> findings are preserved as-is below (they were load-bearing for P1's
+> design); re-run this section again before P4 (Multi-source Analytics)
+> extends the query engine to GA4/GSC/PageSpeed.
 
 Classification per section: **IMPLEMENTED** / **PARTIAL** / **MISSING** /
 **UNSAFE-TO-REUSE**, per `docs/12-INGESTION-MANIFEST.md`'s retrieval rule —

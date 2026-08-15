@@ -15,6 +15,7 @@ use App\Http\Controllers\Api\Admin\UsageController as AdminUsageController;
 use App\Http\Controllers\Api\Admin\UserController as AdminUserController;
 use App\Http\Controllers\Api\AlertController;
 use App\Http\Controllers\Api\AnalyticsController;
+use App\Http\Controllers\Api\AnalyticsQueryController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\BillingController;
 use App\Http\Controllers\Api\BrandSettingsController;
@@ -208,6 +209,12 @@ Route::middleware(['auth:sanctum', 'tenant', 'restrict.impersonation'])->group(f
         Route::get('sites/{site}/analytics/customers', [AnalyticsController::class, 'customers']);
         Route::get('sites/{site}/analytics/refunds', [AnalyticsController::class, 'refunds']);
         Route::get('sites/{site}/analytics/compare', [AnalyticsController::class, 'compare']);
+
+        // Safe WooCommerce Query Engine (spec Phase 2 / P1) — executes an
+        // already-validated semantic plan. POST because a plan is a
+        // structured request body, not just a handful of query params.
+        Route::post('sites/{site}/analytics/query', [AnalyticsQueryController::class, 'query'])
+            ->middleware('throttle:query-engine');
 
         // Traffic / SEO / Performance (Milestone 4). Read the tables Milestone
         // 3 shipped; return honest empty states until connector v2 ingests.

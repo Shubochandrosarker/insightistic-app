@@ -26,6 +26,35 @@ All notable changes to the Insightistic platform (app + API + plugin).
 - `docs/CONVERSATIONAL-ANALYTICS-AUDIT.md` — Phase 0 current-state audit for
   the VNext roadmap (analytics/AI/tenant-isolation/automation surfaces).
 
+### Added — Safe WooCommerce Query Engine (Insightistic VNext P1)
+- **`App\Query\SafeWooQueryEngine`** — typed plan → validated →
+  compiled-via-query-builder-only → defense-in-depth-guarded →
+  tenant-scoped → concurrency/timeout-budgeted → executed read-only →
+  normalized evidence. No plan-supplied string is ever concatenated into
+  SQL; table/column names are hardcoded literals in
+  `WooCommerceQueryCompiler`, never runtime-derived. See
+  `docs/SAFE-QUERY-ENGINE.md`.
+- `POST /api/sites/{site}/analytics/query` — executes a plan requesting up
+  to 5 registered WooCommerce metrics, an optional `product` dimension
+  breakdown, and an optional previous-period comparison. Behind the
+  existing `site.access` tenant-scope middleware.
+- **Read-only Postgres execution identity**: a genuinely separate,
+  SELECT-only role (`php artisan db:provision-readonly-role`), verified in
+  CI by directly attempting INSERT/UPDATE/DELETE/ALTER and reads of
+  out-of-allowlist tables against the real role and confirming Postgres
+  itself rejects them — not just an application-layer check. Fails closed
+  in production if unconfigured; falls back to the default connection with
+  a logged warning in local/dev.
+- Query budgets: 8s statement timeout (real Postgres `SET LOCAL
+  statement_timeout`, proven to cancel and to never leak onto a later
+  query), a 500-row breakdown cap, and a per-organization 3-in-flight
+  concurrency limit (429 when exceeded).
+- `docs/SECURITY-TEST-MATRIX.md` — the full adversarial SQL / tenant-
+  isolation / concurrency test matrix, PASS or explicitly NOT VERIFIED per
+  row, nothing hidden.
+- Tests: 97 new (unit + feature), full existing suite (363 tests) green,
+  zero regressions.
+
 ### Fixed — build/runtime blockers found in post-merge audit
 - **`IngestionFailure` was unloadable**, taking the whole knowledge ingestion
   pipeline with it: it promoted a `public readonly string $code`, and

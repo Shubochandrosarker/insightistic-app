@@ -1,25 +1,30 @@
 # Safe WooCommerce Query Engine
 
-Status: **P1 — implemented**. Second step of the Insightistic VNext roadmap
+Status: **P1 — implemented**, extended to GA4/GSC by **P4 Multi-source
+Analytics — implemented**. Second step of the Insightistic VNext roadmap
 (`P0 Semantic Metric Registry → P1 Safe WooCommerce Query Engine → P2
-Analytical Evidence Ledger → ...`). Builds directly on
-`docs/SEMANTIC-METRICS.md` — every metric a plan can request must already
-be registered there.
+Analytical Evidence Ledger → P3 Ask Insightistic V2 → P4 Multi-source
+Analytics → ...`). Builds directly on `docs/SEMANTIC-METRICS.md` — every
+metric a plan can request must already be registered there. The engine
+class keeps its original name (`App\Query\SafeWooQueryEngine`) even though
+it now compiles three sources — see "Multi-source dispatch" below for why.
 
 ## What it is
 
 A typed request → validated plan → compiled query → executed-read-only
-pipeline that lets a caller (a human today; an AI-authored plan once P3
-"Ask Insightistic V2" lands) ask for WooCommerce metrics **without ever
-writing SQL**. The caller chooses metrics, an optional dimension, and a
-period from allowlisted values; it can never name a table, column, or SQL
-fragment.
+pipeline that lets a caller (a human, `AskInsightisticService`'s
+deterministic question-to-plan builder — see `docs/ASK-INSIGHTISTIC.md`)
+ask for WooCommerce/GA4/GSC metrics **without ever writing SQL**. The
+caller chooses metrics, an optional dimension, and a period from
+allowlisted values; it can never name a table, column, or SQL fragment.
 
 ```
 raw plan (array)
   → PlanValidator            validates against the Semantic Metric Registry
   → SemanticQueryPlan        typed, trusted
-  → WooCommerceQueryCompiler compiles via Laravel's query builder only
+  → a source adapter         WooCommerceQueryCompiler / Ga4QueryCompiler /
+                              GscQueryCompiler — compiles via Laravel's
+                              query builder only, picked by $plan->source
   → ReadOnlySqlGuard         defense-in-depth check on the compiled SQL text
   → QueryConcurrencyLimiter  per-organization in-flight cap
   → read-only DB connection  a separate, least-privilege Postgres role
@@ -27,9 +32,45 @@ raw plan (array)
   → QueryResult              normalized evidence (metrics/rows/caveats/hash)
 ```
 
-Scoped to **WooCommerce only** for P1, matching the roadmap's separate `P4
-Multi-source Analytics` phase — GA4/GSC/PageSpeed metrics exist in the
-registry but are rejected by `PlanValidator::unsupportedSource()` today.
+Scoped to **WooCommerce, GA4, and GSC** as of P4. `pagespeed` metrics exist
+in the registry but stay rejected by `PlanValidator::unsupportedSource()`
+— see "Multi-source dispatch" below for why that one specifically stays
+out.
+
+## Multi-source dispatch (P4)
+
+`SafeWooQueryEngine` dispatches by `$plan->source` to one of three source
+adapters under `App\Query\Adapters`, each following the exact shape
+`WooCommerceQueryCompiler` established in P1 — a hardcoded
+`ALLOWED_TABLES` list and a hardcoded base-metric-id → column map, never
+values read out of the registry at runtime:
+
+| Source | Adapter | Table | Notes |
+|---|---|---|---|
+| `woocommerce` | `WooCommerceQueryCompiler` | `metric_snapshots`, `wc_orders`, `wc_order_items` | Aggregate + the one `product` dimension breakdown. |
+| `ga4` | `Ga4QueryCompiler` | `traffic_daily` | Aggregate only. `traffic_daily` stores more than one `source` per (site, date) — a first-party `connector_engagement` fallback lives alongside GA4 rows — so every compiled query adds `WHERE source = 'ga4'` in addition to `site_id`, matching the caveat every GA4 metric declares in the registry. |
+| `gsc` | `GscQueryCompiler` | `seo_daily` | Aggregate only. Mixes two SQL aggregate functions in one query: `SUM` for `organic_clicks`/`organic_impressions`, `AVG` for `organic_avg_position` (a ranking position, not something a period total means anything for). |
+
+Neither GA4 nor GSC metrics declare an `allowedDimensions` entry in the
+registry, so `PlanValidator` never accepts a dimension for them — the
+product breakdown path (`SafeWooQueryEngine::runBreakdown()`) stays
+WooCommerce-only without needing a source check of its own.
+
+**Why `pagespeed` is still excluded**: `App\Metrics\Catalog\PerformanceMetrics`
+(`lcp`, `inp`, `cls`) are "latest run" values — the most recent
+measurement, not something you `SUM`/`AVG` over a date range the way every
+metric above is. That's a genuinely different compilation shape (closest
+to "give me the latest row", not "aggregate rows in a range") this engine
+doesn't have an adapter for yet. Requesting a `pagespeed` metric still
+throws `unsupported_source` — an honest, typed rejection, not a silent
+wrong answer.
+
+**Why the class wasn't renamed**: `SafeWooQueryEngine` is already the
+tested, merged entry point every caller (`AnalyticsQueryController`,
+`AskInsightisticService`) depends on by that name. A rename buys nothing
+but risk and churn for a purely cosmetic change — the class's job
+(validate → dispatch → guard → scope → budget → execute → normalize)
+didn't change, only how many adapters it dispatches to.
 
 ## Why this is a clean slate, not a retrofit
 
@@ -72,9 +113,9 @@ plan-supplied string is ever concatenated into SQL text.**
 
 | Field | Rule |
 |---|---|
-| `metrics` | 1–5 registered ids, all the same `MetricDefinition::$source` (only `woocommerce` supported today). |
-| `dimension` | `null`, or a dimension every requested metric's `allowedDimensions` includes. Only `"product"` exists today (`product_revenue` only) — requesting it restricts `metrics` to just that one id. |
-| `filters` | Must be `[]` in P1 — no woocommerce metric declares a filter beyond `date_range`, which `period` already covers. Kept in the wire schema so P4 can add real filters without a breaking change. |
+| `metrics` | 1–5 registered ids, all the same `MetricDefinition::$source` — `woocommerce`, `ga4`, or `gsc` as of P4 (`pagespeed` still rejected, see "Multi-source dispatch" above). |
+| `dimension` | `null`, or a dimension every requested metric's `allowedDimensions` includes. Only `"product"` exists today (`product_revenue` only, `woocommerce`-only) — requesting it restricts `metrics` to just that one id. |
+| `filters` | Must be `[]` — no registered metric declares a filter beyond `date_range`, which `period` already covers. Kept in the wire schema so a future phase can add real filters without a breaking change. |
 | `period` | `preset` from `App\Support\DateRange`'s vocabulary (`today`, `yesterday`, `last_7_days`, `last_30_days`, `this_month`, `last_month`, `custom`). `custom` requires `from`/`to` as `YYYY-MM-DD`. |
 | `comparison` | `true` adds the previous equal-length period + deltas. Only valid without a `dimension`. |
 | `limit` | Row cap for a dimension breakdown (1–100, default 10, further clamped by `query_engine.chart_max_rows`). Ignored (must be absent) for an aggregate plan — those always return exactly one row. |
@@ -83,18 +124,22 @@ Unknown/invalid input throws `QueryEngineException` with a stable
 `errorCode` (`unknown_metric`, `disallowed_dimension`, `invalid_period`,
 ...) — never a generic 500.
 
-## Compiled query shapes (P1 has exactly two)
+## Compiled query shapes (exactly two, across all three sources)
 
-1. **Aggregate** (`dimension: null`) — one `SUM(...)` query against
-   `metric_snapshots` for every base metric column the requested metrics
+1. **Aggregate** (`dimension: null`) — one query against the source's own
+   table (`metric_snapshots` for woocommerce, `traffic_daily` for ga4,
+   `seo_daily` for gsc) for every base metric column the requested metrics
    need (following one level of `dependsOn` for derived metrics like
-   `aov`/`refund_rate`/`repeat_purchase_rate`), computed in one round trip.
-   Derived metrics are then computed in PHP by `DerivedMetricCalculator`
-   from hardcoded formulas — never by evaluating `MetricDefinition::$formula`,
+   `aov`/`refund_rate`/`repeat_purchase_rate`/`conversion_rate`/
+   `organic_ctr`), computed in one round trip — `SUM(...)` for every base
+   column except `organic_avg_position`, which is `AVG(...)`. Derived
+   metrics are then computed in PHP by `DerivedMetricCalculator` from
+   hardcoded formulas — never by evaluating `MetricDefinition::$formula`,
    which is a documentation string only.
-2. **Product breakdown** (`dimension: "product"`) — `wc_order_items` joined
-   to `wc_orders`, scoped to `CommerceStatus::REVENUE_PAID`, grouped by
-   product, ordered by revenue, limited.
+2. **Product breakdown** (`dimension: "product"`, woocommerce only) —
+   `wc_order_items` joined to `wc_orders`, scoped to
+   `CommerceStatus::REVENUE_PAID`, grouped by product, ordered by revenue,
+   limited.
 
 Both are always scoped by `Site` and organization id passed in by the
 caller (`AnalyticsQueryController` / `SafeWooQueryEngine::run()`'s
@@ -105,12 +150,14 @@ plan cannot widen its own scope.
 
 The engine executes every compiled query through `DB::connection('readonly')`
 — a genuinely separate Postgres role from the one migrations/writes use,
-with `SELECT`-only grants on exactly
-`WooCommerceQueryCompiler::ALLOWED_TABLES` (`metric_snapshots`, `wc_orders`,
-`wc_order_items`). This is a real database-level guarantee, verified in CI
-by `tests/Feature/Query/ReadOnlyIdentityTest.php`, which connects as that
-role directly and asserts Postgres itself rejects INSERT/UPDATE/DELETE/
-ALTER and reads of any table outside the allowlist.
+with `SELECT`-only grants on exactly `ReadOnlyRoleProvisioner::allowedTables()`
+— the union of every registered source adapter's `ALLOWED_TABLES`
+(`metric_snapshots`, `wc_orders`, `wc_order_items` from WooCommerce;
+`traffic_daily` from GA4; `seo_daily` from GSC, added by P4). This is a
+real database-level guarantee, verified in CI by
+`tests/Feature/Query/ReadOnlyIdentityTest.php`, which connects as that role
+directly and asserts Postgres itself rejects INSERT/UPDATE/DELETE/ALTER
+and reads of any table outside the allowlist.
 
 ### Provisioning
 
@@ -177,12 +224,17 @@ with `code` matching `QueryEngineException::$errorCode`, status mapped by
 `AnalyticsQueryController::statusFor()` (422 default, 429 concurrency, 503
 misconfigured, 504 timeout).
 
-## What P1 deliberately does not do
+## What this engine deliberately does not do
 
-- Does not translate natural language into a plan — that's P3's job. This
-  engine executes an already-shaped plan, from any caller.
-- Does not implement GA4/GSC/PageSpeed adapters — `PlanValidator` rejects
-  any source other than `woocommerce` today (P4).
+- Does not translate natural language into a plan itself — that's
+  `App\Services\Ask\QuestionPlanBuilder` (P3)'s job, which produces this
+  same raw-plan-array shape and hands it to this engine unchanged. See
+  `docs/ASK-INSIGHTISTIC.md`.
+- Does not implement a PageSpeed adapter — `PlanValidator` rejects
+  `pagespeed` specifically because its metrics are a "latest run" shape
+  this engine's SUM/AVG-over-range compilers can't express (see
+  "Multi-source dispatch" above), not because multi-source support itself
+  is missing (GA4/GSC landed in P4).
 - Does not persist runs, query hashes, or evidence — `QueryResult` computes
   everything P2 (Analytical Evidence Ledger) needs to persist (`queryHash`,
   duration, row count, freshness-relevant range) but does not write it
@@ -192,6 +244,7 @@ misconfigured, 504 timeout).
   against `REVENUE_PAID`, matching `MetricsAssembler`'s existing dashboard
   behavior, consistent with how the registry documents that metric.
 - Does not support multiple simultaneous dimensions, ad-hoc filters beyond
-  `date_range`, or CTEs/subqueries — the two compiled shapes above are P1's
-  complete scope. Extending either is a reviewed change to
-  `WooCommerceQueryCompiler`, never a runtime capability.
+  `date_range`, dimension breakdowns for GA4/GSC, or CTEs/subqueries — the
+  compiled shapes documented above are this engine's complete scope.
+  Extending any of them is a reviewed change to the relevant adapter, never
+  a runtime capability.

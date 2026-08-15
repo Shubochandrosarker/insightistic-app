@@ -48,8 +48,13 @@ it('rejects mixing metrics from different sources', function () {
     planValidator()->validate(['metrics' => ['net_revenue', 'ga4_sessions']]);
 })->throws(QueryEngineException::class);
 
-it('rejects sources other than woocommerce for now', function () {
-    planValidator()->validate(['metrics' => ['ga4_sessions']]);
+it('accepts ga4 and gsc sources (P4 Multi-source Analytics)', function () {
+    expect(planValidator()->validate(['metrics' => ['ga4_sessions']])->source)->toBe('ga4');
+    expect(planValidator()->validate(['metrics' => ['organic_clicks']])->source)->toBe('gsc');
+});
+
+it('still rejects pagespeed — a "latest run" shape this engine does not compile', function () {
+    planValidator()->validate(['metrics' => ['lcp']]);
 })->throws(QueryEngineException::class);
 
 it('accepts the product dimension only for a metric that declares it', function () {

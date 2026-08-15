@@ -8,12 +8,14 @@ namespace App\Query;
  * primary SQL safety control" — this is NOT the primary control here.
  *
  * The primary control is architectural: every query this engine ever runs
- * is built exclusively by App\Query\Adapters\WooCommerceQueryCompiler using
- * Laravel's parameter-bound query builder against a hardcoded table/column
- * allowlist (WooCommerceQueryCompiler::ALLOWED_TABLES /
- * BASE_METRIC_COLUMNS) — no plan-supplied string is ever concatenated into
- * SQL text. This guard exists to catch a *future compiler bug*, not
- * untrusted input, which is why a regex-based check is acceptable here.
+ * is built exclusively by one of the source adapters under
+ * App\Query\Adapters (WooCommerceQueryCompiler, and as of P4
+ * Ga4QueryCompiler/GscQueryCompiler) using Laravel's parameter-bound query
+ * builder against that adapter's own hardcoded table/column allowlist
+ * (`ALLOWED_TABLES` / its base-metric-column map) — no plan-supplied
+ * string is ever concatenated into SQL text. This guard exists to catch a
+ * *future compiler bug*, not untrusted input, which is why a regex-based
+ * check is acceptable here.
  *
  * Bindings are checked separately from SQL text: they are always passed to
  * PDO as parameters, never interpolated, so they cannot smuggle SQL — this

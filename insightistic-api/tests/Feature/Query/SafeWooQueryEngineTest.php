@@ -55,6 +55,28 @@ function engineSnapshot(Site $site, string $date, array $attrs = []): void
     ], $attrs));
 }
 
+function engineTrafficDaily(Site $site, string $date, array $attrs = []): void
+{
+    DB::table('traffic_daily')->insert(array_merge([
+        'site_id' => $site->id,
+        'date' => $date,
+        'source' => 'ga4',
+        'users' => 0, 'new_users' => 0, 'sessions' => 100, 'engaged_sessions' => 0,
+        'page_views' => 0, 'conversions' => 5, 'transactions' => 0,
+        'created_at' => now(), 'updated_at' => now(),
+    ], $attrs));
+}
+
+function engineSeoDaily(Site $site, string $date, array $attrs = []): void
+{
+    DB::table('seo_daily')->insert(array_merge([
+        'site_id' => $site->id,
+        'date' => $date,
+        'clicks' => 40, 'impressions' => 400, 'avg_position' => 8.5,
+        'created_at' => now(), 'updated_at' => now(),
+    ], $attrs));
+}
+
 function engineOrderItem(Site $site, int $orderId, int $productId, array $orderAttrs = [], array $itemAttrs = []): void
 {
     DB::table('wc_orders')->updateOrInsert(
@@ -193,6 +215,68 @@ it('propagates plan validation failures as QueryEngineException', function () {
     $site = engineSite($org);
 
     app(SafeWooQueryEngine::class)->run(['metrics' => ['not_a_real_metric']], $site, $org->id);
+})->throws(QueryEngineException::class);
+
+it('runs a ga4 aggregate, scoped to source = ga4 (P4 Multi-source Analytics)', function () {
+    [, $org] = makeOrgUser('engine-ga4@example.com');
+    $site = engineSite($org);
+    engineTrafficDaily($site, now()->toDateString(), ['sessions' => 200, 'conversions' => 10]);
+    // A same-day, same-site row from the first-party fallback source must
+    // never be summed into a ga4-scoped metric.
+    engineTrafficDaily($site, now()->toDateString(), ['source' => 'connector_engagement', 'sessions' => 999999]);
+
+    $result = app(SafeWooQueryEngine::class)->run(
+        ['metrics' => ['ga4_sessions', 'ga4_conversions', 'conversion_rate']],
+        $site,
+        $org->id,
+    );
+
+    expect($result->metrics['ga4_sessions'])->toBe(200)
+        ->and($result->metrics['ga4_conversions'])->toBe(10)
+        ->and($result->metrics['conversion_rate'])->toBe(0.05);
+});
+
+it('runs a gsc aggregate mixing SUM and AVG base metrics', function () {
+    [, $org] = makeOrgUser('engine-gsc@example.com');
+    $site = engineSite($org);
+    engineSeoDaily($site, now()->subDay()->toDateString(), ['clicks' => 10, 'impressions' => 100, 'avg_position' => 5.0]);
+    engineSeoDaily($site, now()->toDateString(), ['clicks' => 30, 'impressions' => 300, 'avg_position' => 7.0]);
+
+    $result = app(SafeWooQueryEngine::class)->run(
+        ['metrics' => ['organic_clicks', 'organic_impressions', 'organic_ctr', 'organic_avg_position'], 'period' => ['preset' => 'last_7_days']],
+        $site,
+        $org->id,
+    );
+
+    expect($result->metrics['organic_clicks'])->toBe(40)
+        ->and($result->metrics['organic_impressions'])->toBe(400)
+        ->and($result->metrics['organic_ctr'])->toBe(0.1)
+        ->and($result->metrics['organic_avg_position'])->toBe(6.0);
+});
+
+it('never returns another site\'s ga4/gsc data', function () {
+    [, $org] = makeOrgUser('engine-ga4-isolation-a@example.com');
+    [, $otherOrg] = makeOrgUser('engine-ga4-isolation-b@example.com');
+    $site = engineSite($org, 'Mine3');
+    $otherSite = engineSite($otherOrg, 'Theirs3');
+
+    engineTrafficDaily($site, now()->toDateString(), ['sessions' => 50]);
+    engineTrafficDaily($otherSite, now()->toDateString(), ['sessions' => 999999]);
+    engineSeoDaily($site, now()->toDateString(), ['clicks' => 5]);
+    engineSeoDaily($otherSite, now()->toDateString(), ['clicks' => 999999]);
+
+    $ga4Result = app(SafeWooQueryEngine::class)->run(['metrics' => ['ga4_sessions']], $site, $org->id);
+    $gscResult = app(SafeWooQueryEngine::class)->run(['metrics' => ['organic_clicks']], $site, $org->id);
+
+    expect($ga4Result->metrics['ga4_sessions'])->toBe(50)
+        ->and($gscResult->metrics['organic_clicks'])->toBe(5);
+});
+
+it('rejects pagespeed plans with unsupported_source rather than compiling a "latest run" shape', function () {
+    [, $org] = makeOrgUser('engine-pagespeed@example.com');
+    $site = engineSite($org);
+
+    app(SafeWooQueryEngine::class)->run(['metrics' => ['lcp']], $site, $org->id);
 })->throws(QueryEngineException::class);
 
 it('releases its concurrency slot so a later sequential query still succeeds', function () {

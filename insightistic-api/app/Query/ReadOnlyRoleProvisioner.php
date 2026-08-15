@@ -2,20 +2,37 @@
 
 namespace App\Query;
 
+use App\Query\Adapters\Ga4QueryCompiler;
+use App\Query\Adapters\GscQueryCompiler;
 use App\Query\Adapters\WooCommerceQueryCompiler;
 use PDO;
 
 /**
- * The actual DDL for provisioning the Safe WooCommerce Query Engine's
- * read-only Postgres role, extracted from the `db:provision-readonly-role`
- * command so it can also run against a deliberately raw, un-wrapped PDO
- * connection in tests (see tests/TestCase.php's `afterRefreshingDatabase()`
- * docblock for why that matters: PHPUnit\RefreshDatabase wraps every test
- * in a transaction it rolls back, which would silently undo a GRANT issued
+ * The actual DDL for provisioning the Safe Query Engine's read-only
+ * Postgres role, extracted from the `db:provision-readonly-role` command so
+ * it can also run against a deliberately raw, un-wrapped PDO connection in
+ * tests (see tests/TestCase.php's `afterRefreshingDatabase()` docblock for
+ * why that matters: PHPUnit\RefreshDatabase wraps every test in a
+ * transaction it rolls back, which would silently undo a GRANT issued
  * through Laravel's own connection object).
+ *
+ * Grants SELECT on the union of every registered source adapter's
+ * ALLOWED_TABLES (spec: P4 Multi-source Analytics added Ga4QueryCompiler
+ * and GscQueryCompiler's tables here) — one role, one provisioning step,
+ * whichever sources are actually connected for a given site.
  */
 class ReadOnlyRoleProvisioner
 {
+    /** @return string[] Every table this role is granted SELECT on, across all registered source adapters. */
+    public static function allowedTables(): array
+    {
+        return array_values(array_unique([
+            ...WooCommerceQueryCompiler::ALLOWED_TABLES,
+            ...Ga4QueryCompiler::ALLOWED_TABLES,
+            ...GscQueryCompiler::ALLOWED_TABLES,
+        ]));
+    }
+
     /**
      * @return string[] Tables granted SELECT.
      */
@@ -42,10 +59,11 @@ class ReadOnlyRoleProvisioner
         $pdo->exec("GRANT USAGE ON SCHEMA public TO \"{$role}\";");
         $pdo->exec("REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA public FROM \"{$role}\";");
 
-        foreach (WooCommerceQueryCompiler::ALLOWED_TABLES as $table) {
+        $tables = self::allowedTables();
+        foreach ($tables as $table) {
             $pdo->exec("GRANT SELECT ON \"{$table}\" TO \"{$role}\";");
         }
 
-        return WooCommerceQueryCompiler::ALLOWED_TABLES;
+        return $tables;
     }
 }

@@ -3,6 +3,7 @@
 namespace App\Query;
 
 use App\Metrics\MetricRegistry;
+use App\Metrics\MetricSource;
 
 /**
  * The only place a raw (e.g. AI-authored) plan array is turned into a
@@ -13,6 +14,16 @@ use App\Metrics\MetricRegistry;
  */
 class PlanValidator
 {
+    /**
+     * Bumped whenever the plan schema or validation rules change in a way
+     * that could make an old evidence_runs row's semantic_plan_json
+     * un-replayable against the current validator. Persisted verbatim onto
+     * every EvidenceRun (spec: Analytical Evidence Ledger) so a stored plan
+     * is always interpreted against the rules that were actually in force
+     * when it ran.
+     */
+    public const CONTRACT_VERSION = 'v1';
+
     public const MAX_METRICS = 5;
 
     public const MIN_LIMIT = 1;
@@ -27,6 +38,19 @@ class PlanValidator
         'today', 'yesterday', 'last_7_days', 'last_30_days', 'this_month', 'last_month', 'custom',
     ];
 
+    /**
+     * Sources with a real query-engine adapter (spec: P4 Multi-source
+     * Analytics). `pagespeed` deliberately stays out: its metrics
+     * (App\Metrics\Catalog\PerformanceMetrics) are "latest run" values, not
+     * a SUM-over-date-range like every metric here — that's a different
+     * compilation shape this engine doesn't support yet, not an oversight.
+     */
+    private const SUPPORTED_SOURCES = [
+        MetricSource::WOOCOMMERCE,
+        MetricSource::GA4,
+        MetricSource::GSC,
+    ];
+
     public function __construct(private readonly MetricRegistry $registry) {}
 
     public function validate(array $raw): SemanticQueryPlan
@@ -34,7 +58,7 @@ class PlanValidator
         $metricIds = $this->validateMetrics($raw['metrics'] ?? null);
         $source = $this->registry->get($metricIds[0])->source;
 
-        if ($source !== 'woocommerce') {
+        if (! in_array($source, self::SUPPORTED_SOURCES, true)) {
             throw QueryEngineException::unsupportedSource($source);
         }
 

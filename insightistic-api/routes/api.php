@@ -16,6 +16,9 @@ use App\Http\Controllers\Api\Admin\UserController as AdminUserController;
 use App\Http\Controllers\Api\AlertController;
 use App\Http\Controllers\Api\AnalyticsController;
 use App\Http\Controllers\Api\AnalyticsQueryController;
+use App\Http\Controllers\Api\AskInsightisticController;
+use App\Http\Controllers\Api\EvidenceController;
+use App\Http\Controllers\Api\SavedInsightController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\BillingController;
 use App\Http\Controllers\Api\BrandSettingsController;
@@ -214,6 +217,29 @@ Route::middleware(['auth:sanctum', 'tenant', 'restrict.impersonation'])->group(f
         // already-validated semantic plan. POST because a plan is a
         // structured request body, not just a handful of query params.
         Route::post('sites/{site}/analytics/query', [AnalyticsQueryController::class, 'query'])
+            ->middleware('throttle:query-engine');
+
+        // Analytical Evidence Ledger (spec Phase 2 / P2) — the "Evidence
+        // drawer": what ran, which metric versions, freshness, outcome.
+        Route::get('sites/{site}/evidence', [EvidenceController::class, 'index']);
+        Route::get('sites/{site}/evidence/{run}', [EvidenceController::class, 'show']);
+
+        // Ask Insightistic V2 (spec Phase 2 / P3) — free-text question in,
+        // cited/confidence-scored answer out. Runs through the same Safe
+        // Query Engine + Evidence Ledger pipeline as analytics/query, so it
+        // shares that route's throttle.
+        Route::post('sites/{site}/ask', [AskInsightisticController::class, 'ask'])
+            ->middleware('throttle:query-engine');
+
+        // Saved Insights (spec Phase 2 / P5) — a named, reusable plan a
+        // user can re-run on demand. "run" shares analytics/query's
+        // throttle since it executes the same engine.
+        Route::get('sites/{site}/saved-insights', [SavedInsightController::class, 'index']);
+        Route::post('sites/{site}/saved-insights', [SavedInsightController::class, 'store']);
+        Route::get('sites/{site}/saved-insights/{savedInsight}', [SavedInsightController::class, 'show']);
+        Route::patch('sites/{site}/saved-insights/{savedInsight}', [SavedInsightController::class, 'update']);
+        Route::delete('sites/{site}/saved-insights/{savedInsight}', [SavedInsightController::class, 'destroy']);
+        Route::post('sites/{site}/saved-insights/{savedInsight}/run', [SavedInsightController::class, 'run'])
             ->middleware('throttle:query-engine');
 
         // Traffic / SEO / Performance (Milestone 4). Read the tables Milestone

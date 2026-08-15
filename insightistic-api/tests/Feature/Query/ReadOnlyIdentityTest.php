@@ -35,6 +35,14 @@ it('can SELECT from an allowlisted table', function () {
     expect($result[0]->c)->toBeInt();
 });
 
+it('can SELECT from the GA4/GSC tables added in P4 (traffic_daily, seo_daily)', function () {
+    $traffic = DB::connection('readonly')->select('select count(*) as c from traffic_daily');
+    $seo = DB::connection('readonly')->select('select count(*) as c from seo_daily');
+
+    expect($traffic[0]->c)->toBeInt()
+        ->and($seo[0]->c)->toBeInt();
+});
+
 it('cannot INSERT even with a hand-crafted statement', function () {
     DB::connection('readonly')->insert(
         'insert into metric_snapshots (site_id, date, revenue, orders) values (999999, ?, 1, 1)',

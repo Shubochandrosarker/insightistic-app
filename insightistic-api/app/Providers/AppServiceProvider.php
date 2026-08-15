@@ -76,6 +76,14 @@ class AppServiceProvider extends ServiceProvider
         // canonical metric definitions. Singleton because the catalog is
         // static per-process — no request-scoped state, no DB round trip.
         $this->app->singleton(\App\Metrics\MetricRegistry::class);
+
+        // Safe WooCommerce Query Engine (spec Phase 2 / P1).
+        $this->app->bind(\App\Query\QueryConcurrencyLimiter::class, function () {
+            return new \App\Query\QueryConcurrencyLimiter(
+                (int) config('insightistic.query_engine.max_concurrent_per_org', 3),
+                (int) config('insightistic.query_engine.concurrency_lock_ttl_seconds', 30),
+            );
+        });
     }
 
     public function boot(): void
@@ -131,6 +139,13 @@ class AppServiceProvider extends ServiceProvider
         \Illuminate\Support\Facades\RateLimiter::for('exports', function (\Illuminate\Http\Request $request) {
             return \Illuminate\Cache\RateLimiting\Limit::perMinute(10)
                 ->by('exports:' . ($request->user()?->id ?: $request->ip()));
+        });
+        // query-engine: Safe WooCommerce Query Engine (spec Phase 2 / P1).
+        // Per-user on top of QueryConcurrencyLimiter's per-org in-flight cap
+        // — this bounds request *rate*, concurrency limits bound simultaneous execution.
+        \Illuminate\Support\Facades\RateLimiter::for('query-engine', function (\Illuminate\Http\Request $request) {
+            return \Illuminate\Cache\RateLimiting\Limit::perMinute(30)
+                ->by('query-engine:' . ($request->user()?->id ?: $request->ip()));
         });
 
         /*

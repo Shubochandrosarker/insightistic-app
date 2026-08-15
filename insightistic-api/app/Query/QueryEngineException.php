@@ -87,4 +87,17 @@ class QueryEngineException extends RuntimeException
     {
         return new self('timeout', 'The query took too long and was cancelled.');
     }
+
+    /**
+     * Raised by App\Services\Ask\QuestionPlanBuilder (spec: Ask Insightistic
+     * V2, P3), not the validator — a question that maps to no known metric
+     * keyword never reaches PlanValidator at all. Reuses this exception
+     * type (rather than a separate one) so AnalyticsQueryController and
+     * AskInsightisticController can share one error-response shape and so
+     * EvidenceLedger::recordFailure() keeps a single accepted type.
+     */
+    public static function questionNotUnderstood(): self
+    {
+        return new self('question_not_understood', 'Could not map this question to a known metric. Try mentioning a specific metric, like "revenue", "orders", or "refund rate".');
+    }
 }

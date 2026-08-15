@@ -1,10 +1,14 @@
-# Security Test Matrix — Safe WooCommerce Query Engine (P1)
+# Security Test Matrix — Safe Query Engine (P1 + P4)
 
 Tracks `docs/04-LOCAL-QUERY-SECURITY.md`'s "Mandatory adversarial tests"
 and `docs/10-ACCEPTANCE-TESTS.md`'s SQL/query-security and tenant-isolation
 gates against what this PR actually implemented and tested. Every row is
 PASS or NOT VERIFIED — nothing is hidden. Re-run and update this file
-before any change to `app/Query/*`.
+before any change to `app/Query/*`. Originally P1 (WooCommerce only);
+`ReadOnlySqlGuardTest.php`'s adversarial suite exercises the guard directly
+so every row below held unchanged when P4 added the `Ga4QueryCompiler` /
+`GscQueryCompiler` adapters — the guard has no source-specific logic to
+regress.
 
 ## SQL / query security
 
@@ -18,8 +22,8 @@ before any change to `app/Query/*`.
 | File functions (`pg_read_file`, `load_file`, `outfile`, `dumpfile`) | PASS | Same file, "rejects delay/exfiltration/introspection primitives". |
 | SLEEP / BENCHMARK / `pg_sleep` | PASS | Same file, same test. |
 | Unapproved schema introspection (`information_schema`, `pg_catalog`) | PASS | Same file, same test. |
-| Unauthorized tables/columns | PASS (two layers) | App layer: guard rejects any table outside `WooCommerceQueryCompiler::ALLOWED_TABLES` (`ReadOnlySqlGuardTest.php`). DB layer: `ReadOnlyIdentityTest.php` proves the role itself cannot SELECT `users` even if every app check were bypassed. |
-| Cross-tenant filter/scope widening | PASS | `SafeWooQueryEngineTest.php` — "never returns another site's data for an aggregate query" / "...for a product breakdown". Scope comes only from `SafeWooQueryEngine::run()`'s `Site $site`/`int $organizationId` arguments, never from plan content — there is no plan field that could carry a site/org id in the first place. |
+| Unauthorized tables/columns | PASS (two layers) | App layer: guard rejects any table outside the active adapter's `ALLOWED_TABLES` (`ReadOnlySqlGuardTest.php`). DB layer: `ReadOnlyIdentityTest.php` proves the role itself cannot SELECT `users` even if every app check were bypassed — and, as of P4, proves it CAN select the newly-granted `traffic_daily`/`seo_daily` ("can SELECT from the GA4/GSC tables added in P4"). |
+| Cross-tenant filter/scope widening | PASS | `SafeWooQueryEngineTest.php` — "never returns another site's data for an aggregate query" / "...for a product breakdown" / "...ga4/gsc data" (P4). Scope comes only from `SafeWooQueryEngine::run()`'s `Site $site`/`int $organizationId` arguments, never from plan content — there is no plan field that could carry a site/org id in the first place. |
 | Query timeout enforced | PASS | `StatementTimeoutExecutorTest.php` — real Postgres `statement_timeout` cancellation (SQLSTATE 57014) against a `pg_sleep(2)` with a 100ms budget, and proof the setting doesn't leak onto a later query. |
 | Result row cap | PASS | `SafeWooQueryEngine::runBreakdown()` clamps to `chart_max_rows`; `QueryResult::$truncated` surfaces when hit. Covered indirectly by the breakdown tests; no dedicated 500+-row fixture test (see Known gaps). |
 | Read-only DB identity cannot write even if every app validator fails | PASS | `ReadOnlyIdentityTest.php` — direct hand-crafted INSERT/UPDATE/DELETE/ALTER against the real role, bypassing the app entirely. |

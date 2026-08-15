@@ -4,7 +4,7 @@ import Link from "next/link";
 import { Bell } from "lucide-react";
 import { useApi } from "@/lib/useApi";
 import { apiPatch } from "@/lib/api";
-import { timeAgo } from "@/lib/format";
+import { timeAgo, isSafeHref } from "@/lib/format";
 
 type Notification = {
   id: number;
@@ -111,7 +111,7 @@ export function NotificationCenter() {
                     {n.message && <p className="mt-1 text-xs text-muted">{n.message}</p>}
 
                     <div className="mt-2 flex items-center gap-3 text-xs">
-                      {n.action_url && (
+                      {n.action_url && isSafeHref(n.action_url) && (
                         <Link
                           href={n.action_url}
                           onClick={() => { mark(n.id, "read"); setOpen(false); }}

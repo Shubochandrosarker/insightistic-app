@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Organization;
 use App\Services\Ai\AiProvider;
+use App\Services\Ai\ProviderResolver;
 use App\Services\Ai\RuleProvider;
 use App\Services\LicenseService;
 use App\Services\UsageService;
@@ -31,6 +32,7 @@ class PluginAiController extends Controller
         private LicenseService $licenses,
         private UsageService $usage,
         private AiProvider $provider,
+        private ProviderResolver $providerResolver,
     ) {}
 
     public function generate(Request $request)
@@ -53,15 +55,27 @@ class PluginAiController extends Controller
             return $this->error('no_license', 'Your Insightistic account is not active. Please check your billing.', 403);
         }
 
-        if ($this->provider instanceof RuleProvider) {
-            // The $0 fallback only knows the SaaS dashboard's own
+        // Every other AI call site (InsightGenerator, AnswerSynthesizer,
+        // InvestigationSynthesizer) resolves through ProviderResolver so an
+        // org's allow_external_ai=false decision is honored before any data
+        // leaves the server. This endpoint forwards up to 40,000 chars of
+        // the site's own business data as a freeform prompt, so it must
+        // follow the exact same rule rather than calling the configured
+        // provider directly.
+        $site = $request->attributes->get('connector_site');
+        $provider = $site ? $this->providerResolver->resolve($this->provider, $site) : $this->provider;
+
+        if ($provider instanceof RuleProvider) {
+            // Reached either because no real provider is configured, or
+            // because the org opted out of external AI — either way, the
+            // $0/consent-off fallback only knows the SaaS dashboard's own
             // single-insight shape (title/summary/possible_reason/...), not
             // the plugin's {overall_score,key_insights,recommendations,
             // warnings} schema — fail clearly instead of returning a
             // payload the plugin can't render into anything meaningful.
             return $this->error(
                 'ai_provider_unavailable',
-                'Insightistic Cloud AI is not configured on the server yet. Try again later, or use a bring-your-own-key provider in the meantime.',
+                'Insightistic Cloud AI is not available for this site right now (unconfigured, or external AI has been disabled in Privacy settings).',
                 503,
             );
         }
@@ -74,7 +88,7 @@ class PluginAiController extends Controller
             );
         }
 
-        $result = $this->provider->generate($data['system_prompt'], [
+        $result = $provider->generate($data['system_prompt'], [
             'engine'        => $data['model'],
             'skill_profile' => $data['skill_profile'] ?? 'basic',
             'instructions'  => $data['prompt'],

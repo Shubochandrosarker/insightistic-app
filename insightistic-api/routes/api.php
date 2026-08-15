@@ -258,19 +258,25 @@ Route::middleware(['auth:sanctum', 'tenant', 'restrict.impersonation'])->group(f
         // approved by configuration; contrast with P9's ActionProposal,
         // which always requires an explicit human approval per action.
         Route::get('sites/{site}/automation-rules', [AutomationRuleController::class, 'index']);
-        Route::post('sites/{site}/automation-rules', [AutomationRuleController::class, 'store']);
         Route::get('sites/{site}/automation-rules/{automationRule}', [AutomationRuleController::class, 'show']);
-        Route::patch('sites/{site}/automation-rules/{automationRule}', [AutomationRuleController::class, 'update']);
-        Route::delete('sites/{site}/automation-rules/{automationRule}', [AutomationRuleController::class, 'destroy']);
-        Route::post('sites/{site}/automation-rules/{automationRule}/run', [AutomationRuleController::class, 'run']);
         Route::get('sites/{site}/automation-rules/{automationRule}/runs', [AutomationRuleController::class, 'runs']);
+        // Configuring or firing a rule executes real side effects (webhooks,
+        // emails) — a client_viewer (read-only stakeholder access) must not
+        // be able to create/edit/fire one, only see that it exists.
+        Route::middleware('role:owner,admin,analyst')->group(function () {
+            Route::post('sites/{site}/automation-rules', [AutomationRuleController::class, 'store']);
+            Route::patch('sites/{site}/automation-rules/{automationRule}', [AutomationRuleController::class, 'update']);
+            Route::delete('sites/{site}/automation-rules/{automationRule}', [AutomationRuleController::class, 'destroy']);
+            Route::post('sites/{site}/automation-rules/{automationRule}/run', [AutomationRuleController::class, 'run']);
+        });
 
         // Anomaly Engine (spec Phase 2 / P7) — median/MAD detection across
         // the small fixed metric set AnomalyDetector::supportedMetrics()
         // declares.
         Route::get('sites/{site}/anomalies', [AnomalyController::class, 'index']);
         Route::post('sites/{site}/anomalies/scan', [AnomalyController::class, 'scan']);
-        Route::post('sites/{site}/anomalies/{anomaly}/acknowledge', [AnomalyController::class, 'acknowledge']);
+        Route::post('sites/{site}/anomalies/{anomaly}/acknowledge', [AnomalyController::class, 'acknowledge'])
+            ->middleware('role:owner,admin,analyst');
 
         // WPAgentistic Investigations (spec Phase 2 / P8) — read-only,
         // multi-metric diagnostic runs. Shares analytics/query's throttle
@@ -287,8 +293,14 @@ Route::middleware(['auth:sanctum', 'tenant', 'restrict.impersonation'])->group(f
         Route::get('sites/{site}/action-proposals', [ActionProposalController::class, 'index']);
         Route::post('sites/{site}/action-proposals', [ActionProposalController::class, 'store']);
         Route::get('sites/{site}/action-proposals/{actionProposal}', [ActionProposalController::class, 'show']);
-        Route::post('sites/{site}/action-proposals/{actionProposal}/approve', [ActionProposalController::class, 'approve']);
-        Route::post('sites/{site}/action-proposals/{actionProposal}/reject', [ActionProposalController::class, 'reject']);
+        // approve() is the one method in the whole app that actually executes
+        // a proposed action (ActionProposalService::approve -> ActionExecutor).
+        // The "explicit human approval" invariant means a trusted human, not
+        // any authenticated user with view access to the site.
+        Route::middleware('role:owner,admin,analyst')->group(function () {
+            Route::post('sites/{site}/action-proposals/{actionProposal}/approve', [ActionProposalController::class, 'approve']);
+            Route::post('sites/{site}/action-proposals/{actionProposal}/reject', [ActionProposalController::class, 'reject']);
+        });
 
         // Outcome Verification (spec Phase 2 / P11) — closes the loop P9
         // opens: did an executed action's watched metric actually improve?
@@ -343,8 +355,10 @@ Route::middleware(['auth:sanctum', 'tenant', 'restrict.impersonation'])->group(f
         // schedule (routes/console.php) or on demand via scan().
         Route::get('sites/{site}/alerts', [AlertController::class, 'index']);
         Route::post('sites/{site}/alerts/scan', [AlertController::class, 'scan']);
-        Route::post('sites/{site}/alerts/{alert}/resolve', [AlertController::class, 'resolve']);
-        Route::post('sites/{site}/alerts/{alert}/reopen', [AlertController::class, 'reopen']);
+        Route::middleware('role:owner,admin,analyst')->group(function () {
+            Route::post('sites/{site}/alerts/{alert}/resolve', [AlertController::class, 'resolve']);
+            Route::post('sites/{site}/alerts/{alert}/reopen', [AlertController::class, 'reopen']);
+        });
 
         // AI insights (Week 4)
         Route::get('sites/{site}/insights', [InsightController::class, 'index']);
@@ -389,11 +403,15 @@ Route::middleware(['auth:sanctum', 'tenant', 'restrict.impersonation'])->group(f
         Route::get('sites/{site}/reports', [ReportController::class, 'index']);
         Route::post('sites/{site}/reports/generate', [ReportController::class, 'generate']);
 
-        // Scheduled report delivery (Milestone 5, spec §12).
+        // Scheduled report delivery (Milestone 5, spec §12). A schedule sends
+        // data to an email address on a recurring basis, so configuring one
+        // is owner/admin, matching emails/integrations connect above.
         Route::get('sites/{site}/report-schedules', [ReportScheduleController::class, 'index']);
-        Route::post('sites/{site}/report-schedules', [ReportScheduleController::class, 'store']);
-        Route::patch('sites/{site}/report-schedules/{schedule}', [ReportScheduleController::class, 'update']);
-        Route::delete('sites/{site}/report-schedules/{schedule}', [ReportScheduleController::class, 'destroy']);
+        Route::middleware('role:owner,admin')->group(function () {
+            Route::post('sites/{site}/report-schedules', [ReportScheduleController::class, 'store']);
+            Route::patch('sites/{site}/report-schedules/{schedule}', [ReportScheduleController::class, 'update']);
+            Route::delete('sites/{site}/report-schedules/{schedule}', [ReportScheduleController::class, 'destroy']);
+        });
 
         // Bounded CSV exports (Milestone 5, spec §12).
         Route::middleware('throttle:exports')->group(function () {

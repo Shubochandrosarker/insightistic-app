@@ -56,9 +56,12 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     reloadSites().finally(() => setLoading(false));
 
     // Best-effort: apply saved white-label branding (owner/admin only; ignored otherwise).
+    // A failure here shouldn't block the dashboard, but it shouldn't be
+    // silent either — an unbranded/wrong-branded white-label dashboard with
+    // no signal anywhere is exactly the kind of bug that's hard to notice.
     apiGet("/brand-settings")
       .then((r) => applyBrand(r?.brand_settings?.primary_color))
-      .catch(() => {});
+      .catch((err) => console.warn("Failed to load brand settings; using defaults.", err));
   }, []);
 
   const setSiteId = (id: number) => { setSiteIdState(id); localStorage.setItem("ins_site", String(id)); };

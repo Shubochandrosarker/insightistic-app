@@ -25,6 +25,20 @@ export const initials = (name?: string) =>
     .map((p) => p[0]?.toUpperCase())
     .join("") || "?";
 
+/**
+ * Guards against rendering an API-sourced URL (citation link, knowledge
+ * source, report download, notification action_url, ...) as an `href`
+ * with an unexpected scheme like `javascript:` or `data:`. These values
+ * originate from ingested content or generated reports, not direct user
+ * input, but nothing upstream validates the scheme before it reaches JSX
+ * — this is the one place that does, so every API-sourced href should be
+ * routed through it before rendering.
+ */
+export function isSafeHref(url: string | null | undefined): boolean {
+  if (!url) return false;
+  return /^https?:\/\//i.test(url) || url.startsWith("/") || url.startsWith("#");
+}
+
 export function timeAgo(iso?: string | null): string {
   if (!iso) return "—";
   const then = new Date(iso).getTime();

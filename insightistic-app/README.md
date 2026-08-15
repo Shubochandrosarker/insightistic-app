@@ -3,7 +3,7 @@
 Marketing site + multi-tenant dashboard for the Insightistic API.
 
 ## Stack
-Next.js 15 (App Router) · React 19 · Tailwind CSS 3 · Recharts · lucide-react.
+Next.js 16 (App Router) · React 19 · Tailwind CSS 3 · Recharts · lucide-react.
 Token auth (Sanctum bearer) stored in `localStorage`. No external state library.
 
 ## Run

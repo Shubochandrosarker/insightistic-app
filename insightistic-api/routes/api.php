@@ -16,8 +16,14 @@ use App\Http\Controllers\Api\Admin\UserController as AdminUserController;
 use App\Http\Controllers\Api\AlertController;
 use App\Http\Controllers\Api\AnalyticsController;
 use App\Http\Controllers\Api\AnalyticsQueryController;
+use App\Http\Controllers\Api\ActionProposalController;
+use App\Http\Controllers\Api\AgencyController;
+use App\Http\Controllers\Api\AnomalyController;
 use App\Http\Controllers\Api\AskInsightisticController;
+use App\Http\Controllers\Api\AutomationRuleController;
 use App\Http\Controllers\Api\EvidenceController;
+use App\Http\Controllers\Api\InvestigationController;
+use App\Http\Controllers\Api\OutcomeVerificationController;
 use App\Http\Controllers\Api\SavedInsightController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\BillingController;
@@ -148,6 +154,11 @@ Route::middleware(['auth:sanctum', 'tenant', 'restrict.impersonation'])->group(f
     Route::get('metrics', [MetricRegistryController::class, 'index']);
     Route::get('metrics/{metric}', [MetricRegistryController::class, 'show']);
 
+    // Agency Intelligence (spec Phase 2 / P10) — cross-site rollup for the
+    // caller's own organization. No {site} segment on purpose; see
+    // AgencyController's docblock.
+    Route::get('agency/overview', [AgencyController::class, 'overview']);
+
     // Team management (Week 5) — owner/admin can view & invite; owner-only mutations.
     Route::get('organizations/users', [TeamController::class, 'index'])->middleware('role:owner,admin');
     Route::post('organizations/users/invite', [TeamController::class, 'invite'])->middleware('role:owner,admin');
@@ -241,6 +252,51 @@ Route::middleware(['auth:sanctum', 'tenant', 'restrict.impersonation'])->group(f
         Route::delete('sites/{site}/saved-insights/{savedInsight}', [SavedInsightController::class, 'destroy']);
         Route::post('sites/{site}/saved-insights/{savedInsight}/run', [SavedInsightController::class, 'run'])
             ->middleware('throttle:query-engine');
+
+        // Automation Studio (spec Phase 2 / P6) — trigger -> action rules
+        // an org admin configures once. Actions execute automatically once
+        // approved by configuration; contrast with P9's ActionProposal,
+        // which always requires an explicit human approval per action.
+        Route::get('sites/{site}/automation-rules', [AutomationRuleController::class, 'index']);
+        Route::post('sites/{site}/automation-rules', [AutomationRuleController::class, 'store']);
+        Route::get('sites/{site}/automation-rules/{automationRule}', [AutomationRuleController::class, 'show']);
+        Route::patch('sites/{site}/automation-rules/{automationRule}', [AutomationRuleController::class, 'update']);
+        Route::delete('sites/{site}/automation-rules/{automationRule}', [AutomationRuleController::class, 'destroy']);
+        Route::post('sites/{site}/automation-rules/{automationRule}/run', [AutomationRuleController::class, 'run']);
+        Route::get('sites/{site}/automation-rules/{automationRule}/runs', [AutomationRuleController::class, 'runs']);
+
+        // Anomaly Engine (spec Phase 2 / P7) — median/MAD detection across
+        // the small fixed metric set AnomalyDetector::supportedMetrics()
+        // declares.
+        Route::get('sites/{site}/anomalies', [AnomalyController::class, 'index']);
+        Route::post('sites/{site}/anomalies/scan', [AnomalyController::class, 'scan']);
+        Route::post('sites/{site}/anomalies/{anomaly}/acknowledge', [AnomalyController::class, 'acknowledge']);
+
+        // WPAgentistic Investigations (spec Phase 2 / P8) — read-only,
+        // multi-metric diagnostic runs. Shares analytics/query's throttle
+        // since each investigation runs the same query engine, once per
+        // requested metric.
+        Route::get('sites/{site}/investigations', [InvestigationController::class, 'index']);
+        Route::post('sites/{site}/investigations', [InvestigationController::class, 'store'])
+            ->middleware('throttle:query-engine');
+        Route::get('sites/{site}/investigations/{investigation}', [InvestigationController::class, 'show']);
+
+        // Bridgistic Approved Actions (spec Phase 2 / P9) — a proposed
+        // action that ALWAYS requires an explicit human approval before it
+        // ever executes. No auto-approval route exists.
+        Route::get('sites/{site}/action-proposals', [ActionProposalController::class, 'index']);
+        Route::post('sites/{site}/action-proposals', [ActionProposalController::class, 'store']);
+        Route::get('sites/{site}/action-proposals/{actionProposal}', [ActionProposalController::class, 'show']);
+        Route::post('sites/{site}/action-proposals/{actionProposal}/approve', [ActionProposalController::class, 'approve']);
+        Route::post('sites/{site}/action-proposals/{actionProposal}/reject', [ActionProposalController::class, 'reject']);
+
+        // Outcome Verification (spec Phase 2 / P11) — closes the loop P9
+        // opens: did an executed action's watched metric actually improve?
+        // No store() route — rows are created automatically by
+        // ActionProposalService::approve().
+        Route::get('sites/{site}/outcome-verifications', [OutcomeVerificationController::class, 'index']);
+        Route::get('sites/{site}/outcome-verifications/{outcomeVerification}', [OutcomeVerificationController::class, 'show']);
+        Route::post('sites/{site}/outcome-verifications/{outcomeVerification}/verify', [OutcomeVerificationController::class, 'verify']);
 
         // Traffic / SEO / Performance (Milestone 4). Read the tables Milestone
         // 3 shipped; return honest empty states until connector v2 ingests.

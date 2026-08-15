@@ -185,6 +185,157 @@ All notable changes to the Insightistic platform (app + API + plugin).
   update-versioning/delete/run/run-failure/tenant-isolation), plus a
   `NestedRouteBindingTest` regression case for `SavedInsightController::update()`.
 
+### Added — Automation Studio (Insightistic VNext P6)
+- **`App\Models\AutomationRule`** — a trigger → action rule an org admin
+  configures once, that fires automatically (no per-occurrence approval —
+  contrast with P9). Full CRUD + `POST .../run` (manual test-fire) + `GET
+  .../runs` (audit trail) under `/api/sites/{site}/automation-rules[/{id}]`.
+  See `docs/AUTOMATION-STUDIO.md`.
+- Three trigger types: `schedule` (own cadence, checked against the rule's
+  `last_fired_at` — `AutomationDispatcher::shouldFireSchedule()`),
+  `alert_created` (fires only for a genuinely NEW `Alert`, wired into
+  `AlertDetector::raise()`), `anomaly_detected` (wired into P7's
+  `AnomalyScanner`, below).
+- **`App\Services\Actions\ActionType`/`ActionExecutor`** — the shared
+  allowlist and single implementation P6 and P9 both execute through:
+  `resolve_alert`, `dismiss_insight`, `create_saved_insight`,
+  `send_notification_email`, `send_webhook`. Every action only ever
+  mutates Insightistic's own database or sends mail/webhooks the org
+  itself configured — none reach out and mutate a customer's live
+  WordPress site (no such channel exists).
+- **`App\Services\Actions\WebhookUrlGuard`** — SSRF-hardened `send_webhook`
+  validation (rejects internal hostnames without touching DNS, then
+  resolves and screens every IP against private/loopback/reserved ranges),
+  independent of the knowledge crawler's own `SafeUrlFetcher` on purpose.
+  Signed via HMAC-SHA256 over the exact bytes sent
+  (`X-Insightistic-Timestamp`/`X-Insightistic-Signature`).
+  `AutomationRule.webhook_secret` is `encrypted` at rest and `hidden` from
+  every API response.
+- `php artisan insightistic:automation-run-scheduled`, hourly.
+- Tests: `ActionExecutorTest`, `WebhookUrlGuardTest`,
+  `AutomationDispatcherTest`, `AlertTriggerWiringTest`,
+  `AutomationRuleEndpointTest`, `RunScheduledAutomationsCommandTest`, plus
+  a `NestedRouteBindingTest` case.
+
+### Added — Anomaly Engine (Insightistic VNext P7)
+- **`App\Services\Anomaly\AnomalyDetector`** — generalizes the median/MAD
+  anomaly math `AcquisitionIntelligence::trafficAnomalies()` already
+  shipped for GA4 sessions specifically to a small fixed metric set across
+  all three query-engine sources (`net_revenue`, `orders`,
+  `refund_count`, `ga4_sessions`, `ga4_conversions`, `organic_clicks`,
+  `organic_impressions`). Deliberately independent code from
+  `AcquisitionIntelligence` (small copy over a risky shared abstraction —
+  matches the existing per-adapter-hardcoded-map convention in
+  `app/Query/Adapters`), so P7 cannot regress that shipped, tested
+  feature. See `docs/ANOMALY-ENGINE.md`.
+- **`App\Services\Anomaly\AnomalyScanner`** — mirrors `AlertDetector::scan()`:
+  persists only genuinely new findings (`unique(site_id, metric_id,
+  date)`), fires P6's `anomaly_detected` trigger for each one.
+- `GET/POST /api/sites/{site}/anomalies[/scan]`,
+  `POST .../{id}/acknowledge`. `php artisan insightistic:anomalies-scan`,
+  every 6 hours.
+- Tests: `AnomalyDetectorTest`, `AnomalyScannerTest`, `AnomalyEndpointTest`,
+  `ScanAnomaliesCommandTest`, plus a `NestedRouteBindingTest` case and a
+  new `ReadOnlyIdentityTest` case proving the readonly role can read the
+  tables this engine needs.
+
+### Added — WPAgentistic Investigations (Insightistic VNext P8)
+- **`App\Services\Investigation\InvestigationService`** — a read-only,
+  multi-metric diagnostic run ("why did revenue drop?") across up to
+  `PlanValidator::MAX_METRICS` metrics at once, each through the identical
+  `PlanValidator`/`SafeWooQueryEngine`/`EvidenceLedger` pipeline
+  (`run_type = "investigation"`) every other analytical surface uses. A
+  failing metric is recorded as one failed finding among the rest, never
+  aborts the whole investigation. `POST/GET /api/sites/{site}/investigations[/{id}]`.
+  See `docs/WPAGENTISTIC-INVESTIGATIONS.md`.
+- **`InvestigationSynthesizer`** — the identical two-layer AI guarantee
+  `AnswerSynthesizer` (P3) established, applied across multiple metrics:
+  deterministic narrative first, optional AI rephrase that can only touch
+  narrative text — `confidence`/`citation_refs` are never read from the AI
+  response under any circumstance (`InvestigationSynthesizerTest` proves
+  this against a provider that tries to smuggle a fabricated number, a
+  fake confidence, and a fake citation through).
+  **WPAgentistic is read-only — it cannot take any action.** A
+  recommendation in its narrative can only become a real action through a
+  separate, explicit P9 `ActionProposal` call; nothing here creates one
+  automatically.
+- Tests: `InvestigationServiceTest`, `InvestigationSynthesizerTest`,
+  `InvestigationEndpointTest`, plus a `NestedRouteBindingTest` case.
+
+### Added — Bridgistic Approved Actions (Insightistic VNext P9)
+- **`App\Models\ActionProposal`** — a proposed action that **always**
+  requires an explicit human approval before it ever executes. A new
+  internal subsystem (not an external "Bridgistic" integration — see
+  `docs/BRIDGISTIC-APPROVED-ACTIONS.md`), using the identical
+  `ActionType`/`ActionExecutor` P6 uses.
+  `POST/GET /api/sites/{site}/action-proposals[/{id}]` +
+  `POST .../{id}/approve` + `POST .../{id}/reject`.
+- **No auto-approval tier exists.**
+  `ActionProposalService::approve()` is the only method in the codebase
+  that ever executes a `ActionProposal`'s action, and it always requires a
+  real, authenticated reviewer id. Approval and execution happen together,
+  synchronously — no "approved but not yet run" limbo state.
+  `pending -> executed|failed` (approved) or `pending -> rejected` (never
+  executed); both terminal, both throw on a repeat review attempt.
+- Every proposal requires a non-empty `rationale` and may cite the real
+  `evidence_runs` ids it's backed by. `source_type`/`source_id` record
+  provenance (`manual` | `wpagentistic_investigation` | `anomaly` |
+  `automation_rule`).
+- `send_webhook` proposals always deliver **unsigned** —
+  `ActionProposal` has no encrypted-secret column the way `AutomationRule`
+  does, and the `store()` endpoint actively strips any smuggled
+  `secret`/`webhook_secret` key before ever persisting `action_params_json`.
+- Tests: `ActionProposalServiceTest`, `ActionProposalEndpointTest`
+  (including cross-org approve/reject/view adversarial cases proving a
+  blocked attempt truly executed nothing), plus a `NestedRouteBindingTest`
+  case.
+
+### Added — Agency Intelligence (Insightistic VNext P10)
+- **`App\Services\Agency\AgencyRollupService`** — a cross-site rollup for
+  an agency-style organization: `net_revenue`/`orders` (with
+  previous-period comparison) for every site the caller's organization
+  owns, in one call. `GET /api/agency/overview?period=`. See
+  `docs/AGENCY-INTELLIGENCE.md`.
+- Deliberately **not** a `sites/{site}/...` route — sits in the same outer
+  tenant-scoped group `GET /api/sites` already uses, since this is the one
+  surface that spans every site an org owns at once. No new tenant-scope
+  risk: every site is already filtered to the caller's own organization
+  before the query engine is ever touched.
+- `health` (`at_risk`/`watch`/`healthy`/`unknown`) uses the **identical**
+  `-20%` threshold `AlertDetector::REVENUE_DROP_THRESHOLD` already applies
+  — a site flagged `at_risk` here is, by construction, one that would also
+  trip a real alert. A site whose query fails is its own `"status":
+  "error"` row, never silently dropped or counted as zero.
+- Tests: `AgencyOverviewTest` (rollup correctness, health classification,
+  invalid period, cross-org isolation).
+
+### Added — Outcome Verification (Insightistic VNext P11)
+- **`App\Services\Outcome\OutcomeVerificationService`** — closes the loop
+  P9 opens: captures a baseline reading of whatever metric an executed
+  `ActionProposal`'s source implicates (the `Anomaly`'s `metric_id`, or an
+  `Investigation`'s first successful finding's `metric_id`), then a
+  scheduled/manual `verify()` re-measures it and classifies
+  `improved`/`unchanged`/`worsened` (±5-point noise band) —
+  `no_metric_to_verify` immediately, not left dangling, when no metric is
+  derivable. See `docs/OUTCOME-VERIFICATION.md`.
+- Measured values live directly on `outcome_verifications`
+  (`baseline_value`/`followup_value`) rather than re-derived from
+  `evidence_runs` afterward — `evidence_runs` doesn't persist a copy of
+  the computed value (P2's documented scope), only the plan/hash/outcome;
+  the linked evidence-run ids are citations, not a value store.
+- Wired automatically into `ActionProposalService::approve()` — a
+  baseline is captured immediately after a successful execution, never
+  after a failed one. `GET/POST /api/sites/{site}/outcome-verifications[/{id}][/verify]`.
+  `php artisan insightistic:outcome-verifications-run`, daily (a
+  verification isn't due until 24h after its baseline regardless).
+- Explicitly does not claim causation — "improved" means the watched
+  metric measurably moved up after the action executed, never that the
+  action *caused* it.
+- Tests: `OutcomeVerificationServiceTest` (manual/anomaly/investigation
+  baseline derivation, classification, auto-capture-on-approve),
+  `OutcomeVerificationEndpointTest`, `RunOutcomeVerificationsCommandTest`,
+  plus a `NestedRouteBindingTest` case.
+
 ### Fixed — build/runtime blockers found in post-merge audit
 - **`IngestionFailure` was unloadable**, taking the whole knowledge ingestion
   pipeline with it: it promoted a `public readonly string $code`, and

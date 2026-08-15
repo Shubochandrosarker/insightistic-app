@@ -99,6 +99,17 @@ jobs:
           php artisan db:seed --class=Database\\Seeders\\PlanSeeder --force
           php artisan migrate --force
           php artisan migrate:status
+      # Safe WooCommerce Query Engine (P1): provisions the least-privilege
+      # Postgres role tests/Feature/Query/ReadOnlyIdentityTest.php connects
+      # as directly, proving at the database level (not just app logic) that
+      # it cannot write. Credentials match phpunit.xml's READONLY_DB_* values.
+      # Belt-and-suspenders: tests/Pest.php also self-provisions this same
+      # role once Pest's RefreshDatabase has finished migrate:fresh (which
+      # drops/recreates every table and would otherwise wipe this step's
+      # grants) — see that file's docblock. This step keeps provisioning
+      # visible in the CI log and is not itself load-bearing.
+      - name: Provision read-only query-engine role
+        run: php artisan db:provision-readonly-role --role=insightistic_readonly --password=readonly_test_pw
       - name: Pest test suite
         run: php artisan test --compact
       # Informational only. The codebase deliberately aligns `=>` in arrays

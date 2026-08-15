@@ -33,6 +33,12 @@
         <env name="DB_USERNAME" value="insightistic"/>
         <env name="DB_PASSWORD" value="insightistic"/>
         <env name="DB_URL" value=""/>
+        <!-- Safe WooCommerce Query Engine (P1) read-only identity. Provision
+             once locally/in CI: php artisan db:provision-readonly-role,
+             role insightistic_readonly, password readonly_test_pw.
+             See docs/SAFE-QUERY-ENGINE.md. -->
+        <env name="READONLY_DB_USERNAME" value="insightistic_readonly"/>
+        <env name="READONLY_DB_PASSWORD" value="readonly_test_pw"/>
         <env name="MAIL_MAILER" value="array"/>
         <env name="QUEUE_CONNECTION" value="sync"/>
         <env name="SESSION_DRIVER" value="array"/>

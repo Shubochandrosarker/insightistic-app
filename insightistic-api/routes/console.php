@@ -89,3 +89,35 @@ Schedule::command('insightistic:insights-generate')
 Schedule::command('insightistic:telemetry-prune')
     ->dailyAt('03:50')
     ->withoutOverlapping();
+
+/*
+ * Automation Studio (spec: Insightistic VNext P6) schedule-triggered
+ * rules. Hourly — the finest cadence a rule can configure
+ * (trigger_config.frequency = 'hourly'); AutomationDispatcher's own
+ * shouldFireSchedule() decides per-rule whether a daily/weekly rule is
+ * actually due on any given run, so this can safely run more often than
+ * every rule needs without double-firing anything.
+ */
+Schedule::command('insightistic:automation-run-scheduled')
+    ->hourly()
+    ->withoutOverlapping();
+
+/*
+ * Anomaly Engine (spec: Insightistic VNext P7). Every 6 hours, same
+ * cadence as the alert scan it complements — the underlying data
+ * (metric_snapshots/traffic_daily/seo_daily) is daily-granularity, so
+ * more-frequent runs wouldn't surface anything new within a day.
+ */
+Schedule::command('insightistic:anomalies-scan')
+    ->everySixHours()
+    ->withoutOverlapping();
+
+/*
+ * Outcome Verification (spec: Insightistic VNext P11). Daily — a
+ * verification isn't due until 24h after its baseline was captured
+ * anyway (OutcomeVerificationService::MIN_HOURS_BEFORE_VERIFY), so a
+ * finer cadence would just find nothing due most runs.
+ */
+Schedule::command('insightistic:outcome-verifications-run')
+    ->dailyAt('06:00')
+    ->withoutOverlapping();

@@ -2,6 +2,7 @@
 
 namespace App\Services\Intelligence;
 
+use App\Metrics\CommerceStatus;
 use App\Models\Site;
 use App\Support\DateRange;
 use Illuminate\Support\Facades\DB;
@@ -186,7 +187,7 @@ class AcquisitionIntelligence
 
         $revenue = DB::table('wc_orders')
             ->where('site_id', $site->id)
-            ->whereIn('status', ['completed', 'processing'])
+            ->whereIn('status', CommerceStatus::CONFIRMED_PAID)
             ->whereBetween('created_at_store', [$range->utcStart(), $range->utcEnd()])
             ->selectRaw('DATE(created_at_store) as day, SUM(total - COALESCE(refund_total, 0)) as revenue, COUNT(*) as orders')
             ->groupBy('day')

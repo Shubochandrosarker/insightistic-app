@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Metrics\CommerceStatus;
 use App\Models\MetricSnapshot;
 use App\Models\Site;
 use App\Models\WcCustomer;
@@ -13,11 +14,19 @@ use Illuminate\Support\Facades\DB;
  * Single source of truth for reading aggregated metrics out of snapshots +
  * live tables. Shared by AnalyticsController (charts/KPIs), InsightGenerator
  * (AI context), and ReportBuilder (PDF reports) so the numbers always agree.
+ *
+ * The metric definitions this class implements are catalogued in
+ * App\Metrics\Catalog\CommerceMetrics (see docs/SEMANTIC-METRICS.md) — that
+ * registry is metadata (what a metric means), this class is still the
+ * implementation (how it's computed).
  */
 class MetricsAssembler
 {
-    public const PAID_STATUSES   = ['completed', 'processing', 'on-hold'];
-    public const FAILED_STATUSES = ['failed', 'cancelled'];
+    /** @deprecated Kept for backward compatibility with any external reference; use App\Metrics\CommerceStatus::REVENUE_PAID directly. */
+    public const PAID_STATUSES   = CommerceStatus::REVENUE_PAID;
+
+    /** @deprecated Kept for backward compatibility with any external reference; use App\Metrics\CommerceStatus::FAILED directly. */
+    public const FAILED_STATUSES = CommerceStatus::FAILED;
 
     /** Sum snapshot rows over a range into headline metrics. */
     public function aggregate(int $siteId, DateRange $range): array

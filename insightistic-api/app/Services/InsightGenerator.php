@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\AiInsight;
 use App\Models\Site;
 use App\Services\Ai\AiProvider;
+use App\Services\Ai\ProviderResolver;
 use App\Support\DateRange;
 
 class InsightGenerator
@@ -22,13 +23,15 @@ TXT;
     public function __construct(
         private MetricsAssembler $metrics,
         private AiProvider $provider,
+        private ProviderResolver $providerResolver,
     ) {}
 
     /** Pure: produce a normalized insight array without storing or metering. */
     public function summarize(Site $site, DateRange $range): ?array
     {
         $context = $this->metrics->bundle($site, $range);
-        $raw = $this->provider->generate(self::SYSTEM, $context, $site->organization_id);
+        $provider = $this->resolveProvider($site);
+        $raw = $provider->generate(self::SYSTEM, $context, $site->organization_id);
 
         if (! $raw) {
             return null;
@@ -41,9 +44,26 @@ TXT;
             'recommendation'  => (string) ($raw['recommendation'] ?? ''),
             'severity'        => $this->normalizeSeverity($raw['severity'] ?? 'medium'),
             'priority_score'  => $this->clampPriority($raw['priority_score'] ?? 5),
-            'model'           => $this->provider->model(),
+            'model'           => $provider->model(),
             'context'         => $context,
         ];
+    }
+
+    /**
+     * The AiProvider injected into this class is resolved once, app-wide,
+     * from config — it has no notion of a per-organization consent
+     * decision. `CopilotChat::mode()` already gets this right for the chat
+     * path; this class (legacy `generate()` and `generateContextual()`,
+     * including the nightly GenerateProactiveInsights command) did not, a
+     * gap flagged in docs/CONVERSATIONAL-ANALYTICS-AUDIT.md §3. When an
+     * organization has turned external AI off, force the $0 deterministic
+     * fallback instead of silently sending its business data out anyway.
+     * Delegates to ProviderResolver so Ask Insightistic V2 (P3) enforces
+     * the identical rule instead of re-deriving it.
+     */
+    private function resolveProvider(Site $site): AiProvider
+    {
+        return $this->providerResolver->resolve($this->provider, $site);
     }
 
     /** Generate + persist an AiInsight (caller handles usage limits/metering). */
@@ -110,7 +130,8 @@ TXT;
      */
     public function generateContextual(Site $site, string $type, array $context): ?AiInsight
     {
-        $raw = $this->provider->generate(self::CONTEXTUAL_SYSTEM, ['type' => $type, 'evidence' => $context['raw']], $site->organization_id);
+        $provider = $this->resolveProvider($site);
+        $raw = $provider->generate(self::CONTEXTUAL_SYSTEM, ['type' => $type, 'evidence' => $context['raw']], $site->organization_id);
 
         if (! $raw) {
             return null;
@@ -130,7 +151,7 @@ TXT;
             'severity'          => $this->normalizeSeverity($raw['severity'] ?? 'medium'),
             'confidence'        => $this->normalizeConfidence($raw['confidence'] ?? 'medium'),
             'data_limitations'  => (string) ($raw['data_limitations'] ?? ''),
-            'model'             => $this->provider->model(),
+            'model'             => $provider->model(),
             'generated_at'      => now()->toIso8601String(),
             'expires_at'        => now()->addHours(6)->toIso8601String(),
         ];

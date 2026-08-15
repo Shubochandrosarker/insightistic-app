@@ -11,6 +11,7 @@ use App\Models\Site;
 use App\Models\SyncLog;
 use App\Models\TrafficDaily;
 use App\Models\WcProduct;
+use App\Services\Automation\AutomationDispatcher;
 use App\Support\DateRange;
 use Illuminate\Support\Carbon;
 
@@ -37,6 +38,8 @@ class AlertDetector
     private const PERFORMANCE_REGRESSION_POINTS = 15;  // score points dropped vs previous run
     private const SYNC_STALE_HOURS = 48;
     private const BROKEN_LINK_SPIKE_HITS = 10;         // hits in the window for a single path
+
+    public function __construct(private readonly AutomationDispatcher $dispatcher) {}
 
     /** Run every rule for one site. Returns the alerts created this run. */
     public function scan(Site $site): array
@@ -203,7 +206,7 @@ class AlertDetector
             return null; // already alerted — dedup
         }
 
-        return Alert::create([
+        $alert = Alert::create([
             'site_id'     => $site->id,
             'type'        => $type,
             'title'       => $title,
@@ -211,6 +214,14 @@ class AlertDetector
             'severity'    => $severity,
             'is_resolved' => false,
         ]);
+
+        // Automation Studio (P6) 'alert_created' trigger — fires only for a
+        // genuinely NEW alert (this line is unreachable on a dedup hit
+        // above), matching the same "don't re-fire on every scan" rule
+        // AlertDetector itself already follows.
+        $this->dispatcher->dispatch('alert_created', $site, ['alert_type' => $type, 'alert_id' => $alert->id]);
+
+        return $alert;
     }
 
     /** Auto-resolve any open alert of this type — the condition that raised it is no longer true. */

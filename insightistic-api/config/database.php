@@ -99,6 +99,36 @@ return [
             'sslmode' => env('DB_SSLMODE', 'prefer'),
         ],
 
+        /*
+         * Read-only execution identity for the Safe WooCommerce Query Engine
+         * (spec Phase 2 / P1). Same host/database as `pgsql`, but a
+         * separate, least-privilege Postgres role — provisioned once via
+         * `php artisan db:provision-readonly-role` (see
+         * docs/SAFE-QUERY-ENGINE.md) — that can SELECT from exactly the
+         * tables the query engine reads and nothing else. This is the
+         * "even if every app validator fails, the identity still cannot
+         * write" control: it must remain a *different* role from `pgsql`'s,
+         * never an alias for it.
+         *
+         * Left unconfigured (no READONLY_DB_USERNAME) in local/testing is
+         * fine — SafeWooQueryEngine falls back to the default connection
+         * there and flags it in its result metadata. In production it is
+         * required; the engine refuses to execute without it.
+         */
+        'readonly' => [
+            'driver' => 'pgsql',
+            'host' => env('DB_HOST', '127.0.0.1'),
+            'port' => env('DB_PORT', '5432'),
+            'database' => env('DB_DATABASE', 'laravel'),
+            'username' => env('READONLY_DB_USERNAME'),
+            'password' => env('READONLY_DB_PASSWORD', ''),
+            'charset' => env('DB_CHARSET', 'utf8'),
+            'prefix' => '',
+            'prefix_indexes' => true,
+            'search_path' => 'public',
+            'sslmode' => env('DB_SSLMODE', 'prefer'),
+        ],
+
         'sqlsrv' => [
             'driver' => 'sqlsrv',
             'url' => env('DB_URL'),

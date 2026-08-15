@@ -4,6 +4,338 @@ All notable changes to the Insightistic platform (app + API + plugin).
 
 ## [Unreleased] — Advanced SaaS + AI Knowledge Base upgrade (2026-07)
 
+### Added — Semantic Metric Registry (Insightistic VNext P0)
+- **`App\Metrics\MetricRegistry`** — one versioned, canonical catalog of 19
+  metric definitions (id, label, unit, source, table/column, formula,
+  freshness, caveats) covering revenue, orders, AOV, refunds, products,
+  customers, GA4, GSC and Core Web Vitals. Metadata only — computation stays
+  in the existing `MetricsAssembler`/`MetricSnapshotService`/
+  `ContextAssembler` services. See `docs/SEMANTIC-METRICS.md`.
+- `GET /api/metrics` (+ `?source=`) and `GET /api/metrics/{id}` — read-only,
+  authenticated-tenant access to the catalog for the dashboard/Copilot.
+- `php artisan metrics:list` for manual/CI verification.
+- **Fixed order-status classification drift**: `MetricsAssembler`,
+  `MetricSnapshotService`, `CustomerIntelligence`, `ProductIntelligence` and
+  `AcquisitionIntelligence` each hand-typed their own paid/failed status
+  array; two of the five silently disagreed (on-hold orders included in
+  revenue KPIs but excluded from customer/product intelligence). All five
+  now read from `App\Metrics\CommerceStatus::REVENUE_PAID` /
+  `::CONFIRMED_PAID` / `::FAILED`. No metric value changed — see
+  `docs/CONVERSATIONAL-ANALYTICS-AUDIT.md` for the full before/after table
+  and the still-open product decision this surfaced.
+- `docs/CONVERSATIONAL-ANALYTICS-AUDIT.md` — Phase 0 current-state audit for
+  the VNext roadmap (analytics/AI/tenant-isolation/automation surfaces).
+
+### Added — Safe WooCommerce Query Engine (Insightistic VNext P1)
+- **`App\Query\SafeWooQueryEngine`** — typed plan → validated →
+  compiled-via-query-builder-only → defense-in-depth-guarded →
+  tenant-scoped → concurrency/timeout-budgeted → executed read-only →
+  normalized evidence. No plan-supplied string is ever concatenated into
+  SQL; table/column names are hardcoded literals in
+  `WooCommerceQueryCompiler`, never runtime-derived. See
+  `docs/SAFE-QUERY-ENGINE.md`.
+- `POST /api/sites/{site}/analytics/query` — executes a plan requesting up
+  to 5 registered WooCommerce metrics, an optional `product` dimension
+  breakdown, and an optional previous-period comparison. Behind the
+  existing `site.access` tenant-scope middleware.
+- **Read-only Postgres execution identity**: a genuinely separate,
+  SELECT-only role (`php artisan db:provision-readonly-role`), verified in
+  CI by directly attempting INSERT/UPDATE/DELETE/ALTER and reads of
+  out-of-allowlist tables against the real role and confirming Postgres
+  itself rejects them — not just an application-layer check. Fails closed
+  in production if unconfigured; falls back to the default connection with
+  a logged warning in local/dev.
+- Query budgets: 8s statement timeout (real Postgres `SET LOCAL
+  statement_timeout`, proven to cancel and to never leak onto a later
+  query), a 500-row breakdown cap, and a per-organization 3-in-flight
+  concurrency limit (429 when exceeded).
+- `docs/SECURITY-TEST-MATRIX.md` — the full adversarial SQL / tenant-
+  isolation / concurrency test matrix, PASS or explicitly NOT VERIFIED per
+  row, nothing hidden.
+- Tests: 97 new (unit + feature), full existing suite (363 tests) green,
+  zero regressions.
+
+### Added — Analytical Evidence Ledger (Insightistic VNext P2)
+- **`App\Query\EvidenceLedger`** persists every Safe Query Engine execution
+  — success or failure — as one `evidence_runs` row: the validated plan,
+  each metric's *resolved* registry version, a reproducibility hash
+  (`sha256(site_id | compiled SQL | bindings)`), timing, the site's own
+  data-freshness (independent of the query's requested period), and
+  outcome. A separate table from the existing `ai_runs` on purpose — that
+  table's `ai_message_id` is a `NOT NULL` FK into Copilot chat messages and
+  its rows feed `UsageService`'s AI-usage quota metering; most query-engine
+  runs involve no AI call and no chat message at all. See
+  `docs/ANALYTICAL-EVIDENCE.md`.
+- `SafeWooQueryEngine` itself stays a pure computation with no storage side
+  effect (P1's documented boundary preserved); `AnalyticsQueryController`
+  now calls `EvidenceLedger::recordSuccess()`/`recordFailure()` explicitly
+  after every run and returns `evidence_run_id` in the response.
+- `GET /api/sites/{site}/evidence` (`?status=`, `?run_type=`, `?limit=`) and
+  `GET /api/sites/{site}/evidence/{run}` — the "Evidence drawer" read
+  surface. Same tenant-scope pattern as every other site-scoped route; a
+  run belonging to a different site or organization 404s.
+- **Fixed a consent gap flagged by the P0 audit**: `InsightGenerator`
+  (legacy insight summarization + the nightly proactive-insights job) called
+  its injected `AiProvider` regardless of an organization's
+  `allow_external_ai` setting — only `CopilotChat`'s chat path actually
+  respected that consent flag. Extracted the check into
+  `App\Services\Ai\ProviderResolver` (forces the deterministic `$0`
+  `RuleProvider` when consent is off) so both `InsightGenerator` and P3's
+  `AskInsightisticService` enforce the identical rule.
+- Tests: `EvidenceLedgerTest`, `EvidenceEndpointTest`,
+  `InsightGeneratorConsentTest`, plus a permanent regression case added to
+  `NestedRouteBindingTest` for `EvidenceController::show()` (a positional
+  route-parameter bug caught only by a full-suite run — see that test
+  file's docblock).
+
+### Added — Ask Insightistic V2 (Insightistic VNext P3)
+- `POST /api/sites/{site}/ask` — a free-text question in, a cited,
+  confidence-scored answer out. Runs through the exact same
+  `PlanValidator`/`SafeWooQueryEngine`/`EvidenceLedger` pipeline as a
+  hand-authored `analytics/query` plan; a question is only a different way
+  of producing that plan's raw-array shape, never a parallel query path.
+  See `docs/ASK-INSIGHTISTIC.md`.
+- **`App\Services\Ask\QuestionPlanBuilder`** — deterministic, keyword-based
+  question → plan mapping against `MetricRegistry` (no AI involved in
+  understanding the question). A question matching no known metric keyword
+  gets an honest `422 question_not_understood`, not a guess.
+- **`App\Services\Ask\ConfidenceScorer`** — `high`/`medium`/`low` from data
+  freshness, keyword-match ambiguity, and result shape. Never from a
+  model's own self-reported confidence, which is not evidence.
+- **`App\Services\Ask\AnswerSynthesizer`** — a fully deterministic
+  answer contract (mirroring `CopilotChat`'s existing shape) built only
+  from `QueryResult`'s real numbers; an optional AI rephrase step may touch
+  narrative text only (`direct_answer`, `key_finding`, `why_it_matters`,
+  `recommended_actions`). `confidence`, `supporting_metrics` and
+  `citation_refs` are never read from the AI response under any
+  circumstance — `tests/Unit/Ask/AnswerSynthesizerTest.php` proves this
+  against a provider that tries to smuggle a fabricated number and a fake
+  confidence through. Skipped entirely (not just discarded) when
+  `ProviderResolver` resolves to the rule-based fallback, so no request is
+  even sent when external AI is off for the organization.
+- **`App\Services\Ask\ChartSpecBuilder`** — reshapes `QueryResult` into a
+  `kpi` (aggregate) or `bar` (breakdown) chart spec; computes nothing,
+  copies numbers already produced by the query engine.
+- `evidence_runs`' `ai_used`/`ai_model` columns (added ahead of use in P2's
+  migration) are now actually populated, by Ask's runs (`run_type = "ask"`)
+  — always `false`/`null` for a plain `query` run, which never calls AI.
+- Tests: `QuestionPlanBuilderTest`, `AnswerSynthesizerTest`,
+  `AskInsightisticEndpointTest` (tenant isolation, no-match handling,
+  breakdown routing, AI-consent-off behavior).
+
+### Added — Multi-source Analytics (Insightistic VNext P4)
+- **`App\Query\Adapters\Ga4QueryCompiler`** and **`GscQueryCompiler`** —
+  two new source adapters mirroring `WooCommerceQueryCompiler`'s shape
+  exactly: hardcoded `ALLOWED_TABLES` and base-metric-id → column maps,
+  every SELECT built via the query builder only. GA4 reads `traffic_daily`
+  scoped to `source = 'ga4'` (that table also stores a first-party
+  `connector_engagement` fallback per day — never summed into a GA4-scoped
+  metric). GSC reads `seo_daily`, mixing `SUM` (clicks/impressions) and
+  `AVG` (`organic_avg_position` — a ranking position, not a period total)
+  in one compiled query.
+- `PlanValidator` now accepts `ga4`/`gsc` alongside `woocommerce`.
+  `pagespeed` stays rejected on purpose: its metrics are "latest run"
+  values, a different compilation shape this engine doesn't support yet —
+  an honest `unsupported_source`, not a silent wrong answer.
+- `DerivedMetricCalculator` gains `conversion_rate` (`ga4_conversions /
+  ga4_sessions`) and `organic_ctr` (`organic_clicks /
+  organic_impressions`).
+- **`SafeWooQueryEngine`** keeps its P1 name (already the tested entry
+  point every caller depends on) but now dispatches internally by
+  `$plan->source` to the matching adapter. A dimension breakdown stays
+  WooCommerce/`product`-only, since neither GA4 nor GSC metrics declare an
+  `allowedDimensions` entry.
+- The read-only Postgres role now grants `SELECT` on the union of every
+  registered adapter's `ALLOWED_TABLES` (`ReadOnlyRoleProvisioner::allowedTables()`)
+  — `traffic_daily` and `seo_daily` join the P1 WooCommerce tables.
+- Tests: `Ga4QueryCompilerTest`, `GscQueryCompilerTest`, new
+  `SafeWooQueryEngineTest` cases (ga4 aggregate scoped to `source = 'ga4'`,
+  gsc SUM+AVG aggregate, cross-tenant isolation for both, `pagespeed`
+  rejection), a `ReadOnlyIdentityTest` case proving the role can actually
+  read the two new tables. Updated `docs/SAFE-QUERY-ENGINE.md` and
+  `docs/SECURITY-TEST-MATRIX.md`.
+
+### Added — Saved Insights (Insightistic VNext P5)
+- **`App\Models\SavedInsight`** — a named, reusable `SemanticQueryPlan` a
+  user saves once and re-runs on demand. `POST/GET/PATCH/DELETE
+  /api/sites/{site}/saved-insights[/{id}]` plus `POST .../{id}/run`. See
+  `docs/SAVED-INSIGHTS.md`.
+- Create/update validate the submitted plan through the exact same
+  `PlanValidator` `analytics/query` and Ask use — a saved insight can never
+  store a plan that direct query wouldn't already accept, and gets the
+  identical error codes when it doesn't.
+- `metric_versions_json` is frozen at save time via
+  `EvidenceLedger::metricVersionsFor()` (now public, shared with
+  `recordSuccess()`'s own use of it). `chart_spec_json` stores only the
+  **structural** chart type (`{"type":"kpi"}` / `{"type":"bar",...}`) via
+  the new `ChartSpecBuilder::typeFor()` — never computed values, which
+  would go stale the instant underlying data changes.
+- `POST .../run` re-executes the stored plan through `SafeWooQueryEngine`
+  and records to the Evidence Ledger with `run_type = "query"` — the same
+  path a direct query call uses — and updates `last_run_at`. Never returns
+  a cached number; every run is a real query.
+- `scope`: `"organization"` (default, org-wide visible) or `"private"`
+  (owner only). Fetching/updating/deleting/running someone else's private
+  insight 404s, matching `EvidenceController`'s cross-org convention —
+  never a 403 that would confirm something exists.
+- `thresholds_json` column added but **inert** — reserved schema for a
+  future alerting feature, not evaluated by anything in this PR (documented
+  explicitly, not silently implied as live).
+- Tests: `SavedInsightEndpointTest` (create/validate/list-visibility/
+  update-versioning/delete/run/run-failure/tenant-isolation), plus a
+  `NestedRouteBindingTest` regression case for `SavedInsightController::update()`.
+
+### Added — Automation Studio (Insightistic VNext P6)
+- **`App\Models\AutomationRule`** — a trigger → action rule an org admin
+  configures once, that fires automatically (no per-occurrence approval —
+  contrast with P9). Full CRUD + `POST .../run` (manual test-fire) + `GET
+  .../runs` (audit trail) under `/api/sites/{site}/automation-rules[/{id}]`.
+  See `docs/AUTOMATION-STUDIO.md`.
+- Three trigger types: `schedule` (own cadence, checked against the rule's
+  `last_fired_at` — `AutomationDispatcher::shouldFireSchedule()`),
+  `alert_created` (fires only for a genuinely NEW `Alert`, wired into
+  `AlertDetector::raise()`), `anomaly_detected` (wired into P7's
+  `AnomalyScanner`, below).
+- **`App\Services\Actions\ActionType`/`ActionExecutor`** — the shared
+  allowlist and single implementation P6 and P9 both execute through:
+  `resolve_alert`, `dismiss_insight`, `create_saved_insight`,
+  `send_notification_email`, `send_webhook`. Every action only ever
+  mutates Insightistic's own database or sends mail/webhooks the org
+  itself configured — none reach out and mutate a customer's live
+  WordPress site (no such channel exists).
+- **`App\Services\Actions\WebhookUrlGuard`** — SSRF-hardened `send_webhook`
+  validation (rejects internal hostnames without touching DNS, then
+  resolves and screens every IP against private/loopback/reserved ranges),
+  independent of the knowledge crawler's own `SafeUrlFetcher` on purpose.
+  Signed via HMAC-SHA256 over the exact bytes sent
+  (`X-Insightistic-Timestamp`/`X-Insightistic-Signature`).
+  `AutomationRule.webhook_secret` is `encrypted` at rest and `hidden` from
+  every API response.
+- `php artisan insightistic:automation-run-scheduled`, hourly.
+- Tests: `ActionExecutorTest`, `WebhookUrlGuardTest`,
+  `AutomationDispatcherTest`, `AlertTriggerWiringTest`,
+  `AutomationRuleEndpointTest`, `RunScheduledAutomationsCommandTest`, plus
+  a `NestedRouteBindingTest` case.
+
+### Added — Anomaly Engine (Insightistic VNext P7)
+- **`App\Services\Anomaly\AnomalyDetector`** — generalizes the median/MAD
+  anomaly math `AcquisitionIntelligence::trafficAnomalies()` already
+  shipped for GA4 sessions specifically to a small fixed metric set across
+  all three query-engine sources (`net_revenue`, `orders`,
+  `refund_count`, `ga4_sessions`, `ga4_conversions`, `organic_clicks`,
+  `organic_impressions`). Deliberately independent code from
+  `AcquisitionIntelligence` (small copy over a risky shared abstraction —
+  matches the existing per-adapter-hardcoded-map convention in
+  `app/Query/Adapters`), so P7 cannot regress that shipped, tested
+  feature. See `docs/ANOMALY-ENGINE.md`.
+- **`App\Services\Anomaly\AnomalyScanner`** — mirrors `AlertDetector::scan()`:
+  persists only genuinely new findings (`unique(site_id, metric_id,
+  date)`), fires P6's `anomaly_detected` trigger for each one.
+- `GET/POST /api/sites/{site}/anomalies[/scan]`,
+  `POST .../{id}/acknowledge`. `php artisan insightistic:anomalies-scan`,
+  every 6 hours.
+- Tests: `AnomalyDetectorTest`, `AnomalyScannerTest`, `AnomalyEndpointTest`,
+  `ScanAnomaliesCommandTest`, plus a `NestedRouteBindingTest` case and a
+  new `ReadOnlyIdentityTest` case proving the readonly role can read the
+  tables this engine needs.
+
+### Added — WPAgentistic Investigations (Insightistic VNext P8)
+- **`App\Services\Investigation\InvestigationService`** — a read-only,
+  multi-metric diagnostic run ("why did revenue drop?") across up to
+  `PlanValidator::MAX_METRICS` metrics at once, each through the identical
+  `PlanValidator`/`SafeWooQueryEngine`/`EvidenceLedger` pipeline
+  (`run_type = "investigation"`) every other analytical surface uses. A
+  failing metric is recorded as one failed finding among the rest, never
+  aborts the whole investigation. `POST/GET /api/sites/{site}/investigations[/{id}]`.
+  See `docs/WPAGENTISTIC-INVESTIGATIONS.md`.
+- **`InvestigationSynthesizer`** — the identical two-layer AI guarantee
+  `AnswerSynthesizer` (P3) established, applied across multiple metrics:
+  deterministic narrative first, optional AI rephrase that can only touch
+  narrative text — `confidence`/`citation_refs` are never read from the AI
+  response under any circumstance (`InvestigationSynthesizerTest` proves
+  this against a provider that tries to smuggle a fabricated number, a
+  fake confidence, and a fake citation through).
+  **WPAgentistic is read-only — it cannot take any action.** A
+  recommendation in its narrative can only become a real action through a
+  separate, explicit P9 `ActionProposal` call; nothing here creates one
+  automatically.
+- Tests: `InvestigationServiceTest`, `InvestigationSynthesizerTest`,
+  `InvestigationEndpointTest`, plus a `NestedRouteBindingTest` case.
+
+### Added — Bridgistic Approved Actions (Insightistic VNext P9)
+- **`App\Models\ActionProposal`** — a proposed action that **always**
+  requires an explicit human approval before it ever executes. A new
+  internal subsystem (not an external "Bridgistic" integration — see
+  `docs/BRIDGISTIC-APPROVED-ACTIONS.md`), using the identical
+  `ActionType`/`ActionExecutor` P6 uses.
+  `POST/GET /api/sites/{site}/action-proposals[/{id}]` +
+  `POST .../{id}/approve` + `POST .../{id}/reject`.
+- **No auto-approval tier exists.**
+  `ActionProposalService::approve()` is the only method in the codebase
+  that ever executes a `ActionProposal`'s action, and it always requires a
+  real, authenticated reviewer id. Approval and execution happen together,
+  synchronously — no "approved but not yet run" limbo state.
+  `pending -> executed|failed` (approved) or `pending -> rejected` (never
+  executed); both terminal, both throw on a repeat review attempt.
+- Every proposal requires a non-empty `rationale` and may cite the real
+  `evidence_runs` ids it's backed by. `source_type`/`source_id` record
+  provenance (`manual` | `wpagentistic_investigation` | `anomaly` |
+  `automation_rule`).
+- `send_webhook` proposals always deliver **unsigned** —
+  `ActionProposal` has no encrypted-secret column the way `AutomationRule`
+  does, and the `store()` endpoint actively strips any smuggled
+  `secret`/`webhook_secret` key before ever persisting `action_params_json`.
+- Tests: `ActionProposalServiceTest`, `ActionProposalEndpointTest`
+  (including cross-org approve/reject/view adversarial cases proving a
+  blocked attempt truly executed nothing), plus a `NestedRouteBindingTest`
+  case.
+
+### Added — Agency Intelligence (Insightistic VNext P10)
+- **`App\Services\Agency\AgencyRollupService`** — a cross-site rollup for
+  an agency-style organization: `net_revenue`/`orders` (with
+  previous-period comparison) for every site the caller's organization
+  owns, in one call. `GET /api/agency/overview?period=`. See
+  `docs/AGENCY-INTELLIGENCE.md`.
+- Deliberately **not** a `sites/{site}/...` route — sits in the same outer
+  tenant-scoped group `GET /api/sites` already uses, since this is the one
+  surface that spans every site an org owns at once. No new tenant-scope
+  risk: every site is already filtered to the caller's own organization
+  before the query engine is ever touched.
+- `health` (`at_risk`/`watch`/`healthy`/`unknown`) uses the **identical**
+  `-20%` threshold `AlertDetector::REVENUE_DROP_THRESHOLD` already applies
+  — a site flagged `at_risk` here is, by construction, one that would also
+  trip a real alert. A site whose query fails is its own `"status":
+  "error"` row, never silently dropped or counted as zero.
+- Tests: `AgencyOverviewTest` (rollup correctness, health classification,
+  invalid period, cross-org isolation).
+
+### Added — Outcome Verification (Insightistic VNext P11)
+- **`App\Services\Outcome\OutcomeVerificationService`** — closes the loop
+  P9 opens: captures a baseline reading of whatever metric an executed
+  `ActionProposal`'s source implicates (the `Anomaly`'s `metric_id`, or an
+  `Investigation`'s first successful finding's `metric_id`), then a
+  scheduled/manual `verify()` re-measures it and classifies
+  `improved`/`unchanged`/`worsened` (±5-point noise band) —
+  `no_metric_to_verify` immediately, not left dangling, when no metric is
+  derivable. See `docs/OUTCOME-VERIFICATION.md`.
+- Measured values live directly on `outcome_verifications`
+  (`baseline_value`/`followup_value`) rather than re-derived from
+  `evidence_runs` afterward — `evidence_runs` doesn't persist a copy of
+  the computed value (P2's documented scope), only the plan/hash/outcome;
+  the linked evidence-run ids are citations, not a value store.
+- Wired automatically into `ActionProposalService::approve()` — a
+  baseline is captured immediately after a successful execution, never
+  after a failed one. `GET/POST /api/sites/{site}/outcome-verifications[/{id}][/verify]`.
+  `php artisan insightistic:outcome-verifications-run`, daily (a
+  verification isn't due until 24h after its baseline regardless).
+- Explicitly does not claim causation — "improved" means the watched
+  metric measurably moved up after the action executed, never that the
+  action *caused* it.
+- Tests: `OutcomeVerificationServiceTest` (manual/anomaly/investigation
+  baseline derivation, classification, auto-capture-on-approve),
+  `OutcomeVerificationEndpointTest`, `RunOutcomeVerificationsCommandTest`,
+  plus a `NestedRouteBindingTest` case.
+
 ### Fixed — build/runtime blockers found in post-merge audit
 - **`IngestionFailure` was unloadable**, taking the whole knowledge ingestion
   pipeline with it: it promoted a `public readonly string $code`, and

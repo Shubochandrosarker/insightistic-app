@@ -2,6 +2,7 @@
 
 namespace App\Services\Intelligence;
 
+use App\Metrics\CommerceStatus;
 use App\Models\Site;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -28,8 +29,12 @@ class CustomerIntelligence
      * WooCommerce statuses: `completed` and `processing` are paid; everything
      * else (pending, on-hold, cancelled, refunded, failed, draft) is not, and
      * counting them inflates every metric that follows.
+     *
+     * Canonical source: App\Metrics\CommerceStatus::CONFIRMED_PAID. This is
+     * deliberately narrower than the on-hold-inclusive list MetricsAssembler
+     * uses for headline revenue KPIs — see that class's docblock.
      */
-    private const PAID_STATUSES = ['completed', 'processing'];
+    private const PAID_STATUSES = CommerceStatus::CONFIRMED_PAID;
 
     /**
      * RFM segmentation.

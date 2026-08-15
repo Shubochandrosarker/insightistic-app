@@ -2,6 +2,7 @@
 
 namespace App\Services\Intelligence;
 
+use App\Metrics\CommerceStatus;
 use App\Models\Site;
 use App\Support\DateRange;
 use Illuminate\Support\Facades\DB;
@@ -15,7 +16,8 @@ use Illuminate\Support\Facades\DB;
  */
 class ProductIntelligence
 {
-    private const PAID_STATUSES = ['completed', 'processing'];
+    /** Canonical source: App\Metrics\CommerceStatus::CONFIRMED_PAID (see CustomerIntelligence for why this differs from MetricsAssembler's revenue-KPI status list). */
+    private const PAID_STATUSES = CommerceStatus::CONFIRMED_PAID;
 
     /**
      * A pair must appear together this many times before it is reported.

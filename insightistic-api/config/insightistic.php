@@ -164,6 +164,29 @@ return [
         'export_ttl_days'     => (int) env('PRIVACY_EXPORT_TTL_DAYS', 7),
     ],
 
+    /*
+     * Safe WooCommerce Query Engine (spec Phase 2 / P1). Budgets tune the
+     * blast radius of any single semantic-plan query — see
+     * docs/SAFE-QUERY-ENGINE.md for the full pipeline. Numbers here match
+     * docs/04-LOCAL-QUERY-SECURITY.md's "Initial query budgets"; tune from
+     * telemetry once this ships.
+     */
+    'query_engine' => [
+        // Postgres statement_timeout for a single compiled query, in ms.
+        'timeout_ms' => (int) env('QUERY_ENGINE_TIMEOUT_MS', 8000),
+        // Row cap for a plan with no explicit dimension breakdown.
+        'max_rows' => (int) env('QUERY_ENGINE_MAX_ROWS', 2000),
+        // Row cap when the plan requests a dimension breakdown for a chart
+        // (e.g. top products) — charts render far fewer points than a table.
+        'chart_max_rows' => (int) env('QUERY_ENGINE_CHART_MAX_ROWS', 500),
+        // Max concurrently in-flight interactive queries per organization.
+        // Exceeding this returns a structured 429, not a queued/blocked request.
+        'max_concurrent_per_org' => (int) env('QUERY_ENGINE_MAX_CONCURRENT_PER_ORG', 3),
+        // How long a concurrency slot is held before being force-released
+        // (crash safety net — a normal query releases its slot itself).
+        'concurrency_lock_ttl_seconds' => (int) env('QUERY_ENGINE_CONCURRENCY_LOCK_TTL', 30),
+    ],
+
     // NOTE: the old `super_admin_email` / SUPER_ADMIN_EMAIL auto-promotion
     // was removed as a security fix. Super admins are created only via the
     // insightistic:super-admin:* artisan commands or promotion by an existing

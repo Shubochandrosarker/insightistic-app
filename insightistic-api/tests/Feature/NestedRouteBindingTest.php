@@ -2,8 +2,13 @@
 
 use App\Models\AiInsight;
 use App\Models\Alert;
+use App\Models\Anomaly;
+use App\Models\AutomationRule;
+use App\Models\EvidenceRun;
+use App\Models\Investigation;
 use App\Models\Organization;
 use App\Models\ReportSchedule;
+use App\Models\SavedInsight;
 use App\Models\Site;
 use Illuminate\Support\Collection;
 
@@ -122,4 +127,153 @@ it('updates the requested report schedule, not the one matching the site id', fu
     expect((bool) $target->fresh()->is_active)->toBeFalse()
         ->and($rows->reject(fn ($r) => $r->id === $target->id)
             ->every(fn ($r) => (bool) $r->fresh()->is_active === true))->toBeTrue();
+});
+
+it('shows the requested evidence run, not the one matching the site id', function () {
+    [$user, $org] = makeOrgUser('bind-evidence@example.com');
+    $site = bindingSite($org);
+
+    $rows = collect(range(1, 3))->map(fn ($n) => EvidenceRun::create([
+        'organization_id' => $org->id,
+        'site_id' => $site->id,
+        'source' => 'woocommerce',
+        'run_type' => 'query',
+        'validator_version' => 'v1',
+        'semantic_plan_json' => ['metrics' => ['net_revenue']],
+        'metric_versions_json' => ['net_revenue' => 1],
+        'status' => 'success',
+    ]));
+
+    $target = bindingTarget($rows, $site);
+
+    $this->actingAs($user)
+        ->getJson("/api/sites/{$site->id}/evidence/{$target->id}")
+        ->assertOk()
+        ->assertJsonPath('run.id', $target->id);
+});
+
+it('updates the requested saved insight, not the one matching the site id', function () {
+    [$user, $org] = makeOrgUser('bind-saved-insight@example.com');
+    $site = bindingSite($org);
+
+    $rows = collect(range(1, 3))->map(fn ($n) => SavedInsight::create([
+        'organization_id' => $org->id, 'site_id' => $site->id, 'owner_user_id' => $user->id,
+        'name' => "Insight {$n}", 'semantic_plan_json' => ['metrics' => ['net_revenue']],
+        'metric_versions_json' => ['net_revenue' => 1], 'chart_spec_json' => ['type' => 'kpi'],
+        'scope' => 'organization', 'version' => 1,
+    ]));
+
+    $target = bindingTarget($rows, $site);
+
+    $this->actingAs($user)
+        ->patchJson("/api/sites/{$site->id}/saved-insights/{$target->id}", ['name' => 'Renamed'])
+        ->assertOk()
+        ->assertJsonPath('saved_insight.id', $target->id);
+
+    expect($target->fresh()->name)->toBe('Renamed')
+        ->and($rows->reject(fn ($r) => $r->id === $target->id)
+            ->every(fn ($r) => $r->fresh()->name === $r->name))->toBeTrue();
+});
+
+it('acknowledges the requested anomaly, not the one matching the site id', function () {
+    [$user, $org] = makeOrgUser('bind-anomaly@example.com');
+    $site = bindingSite($org);
+
+    $rows = collect(range(1, 3))->map(fn ($n) => Anomaly::create([
+        'organization_id' => $org->id, 'site_id' => $site->id, 'metric_id' => 'net_revenue',
+        'date' => now()->subDays($n)->toDateString(), 'value' => 1000 + $n, 'baseline_median' => 100,
+        'mad' => 10, 'score' => 5.0, 'direction' => 'spike', 'severity' => 'high',
+        'is_acknowledged' => false, 'detected_at' => now(),
+    ]));
+
+    $target = bindingTarget($rows, $site);
+
+    $this->actingAs($user)
+        ->postJson("/api/sites/{$site->id}/anomalies/{$target->id}/acknowledge")
+        ->assertOk()
+        ->assertJsonPath('anomaly.id', $target->id);
+
+    expect($target->fresh()->is_acknowledged)->toBeTrue()
+        ->and($rows->reject(fn ($r) => $r->id === $target->id)
+            ->every(fn ($r) => $r->fresh()->is_acknowledged === false))->toBeTrue();
+});
+
+it('updates the requested automation rule, not the one matching the site id', function () {
+    [$user, $org] = makeOrgUser('bind-automation-rule@example.com');
+    $site = bindingSite($org);
+
+    $rows = collect(range(1, 3))->map(fn ($n) => AutomationRule::create([
+        'organization_id' => $org->id, 'site_id' => $site->id, 'name' => "Rule {$n}",
+        'is_active' => true, 'trigger_type' => 'schedule', 'trigger_config_json' => [],
+        'action_type' => 'send_notification_email', 'action_params_json' => ['subject' => 'S', 'body' => 'B'],
+    ]));
+
+    $target = bindingTarget($rows, $site);
+
+    $this->actingAs($user)
+        ->patchJson("/api/sites/{$site->id}/automation-rules/{$target->id}", ['name' => 'Renamed'])
+        ->assertOk()
+        ->assertJsonPath('automation_rule.id', $target->id);
+
+    expect($target->fresh()->name)->toBe('Renamed')
+        ->and($rows->reject(fn ($r) => $r->id === $target->id)
+            ->every(fn ($r) => $r->fresh()->name === $r->name))->toBeTrue();
+});
+
+it('shows the requested investigation, not the one matching the site id', function () {
+    [$user, $org] = makeOrgUser('bind-investigation@example.com');
+    $site = bindingSite($org);
+
+    $rows = collect(range(1, 3))->map(fn ($n) => Investigation::create([
+        'organization_id' => $org->id, 'site_id' => $site->id, 'trigger_source' => 'manual',
+        'subject' => "Subject {$n}", 'status' => 'completed',
+        'findings_json' => [], 'narrative_json' => [],
+    ]));
+
+    $target = bindingTarget($rows, $site);
+
+    $this->actingAs($user)
+        ->getJson("/api/sites/{$site->id}/investigations/{$target->id}")
+        ->assertOk()
+        ->assertJsonPath('investigation.id', $target->id);
+});
+
+it('shows the requested action proposal, not the one matching the site id', function () {
+    [$user, $org] = makeOrgUser('bind-action-proposal@example.com');
+    $site = bindingSite($org);
+
+    $rows = collect(range(1, 3))->map(fn ($n) => \App\Models\ActionProposal::create([
+        'organization_id' => $org->id, 'site_id' => $site->id, 'action_type' => 'send_notification_email',
+        'action_params_json' => ['subject' => 'S', 'body' => 'B'], 'rationale' => "Reason {$n}", 'status' => 'pending',
+    ]));
+
+    $target = bindingTarget($rows, $site);
+
+    $this->actingAs($user)
+        ->getJson("/api/sites/{$site->id}/action-proposals/{$target->id}")
+        ->assertOk()
+        ->assertJsonPath('action_proposal.id', $target->id);
+});
+
+it('shows the requested outcome verification, not the one matching the site id', function () {
+    [$user, $org] = makeOrgUser('bind-outcome-verification@example.com');
+    $site = bindingSite($org);
+
+    $proposal = \App\Models\ActionProposal::create([
+        'organization_id' => $org->id, 'site_id' => $site->id, 'source_type' => 'manual',
+        'action_type' => 'send_notification_email', 'action_params_json' => ['subject' => 'S', 'body' => 'B'],
+        'rationale' => 'x', 'status' => 'executed', 'reviewed_at' => now(), 'executed_at' => now(),
+    ]);
+
+    $rows = collect(range(1, 3))->map(fn ($n) => \App\Models\OutcomeVerification::create([
+        'organization_id' => $org->id, 'site_id' => $site->id, 'action_proposal_id' => $proposal->id,
+        'watched_metric_id' => null, 'outcome' => 'no_metric_to_verify', 'verified_at' => now(),
+    ]));
+
+    $target = bindingTarget($rows, $site);
+
+    $this->actingAs($user)
+        ->getJson("/api/sites/{$site->id}/outcome-verifications/{$target->id}")
+        ->assertOk()
+        ->assertJsonPath('outcome_verification.id', $target->id);
 });

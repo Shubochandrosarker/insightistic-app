@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Metrics\CommerceStatus;
 use App\Models\MetricSnapshot;
 use App\Models\Site;
 use App\Models\WcOrder;
@@ -10,11 +11,11 @@ use Illuminate\Support\Facades\DB;
 
 class MetricSnapshotService
 {
-    /** Statuses that count as real sales. */
-    private array $paidStatuses = ['completed', 'processing', 'on-hold'];
+    /** Statuses that count as real sales. Canonical source: App\Metrics\CommerceStatus::REVENUE_PAID (same list MetricsAssembler reads back out of the snapshots this builds). */
+    private array $paidStatuses = CommerceStatus::REVENUE_PAID;
 
     /** Statuses that count as failed/lost. */
-    private array $failedStatuses = ['failed', 'cancelled'];
+    private array $failedStatuses = CommerceStatus::FAILED;
 
     /**
      * Compute + upsert the snapshot for one site on one LOCAL date (Y-m-d).

@@ -6108,16 +6108,16 @@
         },
         {
             "name": "stripe/stripe-php",
-            "version": "v21.1.1",
+            "version": "v21.2.1",
             "source": {
                 "type": "git",
                 "url": "https://github.com/stripe/stripe-php.git",
-                "reference": "5f68d5a285d206a757ebbd9bf0e037759a61c379"
+                "reference": "da798f6224c5ff6f89d8d78025044f418ee27db8"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/stripe/stripe-php/zipball/5f68d5a285d206a757ebbd9bf0e037759a61c379",
-                "reference": "5f68d5a285d206a757ebbd9bf0e037759a61c379",
+                "url": "https://api.github.com/repos/stripe/stripe-php/zipball/da798f6224c5ff6f89d8d78025044f418ee27db8",
+                "reference": "da798f6224c5ff6f89d8d78025044f418ee27db8",
                 "shasum": ""
             },
             "require": {
@@ -6164,9 +6164,9 @@
             ],
             "support": {
                 "issues": "https://github.com/stripe/stripe-php/issues",
-                "source": "https://github.com/stripe/stripe-php/tree/v21.1.1"
+                "source": "https://github.com/stripe/stripe-php/tree/v21.2.1"
             },
-            "time": "2026-07-30T18:43:28+00:00"
+            "time": "2026-08-20T21:06:13+00:00"
         },
         {
             "name": "symfony/clock",

@@ -75,9 +75,10 @@ it('lets an active lifetime grant carry the plan when no subscription exists', f
     $plan = resolverPlan(['name' => 'Founder Tier 2', 'slug' => 'founder-2-'.Str::random(8)]);
     $org = resolverOrg('resolver-ltd@example.com');
     EntitlementGrant::create([
-        'organization_id' => $org->id,
-        'plan_id'         => $plan->id,
-        'source'          => 'paddle_lifetime',
+        'organization_id'  => $org->id,
+        'plan_id'          => $plan->id,
+        'source'           => 'paddle_lifetime',
+        'source_reference' => 'txn_'.Str::random(12),
     ]);
 
     $resolved = app(EntitlementResolver::class)->resolve($org);
@@ -97,9 +98,10 @@ it('unions a manual grant feature on top of the subscription plan features', fun
         'status'          => 'active',
     ]);
     EntitlementGrant::create([
-        'organization_id' => $org->id,
-        'source'          => 'manual',
-        'features_json'   => ['bing_webmaster'],
+        'organization_id'  => $org->id,
+        'source'           => 'manual',
+        'source_reference' => 'manual_'.Str::random(12),
+        'features_json'    => ['bing_webmaster'],
     ]);
 
     $resolved = app(EntitlementResolver::class)->resolve($org);
@@ -117,9 +119,10 @@ it('lets grant limits_json override the plan limit for the same key, up or down'
         'status'          => 'active',
     ]);
     EntitlementGrant::create([
-        'organization_id' => $org->id,
-        'source'          => 'promotion',
-        'limits_json'     => ['crawl_pages_monthly' => 100000, 'sites' => 3],
+        'organization_id'  => $org->id,
+        'source'           => 'promotion',
+        'source_reference' => 'promo_'.Str::random(12),
+        'limits_json'      => ['crawl_pages_monthly' => 100000, 'sites' => 3],
     ]);
 
     $resolved = app(EntitlementResolver::class)->resolve($org);

@@ -1,0 +1,14 @@
+{
+  "schemaVersion": "mimosa-hook-status/v1",
+  "recordedAt": "2026-09-20T01:05:14.086Z",
+  "sessionId": "sess_6bb24c9a-152c-44e2-a6e7-7ba697ff2bdc",
+  "event": "PostToolUse",
+  "toolName": "Edit",
+  "file": "tests/Feature/EntitlementResolverTest.php",
+  "outcome": "clear",
+  "coverage": "complete",
+  "findingCount": 0,
+  "durationMs": 24,
+  "hostState": "hook_complete",
+  "reportHint": ".mimosa/reports/"
+}

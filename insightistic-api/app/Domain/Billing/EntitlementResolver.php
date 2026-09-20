@@ -198,6 +198,18 @@ final class EntitlementResolver
             }
         }
 
+        // Roadmap-era keys (crawl_pages_monthly, tracked_keywords, ...) ride
+        // in limits_json without a legacy column — pass them through verbatim.
+        foreach ($json as $key => $value) {
+            if (isset($limits[$key]) || ! is_numeric($value)) {
+                continue;
+            }
+
+            if ((int) $value > 0) {
+                $limits[$key] = (int) $value;
+            }
+        }
+
         return $limits;
     }
 

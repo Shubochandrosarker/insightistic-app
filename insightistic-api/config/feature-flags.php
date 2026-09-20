@@ -1,0 +1,25 @@
+<?php
+
+// Roadmap feature flags (docs/roadmap-2026/35-CODING-STANDARDS.md).
+// Each flag has a defined removal condition; do not add permanent flags here.
+
+return [
+
+    // Phase 1: provider-neutral billing + Paddle foundation.
+    // Remove when the Stripe retirement phase (roadmap phase 9 of
+    // 23-STRIPE-TO-PADDLE-MIGRATION.md) completes.
+    'paddle' => env('FEATURE_PADDLE', false),
+
+    // Phase 7/8: technical crawler + change monitoring.
+    'crawler' => env('FEATURE_CRAWLER', false),
+
+    // Phase 10: rank tracker.
+    'rank_tracker' => env('FEATURE_RANK_TRACKER', false),
+
+    // Phase 11: AI visibility (distinct from Copilot).
+    'ai_visibility' => env('FEATURE_AI_VISIBILITY', false),
+
+    // Phase 12: uptime monitors / incidents.
+    'uptime' => env('FEATURE_UPTIME', false),
+
+];

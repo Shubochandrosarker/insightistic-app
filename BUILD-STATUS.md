@@ -1,5 +1,12 @@
 # Insightistic — Build Status
 
+> **⚠️ SUPERSEDED (2026-09-20).** This log is a point-in-time record of the
+> original 6-week build and no longer reflects reality (it predates the
+> Copilot/admin-plane era and understates the current size by ~5x). The
+> code-verified current state and the active roadmap live in
+> [`docs/roadmap-2026/00-BASELINE.md`](docs/roadmap-2026/00-BASELINE.md).
+> Kept for history only — do not update this file.
+
 Built in your spec's order. Domains: `insightistic.com` (marketing),
 `app.insightistic.com` (dashboard), API at `api.insightistic.com` (or `app.../api`).
 

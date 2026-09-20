@@ -173,4 +173,41 @@ describe("Billing page checkout", () => {
     expect(await screen.findByRole("option", { name: "Growth — Best Value" })).toBeInTheDocument();
     expect(screen.getByRole("option", { name: "Agency Pro" })).toBeInTheDocument();
   });
+
+  it("opens the founder lifetime checkout via checkout-config {plan: founder_tier_1, kind: lifetime}", async () => {
+    const P = paddleStub();
+    (window as any).Paddle = P;
+
+    apiMocks.apiPost.mockImplementation((path: string) =>
+      path === "/billing/checkout-config"
+        ? Promise.resolve({
+            ...checkoutConfig,
+            price_id: "pri_test_founder1",
+            custom_data: { organization_id: 7, purchase_kind: "lifetime", plan_slug: "founder_tier_1" },
+          })
+        : Promise.resolve({}),
+    );
+
+    render(<BillingPage />);
+    await userEvent.click(await screen.findByRole("button", { name: "Buy Tier 1 — $79" }));
+
+    // One-time LTD purchase: same envelope, kind 'lifetime'.
+    await waitFor(() =>
+      expect(apiMocks.apiPost).toHaveBeenCalledWith("/billing/checkout-config", { plan: "founder_tier_1", kind: "lifetime" }),
+    );
+
+    // The loader/init are module-cached (an earlier test in this file already
+    // initialized Paddle with this token), so Initialize is NOT re-run — wait
+    // on the overlay open. The load dispatch only matters when this test runs
+    // in isolation and the CDN script genuinely needs resolving.
+    document.getElementById("paddle-js")?.dispatchEvent(new Event("load"));
+
+    await waitFor(() => expect(P.Checkout.open).toHaveBeenCalled());
+    expect(P.Checkout.open).toHaveBeenCalledWith(
+      expect.objectContaining({
+        items: [{ priceId: "pri_test_founder1", quantity: 1 }],
+        customData: { organization_id: 7, purchase_kind: "lifetime", plan_slug: "founder_tier_1" },
+      }),
+    );
+  });
 });

@@ -37,7 +37,13 @@ final class PaddleBillingService
     {
         $plan = Plan::where('slug', $planSlug)->first();
 
-        if (! $plan || ! $plan->is_active) {
+        // Hidden plans (founder LTD tiers, credit packs) are seeded
+        // is_active=false so they never appear as subscribable plans — their
+        // purchasability is the ACTIVE PADDLE PRICE below, not the plan flag.
+        // Recurring kinds still require an active plan.
+        $recurring = in_array($kind, ['monthly', 'yearly'], true);
+
+        if (! $plan || ($recurring && ! $plan->is_active)) {
             throw new BillingConfigurationException('plan_not_available', 'This plan is not available.');
         }
 

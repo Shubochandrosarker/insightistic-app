@@ -23,6 +23,7 @@ class IntegrationManager
         private readonly GscClient $gsc,
         private readonly CloudflareClient $cloudflare,
         private readonly BingConnectionService $bing,
+        private readonly CloudflareAnalytics $cloudflareAnalytics,
     ) {
     }
 
@@ -155,7 +156,7 @@ class IntegrationManager
             $result = match ($source) {
                 'ga4'        => $this->ga4->sync($site, $this->credentialOrFail($site, $source), $days),
                 'gsc'        => $this->gsc->sync($site, $this->credentialOrFail($site, $source), $days),
-                'cloudflare' => $this->cloudflare->sync($site, $days),
+                'cloudflare' => $this->syncCloudflare($site, $days),
                 'bing'       => $this->bing->sync($site, $this->credentialOrFail($site, $source)),
                 default      => throw new IntegrationFailure('unsupported_source', "Source {$source} cannot be synced."),
             };
@@ -254,6 +255,36 @@ class IntegrationManager
         }
 
         return $credential;
+    }
+
+    /**
+     * The Cloudflare sync arm: the existing nightly traffic pull into
+     * `traffic_daily` (unchanged), followed by the Edge Intelligence daily
+     * aggregates (roadmap 2026/15) into cloudflare_daily/cloudflare_bot_daily
+     * via idempotent upserts. Plan-gated sub-datasets (firewall events, bot
+     * analytics) degrade to flags inside CloudflareAnalytics rather than
+     * failing the sync; only a hard failure of the primary 1dGroups dataset
+     * throws (retryable, recorded like any other sync failure).
+     *
+     * @return array<string,mixed> provider-specific counters
+     */
+    private function syncCloudflare(Site $site, int $days): array
+    {
+        $result = $this->cloudflare->sync($site, $days);
+
+        $edge = $this->cloudflareAnalytics->fetchDaily(
+            $site,
+            now()->subDays($days)->toDateString(),
+            now()->toDateString(),
+        );
+        $stored = $this->cloudflareAnalytics->storeDaily($site, $edge);
+
+        return $result + [
+            'edge_days'           => $stored['days'],
+            'edge_latest_date'    => $stored['latest_date'],
+            'edge_bots_available' => $stored['bots_available'],
+            'edge_flags'          => $edge['flags'],
+        ];
     }
 
     private function recordFailure(Site $site, string $source, IntegrationFailure $e): void

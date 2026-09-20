@@ -21,6 +21,7 @@ use App\Http\Controllers\Api\AgencyController;
 use App\Http\Controllers\Api\AnomalyController;
 use App\Http\Controllers\Api\AskInsightisticController;
 use App\Http\Controllers\Api\AutomationRuleController;
+use App\Http\Controllers\Api\CloudflareController;
 use App\Http\Controllers\Api\EvidenceController;
 use App\Http\Controllers\Api\InvestigationController;
 use App\Http\Controllers\Api\OutcomeVerificationController;
@@ -353,11 +354,18 @@ Route::middleware(['auth:sanctum', 'tenant', 'restrict.impersonation'])->group(f
         Route::get('sites/{site}/crawl/pages', [\App\Http\Controllers\Api\CrawlController::class, 'pages']);
         Route::get('sites/{site}/crawl/links', [\App\Http\Controllers\Api\CrawlController::class, 'links']);
         Route::get('sites/{site}/crawl/issues', [\App\Http\Controllers\Api\CrawlController::class, 'issues']);
+        Route::get('sites/{site}/crawl/changes', [\App\Http\Controllers\Api\CrawlController::class, 'changes']);
         Route::get('sites/{site}/crawl/health', [\App\Http\Controllers\Api\CrawlController::class, 'health']);
         Route::middleware('role:owner,admin')->group(function () {
             Route::post('sites/{site}/crawl/run', [\App\Http\Controllers\Api\CrawlController::class, 'run']);
             Route::post('sites/{site}/crawl/issues/{issue}/status', [\App\Http\Controllers\Api\CrawlController::class, 'issueStatus']);
         });
+
+        // Cloudflare Edge Intelligence (Phase 9, roadmap 15). Pure read over
+        // the cloudflare_daily/cloudflare_bot_daily tables the nightly sync
+        // fills — never a live Cloudflare call — so it's open to anyone with
+        // site access like every other analytics surface.
+        Route::get('sites/{site}/cloudflare', [CloudflareController::class, 'overview']);
 
         Route::get('sites/{site}/analytics/performance/history', [PerformanceController::class, 'history']);
         Route::get('sites/{site}/analytics/performance/latest', [PerformanceController::class, 'latest']);

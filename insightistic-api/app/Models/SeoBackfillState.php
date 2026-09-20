@@ -13,6 +13,9 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  */
 class SeoBackfillState extends Model
 {
+    /** Migration creates the singular form; Laravel would pluralize to *_states. */
+    protected $table = 'seo_backfill_state';
+
     /** Backfillable daily-grain dimensions (mirrors GscClient::fetchDailyWindow). */
     public const DIMENSIONS = ['queries', 'pages', 'query_page'];
 

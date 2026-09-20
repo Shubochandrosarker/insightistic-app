@@ -2,6 +2,7 @@
 
 use App\Domain\Search\SearchExplorer;
 use App\Models\SeoQueryDaily;
+use App\Models\Site;
 
 /** Local site factory — each test file stays self-contained when run alone. */
 function explorerSite($org): Site

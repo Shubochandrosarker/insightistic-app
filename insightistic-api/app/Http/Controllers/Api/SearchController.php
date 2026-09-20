@@ -165,7 +165,10 @@ class SearchController extends Controller
     private function params(Request $request): array
     {
         $validated = $request->validate([
-            'window'          => ['sometimes', 'integer', 'in:7,28,90'],
+            // window is clamped to a preset by window() — out-of-range values
+            // fall back to 28d (tolerant, like the analytics surfaces) rather
+            // than 422-ing.
+            'window'          => ['sometimes', 'integer', 'min:1', 'max:480'],
             'q'               => ['sometimes', 'nullable', 'string', 'max:200'],
             'min_impressions' => ['sometimes', 'integer', 'min:0'],
             'sort'            => ['sometimes', 'in:clicks,impressions,ctr,position,clicks_delta,position_delta'],

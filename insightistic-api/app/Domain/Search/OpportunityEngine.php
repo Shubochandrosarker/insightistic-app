@@ -2,6 +2,8 @@
 
 namespace App\Domain\Search;
 
+use App\Models\SeoPageDaily;
+use App\Models\SeoQueryDaily;
 use App\Models\Site;
 use Carbon\CarbonImmutable;
 
@@ -370,6 +372,12 @@ class OpportunityEngine
             $grouped[$pair['query_hash']][] = $pair;
         }
 
+        // Labels come straight from the grain tables, not the (row-capped)
+        // aggregate maps — a hash with no aggregate row would otherwise leak
+        // its sha1 into the UI.
+        $queryTexts = $this->labelsFor(SeoQueryDaily::query()->where('site_id', $site->id), 'query_hash', 'query', array_keys($grouped));
+        $pageTexts = $this->labelsFor(SeoPageDaily::query()->where('site_id', $site->id), 'page_hash', 'page_path', array_merge(...array_map(fn (array $pages) => array_column($pages, 'page_hash'), $grouped ?: [[]])));
+
         $items = [];
         foreach ($grouped as $queryHash => $pages) {
             if (count($pages) < self::CANNIBALIZATION_MIN_PAGES) {
@@ -382,10 +390,10 @@ class OpportunityEngine
             $totalImpressions = array_sum(array_column($pages, 'impressions'));
 
             $items[] = [
-                'query'        => $queryLabels[$queryHash]['label'] ?? $queryHash,
+                'query'        => $queryTexts[$queryHash] ?? $queryLabels[$queryHash]['label'] ?? $queryHash,
                 'is_candidate' => true,
                 'pages'        => array_map(fn (array $p) => [
-                    'page_path'   => $pageLabels[$p['page_hash']]['label'] ?? $p['page_hash'],
+                    'page_path'   => $pageTexts[$p['page_hash']] ?? $pageLabels[$p['page_hash']]['label'] ?? $p['page_hash'],
                     'clicks'      => $p['clicks'],
                     'impressions' => $p['impressions'],
                     'position'    => $p['position'],
@@ -461,11 +469,38 @@ class OpportunityEngine
         return '51+';
     }
 
-    /** Ratio (0..1) → human percent, trimmed: 0.045 → "4.5%", 0.02 → "2%". */
+    /** Ratio (0..1) → human percent, trimmed: 0.045 → "4.5%", 0.02 → "2%", 2.0 → "200%". */
     private function pct(float $ratio): string
     {
-        $value = rtrim(rtrim((string) round($ratio * 100, 1), '0'), '.');
+        $value = (string) round($ratio * 100, 1);
+
+        // Trim decimal trailing zeros only — a blanket rtrim(…, '0') turned
+        // "200" into "2" and "20" into "2".
+        if (str_contains($value, '.')) {
+            $value = rtrim(rtrim($value, '0'), '.');
+        }
 
         return $value . '%';
+    }
+
+    /**
+     * hash → label straight from a grain table. Any row carrying the hash
+     * wins (same query/page text on every row by construction).
+     *
+     * @param  \Illuminate\Database\Eloquent\Builder  $builder
+     * @param  array<int, string>  $hashes
+     * @return array<string, string>
+     */
+    private function labelsFor($builder, string $hashCol, string $labelCol, array $hashes): array
+    {
+        if ($hashes === []) {
+            return [];
+        }
+
+        return $builder
+            ->whereIn($hashCol, $hashes)
+            ->get()
+            ->mapWithKeys(fn ($row) => [(string) $row->{$hashCol} => (string) $row->{$labelCol}])
+            ->all();
     }
 }

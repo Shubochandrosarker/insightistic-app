@@ -146,3 +146,17 @@ Schedule::command('insightistic:outcome-verifications-run')
 Schedule::command('insightistic:billing-reconcile')
     ->dailyAt('04:30')
     ->withoutOverlapping();
+
+/*
+ * Rank tracking (Phase 10, doc 13). Daily at 06:00, last in the nightly
+ * chain: SERP positions are point-in-time observations, so they are taken
+ * after the traffic/data syncs finish and before the first dashboard reads
+ * of the day. Each site's check is its own queued RankCheckJob (tries=1 —
+ * a failed provider call stays visible instead of being retried into a
+ * double bill); RankChecker's same-day suppression makes overlapping or
+ * re-run command invocations safe. No-ops with a warning while the
+ * DATAFORSEO credentials are unset.
+ */
+Schedule::command('insightistic:rank-check')
+    ->dailyAt('06:00')
+    ->withoutOverlapping();

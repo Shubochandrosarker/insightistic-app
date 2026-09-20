@@ -53,6 +53,7 @@ use App\Http\Controllers\Api\PluginCloudflareController;
 use App\Http\Controllers\Api\PluginLicenseController;
 use App\Http\Controllers\Api\PrivacyController;
 use App\Http\Controllers\Api\PublicPlanController;
+use App\Http\Controllers\Api\RankController;
 use App\Http\Controllers\Api\ReportController;
 use App\Http\Controllers\Api\ReportScheduleController;
 use App\Http\Controllers\Api\SearchController;
@@ -359,6 +360,29 @@ Route::middleware(['auth:sanctum', 'tenant', 'restrict.impersonation'])->group(f
         Route::middleware('role:owner,admin')->group(function () {
             Route::post('sites/{site}/crawl/run', [\App\Http\Controllers\Api\CrawlController::class, 'run']);
             Route::post('sites/{site}/crawl/issues/{issue}/status', [\App\Http\Controllers\Api\CrawlController::class, 'issueStatus']);
+        });
+
+        // Rank tracker (Phase 10, doc 13). Reads over keywords/observations/
+        // suggestions are open to anyone with site access, like every other
+        // analytics surface. Tracking keywords and queueing checks are
+        // owner/admin: keywords consume the plan's tracked_keywords quota
+        // and checks burn paid SERP-provider cost, matching every other
+        // queued heavy action. GSC average position and tracker position
+        // stay separate products (doc 13) — the overview payload labels
+        // them distinctly (impressions_28d vs latest/previous/best).
+        Route::get('sites/{site}/rank', [RankController::class, 'index']);
+        Route::get('sites/{site}/rank/suggestions', [RankController::class, 'suggestions']);
+        Route::get('sites/{site}/rank/keywords/{keyword}/history', [RankController::class, 'history']);
+        // Latest observation per keyword as CSV — bounded provider-cost
+        // export, on the exports limiter like every other CSV.
+        Route::get('sites/{site}/rank.csv', [ExportController::class, 'rank'])
+            ->middleware('throttle:exports');
+        Route::middleware('role:owner,admin')->group(function () {
+            Route::post('sites/{site}/rank/keywords', [RankController::class, 'storeKeywords']);
+            Route::delete('sites/{site}/rank/keywords/{keyword}', [RankController::class, 'destroyKeyword']);
+            Route::post('sites/{site}/rank/keywords/{keyword}/check', [RankController::class, 'checkKeyword']);
+            Route::post('sites/{site}/rank/check', [RankController::class, 'checkSite']);
+            Route::post('sites/{site}/rank/suggestions/confirm', [RankController::class, 'confirmSuggestions']);
         });
 
         // Cloudflare Edge Intelligence (Phase 9, roadmap 15). Pure read over

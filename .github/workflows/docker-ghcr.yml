@@ -27,6 +27,11 @@ jobs:
     uses: ./.github/workflows/ci.yml
     permissions:
       contents: read
+      # ci.yml's secrets-scan job needs these; a reusable-workflow call is
+      # capped at what the caller grants, and an over-grant there is a
+      # startup_failure (all jobs dropped, images never built).
+      security-events: write
+      pull-requests: write
 
   docker:
     needs: ci

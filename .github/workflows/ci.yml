@@ -179,6 +179,12 @@ jobs:
   secrets-scan:
     name: Secret scanning (gitleaks)
     runs-on: ubuntu-latest
+    # gitleaks-action posts scan results to the pull request; without these
+    # grants it dies with "Resource not accessible by integration" on every PR.
+    permissions:
+      contents: read
+      security-events: write
+      pull-requests: write
     steps:
       - uses: actions/checkout@v7
         with:
@@ -194,6 +200,11 @@ jobs:
     name: Dependency review
     runs-on: ubuntu-latest
     if: github.event_name == 'pull_request'
+    # Private repos without GitHub Advanced Security cannot run dependency
+    # review; the action errors out ("not supported on this repository").
+    # Keep it non-blocking so the summary still appears where supported,
+    # and the npm-audit gate in the frontend job remains the enforcing check.
+    continue-on-error: true
     steps:
       - uses: actions/checkout@v7
       - uses: actions/dependency-review-action@v5

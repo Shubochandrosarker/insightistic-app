@@ -511,6 +511,25 @@ Route::middleware(['auth:sanctum', 'tenant', 'restrict.impersonation'])->group(f
             // Search Intelligence export (Phase 5) — ?type= picks the report.
             Route::get('sites/{site}/search/export.csv', [ExportController::class, 'search']);
         });
+
+        // AI Visibility (Phase 11, docs/roadmap-2026/14-AI-VISIBILITY.md).
+        // Reads over stored observations (runs/mentions/citations) are open
+        // to anyone with site access, like every other analytics surface.
+        // Tracking prompts/competitors and queueing a check are owner/admin:
+        // every prompt run costs real provider spend and burns the plan's
+        // ai_prompt_runs_monthly quota, matching every other queued heavy
+        // action (quota guard lives in the controller + job).
+        Route::get('sites/{site}/ai-visibility', [\App\Http\Controllers\Api\AiVisibilityController::class, 'overview']);
+        Route::get('sites/{site}/ai-visibility/prompts', [\App\Http\Controllers\Api\AiVisibilityController::class, 'prompts']);
+        Route::get('sites/{site}/ai-visibility/mentions', [\App\Http\Controllers\Api\AiVisibilityController::class, 'mentions']);
+        Route::get('sites/{site}/ai-visibility/competitors', [\App\Http\Controllers\Api\AiVisibilityController::class, 'competitors']);
+        Route::middleware('role:owner,admin')->group(function () {
+            Route::post('sites/{site}/ai-visibility/prompts', [\App\Http\Controllers\Api\AiVisibilityController::class, 'storePrompt']);
+            Route::delete('sites/{site}/ai-visibility/prompts/{prompt}', [\App\Http\Controllers\Api\AiVisibilityController::class, 'destroyPrompt']);
+            Route::match(['get', 'post'], 'sites/{site}/ai-visibility/prompts/{prompt}/check', [\App\Http\Controllers\Api\AiVisibilityController::class, 'checkPrompt']);
+            Route::post('sites/{site}/ai-visibility/competitors', [\App\Http\Controllers\Api\AiVisibilityController::class, 'storeCompetitor']);
+            Route::delete('sites/{site}/ai-visibility/competitors/{competitor}', [\App\Http\Controllers\Api\AiVisibilityController::class, 'destroyCompetitor']);
+        });
     });
 
     // Report view + send (not site-scoped in the URL; access checked in controller).
@@ -723,3 +742,22 @@ Route::post('billing/webhook/stripe', [BillingController::class, 'webhook']);
 // Deliberately outside every middleware group — Paddle retries with its own
 // schedule and its servers carry no bearer token.
 Route::post('billing/webhook/paddle', [PaddleWebhookController::class, '__invoke']);
+
+// ---- Uptime monitoring (Phase 12, docs/roadmap-2026/16-PERFORMANCE-UPTIME.md)
+// Appended as its own group rather than spliced into the site.access group
+// above (this file is co-edited on the branch); the middleware stack is
+// identical, so {site} resolution, tenancy 404s and impersonation
+// restrictions behave exactly as they do for every other site surface.
+// Reads are open to anyone with site access; configuring/deleting the
+// monitor and the immediate check-now are owner/admin — like every other
+// queued heavy action (each probe costs an outbound request + history rows).
+Route::middleware(['auth:sanctum', 'tenant', 'restrict.impersonation', 'site.access'])->group(function () {
+    Route::get('sites/{site}/uptime', [\App\Http\Controllers\Api\UptimeController::class, 'index']);
+    Route::get('sites/{site}/uptime/incidents', [\App\Http\Controllers\Api\UptimeController::class, 'incidents']);
+
+    Route::middleware('role:owner,admin')->group(function () {
+        Route::post('sites/{site}/uptime/monitors', [\App\Http\Controllers\Api\UptimeController::class, 'store']);
+        Route::delete('sites/{site}/uptime/monitors/{monitor}', [\App\Http\Controllers\Api\UptimeController::class, 'destroy']);
+        Route::post('sites/{site}/uptime/check', [\App\Http\Controllers\Api\UptimeController::class, 'check']);
+    });
+});

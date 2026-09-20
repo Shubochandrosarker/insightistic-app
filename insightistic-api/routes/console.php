@@ -160,3 +160,32 @@ Schedule::command('insightistic:billing-reconcile')
 Schedule::command('insightistic:rank-check')
     ->dailyAt('06:00')
     ->withoutOverlapping();
+
+/*
+ * Uptime checks (Phase 12, docs/roadmap-2026/16-PERFORMANCE-UPTIME.md).
+ * Every 5 minutes withoutOverlapping; the command itself decides which
+ * active monitors are actually due on their own interval_minutes
+ * (plan-derived at monitor creation: Starter 10, Growth 5, Agency 1-5),
+ * so one schedule entry serves every cadence. Each probe is its own
+ * queued ProbeUptimeJob (tries=1 — a crashed probe must never become a
+ * synthetic "second failure"; the next pass is the retry). The doc-16
+ * confirmation rule (no alert until the SECOND consecutive failed probe)
+ * lives in IncidentManager, not here.
+ */
+Schedule::command('insightistic:uptime-check')
+    ->everyFiveMinutes()
+    ->withoutOverlapping();
+
+/*
+ * AI Visibility (Phase 11, docs/roadmap-2026/14-AI-VISIBILITY.md). Daily at
+ * 07:00, first of the morning AI passes: answers are observations of the
+ * external world, so they are taken after the nightly data chain is done
+ * and before business hours read the dashboard. Each site with active
+ * prompts gets one queued RunAiVisibilityJob (tries=1 — a failed provider
+ * call is recorded as a failed run, never retried into a double bill);
+ * the plan's ai_prompt_runs_monthly quota and the daily due-pick live in
+ * the job, so an overlapping or re-run command is a safe no-op.
+ */
+Schedule::command('insightistic:ai-visibility')
+    ->dailyAt('07:00')
+    ->withoutOverlapping();

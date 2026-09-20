@@ -44,14 +44,15 @@ export const NAV_GROUPS: NavGroup[] = [
     label: "Site Audit",
     icon: "FileSearch",
     items: [
-      // Site Health is the audit section's live page today; the crawl-
-      // centric views below land in a later phase.
-      { label: "Site Health", href: "/dashboard/site-health" },
-      { label: "Overview", soon: true, hint: "Crawl overview is coming soon" },
-      { label: "Pages", soon: true, hint: "Crawled pages report is coming soon" },
-      { label: "Links", soon: true, hint: "Internal & external links are coming soon" },
+      { label: "Overview", href: "/dashboard/audit" },
+      { label: "Pages", href: "/dashboard/audit/pages" },
+      { label: "Links", href: "/dashboard/audit/links" },
+      { label: "Issues", href: "/dashboard/audit/issues" },
+      // The connector health page keeps its /dashboard/site-health route —
+      // it reports plugin/sync reachability rather than crawl results, so it
+      // reads better renamed inside the audit group.
+      { label: "Connector health", href: "/dashboard/site-health" },
       { label: "Images", soon: true, hint: "Image audit is coming soon" },
-      { label: "Issues", soon: true, hint: "Issue explorer is coming soon" },
       { label: "Changes", soon: true, hint: "Change tracking is coming soon" },
     ],
   },

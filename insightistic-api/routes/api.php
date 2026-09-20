@@ -343,6 +343,22 @@ Route::middleware(['auth:sanctum', 'tenant', 'restrict.impersonation'])->group(f
         Route::post('sites/{site}/search/backfill', [SearchController::class, 'backfill'])
             ->middleware('role:owner,admin');
 
+        // Site crawler (Phase 7, doc 12). Reads over runs/pages/links/issues
+        // are open to anyone with site access, like every other analytics
+        // surface. Starting a crawl and triaging issues are owner/admin:
+        // a crawl consumes the plan's monthly page budget and puts load on
+        // the target site, matching every other queued heavy action.
+        Route::get('sites/{site}/crawl/runs', [\App\Http\Controllers\Api\CrawlController::class, 'runs']);
+        Route::get('sites/{site}/crawl/runs/{run}', [\App\Http\Controllers\Api\CrawlController::class, 'runShow']);
+        Route::get('sites/{site}/crawl/pages', [\App\Http\Controllers\Api\CrawlController::class, 'pages']);
+        Route::get('sites/{site}/crawl/links', [\App\Http\Controllers\Api\CrawlController::class, 'links']);
+        Route::get('sites/{site}/crawl/issues', [\App\Http\Controllers\Api\CrawlController::class, 'issues']);
+        Route::get('sites/{site}/crawl/health', [\App\Http\Controllers\Api\CrawlController::class, 'health']);
+        Route::middleware('role:owner,admin')->group(function () {
+            Route::post('sites/{site}/crawl/run', [\App\Http\Controllers\Api\CrawlController::class, 'run']);
+            Route::post('sites/{site}/crawl/issues/{issue}/status', [\App\Http\Controllers\Api\CrawlController::class, 'issueStatus']);
+        });
+
         Route::get('sites/{site}/analytics/performance/history', [PerformanceController::class, 'history']);
         Route::get('sites/{site}/analytics/performance/latest', [PerformanceController::class, 'latest']);
         // Run PageSpeed from the SaaS backend (spec Phase 3.3). Queued, and
@@ -457,6 +473,7 @@ Route::middleware(['auth:sanctum', 'tenant', 'restrict.impersonation'])->group(f
         Route::middleware('throttle:exports')->group(function () {
             Route::get('sites/{site}/exports/traffic.csv', [ExportController::class, 'traffic']);
             Route::get('sites/{site}/exports/seo.csv', [ExportController::class, 'seo']);
+            Route::get('sites/{site}/exports/crawl.csv', [ExportController::class, 'crawl']);
             Route::get('sites/{site}/exports/performance.csv', [ExportController::class, 'performance']);
             Route::get('sites/{site}/exports/commerce.csv', [ExportController::class, 'commerce']);
             // Search Intelligence export (Phase 5) — ?type= picks the report.

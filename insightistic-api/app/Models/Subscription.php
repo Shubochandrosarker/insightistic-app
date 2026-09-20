@@ -16,6 +16,9 @@ class Subscription extends Model
         'cancel_at_period_end',
         'internal_override_active', 'internal_override_reason',
         'internal_override_by', 'internal_override_at',
+        'billing_provider', 'provider_customer_id', 'provider_subscription_id',
+        'provider_price_id', 'provider_status', 'next_billed_at',
+        'scheduled_change_action', 'scheduled_change_at',
     ];
 
     protected function casts(): array
@@ -26,6 +29,14 @@ class Subscription extends Model
             'cancel_at_period_end'     => 'boolean',
             'internal_override_active' => 'boolean',
             'internal_override_at'     => 'datetime',
+            'billing_provider'         => 'string',
+            'provider_customer_id'     => 'string',
+            'provider_subscription_id' => 'string',
+            'provider_price_id'        => 'string',
+            'provider_status'          => 'string',
+            'next_billed_at'           => 'datetime',
+            'scheduled_change_action'  => 'string',
+            'scheduled_change_at'      => 'datetime',
         ];
     }
 

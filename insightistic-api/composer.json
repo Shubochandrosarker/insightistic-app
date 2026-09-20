@@ -25,6 +25,8 @@
         "league/html-to-markdown": "^5.1",
         "open-telemetry/exporter-otlp": "^1.4",
         "open-telemetry/sdk": "^1.15",
+        "paddlehq/paddle-php-sdk": "^1.18",
+        "php-http/guzzle7-adapter": "^1.1",
         "phpoffice/phpword": "^1.4",
         "pragmarx/google2fa": "^9.0",
         "predis/predis": "^3.5",

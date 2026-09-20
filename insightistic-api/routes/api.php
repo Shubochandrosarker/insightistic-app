@@ -45,6 +45,7 @@ use App\Http\Controllers\Api\OAuthController;
 use App\Http\Controllers\Api\OnboardingController;
 use App\Http\Controllers\Api\MetricRegistryController;
 use App\Http\Controllers\Api\OrganizationController;
+use App\Http\Controllers\Api\PaddleWebhookController;
 use App\Http\Controllers\Api\PerformanceController;
 use App\Http\Controllers\Api\PluginAiController;
 use App\Http\Controllers\Api\PluginCloudflareController;
@@ -183,6 +184,13 @@ Route::middleware(['auth:sanctum', 'tenant', 'restrict.impersonation'])->group(f
     Route::post('billing/portal', [BillingController::class, 'portal'])->middleware('role:owner');
     Route::post('billing/cancel', [BillingController::class, 'cancel'])->middleware(['role:owner', 'reauth']);
     Route::post('billing/reactivate', [BillingController::class, 'reactivate'])->middleware('role:owner');
+
+    // Paddle (roadmap 23-STRIPE-TO-PADDLE-MIGRATION) — checkout config feeds
+    // Paddle.js; change-plan is a real billing mutation, so reauth like the
+    // Stripe cancel above. Both no-op with 501 while the feature flag is off
+    // (checked inside the controllers so the routes stay discoverable).
+    Route::post('billing/checkout-config', [BillingController::class, 'paddleCheckoutConfig'])->middleware('role:owner');
+    Route::post('billing/change-plan', [BillingController::class, 'paddleChangePlan'])->middleware(['role:owner', 'reauth']);
 
     // Licenses tab (spec §2). Raw keys only ever appear in regenerate/register responses.
     Route::get('licenses', [LicenseController::class, 'index']);
@@ -619,3 +627,8 @@ Route::prefix('connector/v1')->middleware(['connector.auth', 'throttle:connector
 
 // ---- Stripe webhook (no tenant, signature-verified) -----------------------
 Route::post('billing/webhook/stripe', [BillingController::class, 'webhook']);
+
+// ---- Paddle webhook (same shape: no tenant, HMAC-verified, queued) --------
+// Deliberately outside every middleware group — Paddle retries with its own
+// schedule and its servers carry no bearer token.
+Route::post('billing/webhook/paddle', [PaddleWebhookController::class, '__invoke']);

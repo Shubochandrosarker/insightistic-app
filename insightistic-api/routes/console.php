@@ -121,3 +121,15 @@ Schedule::command('insightistic:anomalies-scan')
 Schedule::command('insightistic:outcome-verifications-run')
     ->dailyAt('06:00')
     ->withoutOverlapping();
+
+/*
+ * Billing reconciliation (roadmap 23-STRIPE-TO-PADDLE-MIGRATION §4.3).
+ * Daily at 04:30 — after the nightly writes (snapshots 02:00, privacy
+ * 03:30, telemetry 03:50) and before business hours, so any drift webhooks
+ * missed is repaired before the day's first billing surface renders.
+ * Runbook: docs/roadmap-2026/23-STRIPE-TO-PADDLE-MIGRATION.md. No-ops
+ * gracefully while PADDLE_API_KEY is unset.
+ */
+Schedule::command('insightistic:billing-reconcile')
+    ->dailyAt('04:30')
+    ->withoutOverlapping();

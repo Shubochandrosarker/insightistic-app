@@ -33,7 +33,9 @@ export const NAV_GROUPS: NavGroup[] = [
     label: "AI Visibility",
     icon: "Sparkles",
     items: [
-      { label: "Overview", soon: true, hint: "AI visibility overview is coming soon" },
+      // Prompts/Mentions/Citations/Competitors live INSIDE the overview page
+      // as cards, so only Overview is a real route for now.
+      { label: "Overview", href: "/dashboard/visibility" },
       { label: "Prompts", soon: true, hint: "Prompt tracking is coming soon" },
       { label: "Mentions", soon: true, hint: "Brand mention tracking is coming soon" },
       { label: "Citations", soon: true, hint: "Citation tracking is coming soon" },
@@ -62,7 +64,7 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       { label: "Core Web Vitals", href: "/dashboard/performance" },
       { label: "Cloudflare", href: "/dashboard/cloudflare" },
-      { label: "Uptime", soon: true, hint: "Uptime monitoring is coming soon" },
+      { label: "Uptime", href: "/dashboard/uptime" },
     ],
   },
   {

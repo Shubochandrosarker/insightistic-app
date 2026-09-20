@@ -11,7 +11,7 @@ use Illuminate\Support\Str;
  * no un-cancel), while Stripe orgs keep their exact legacy behavior.
  */
 
-/** Org whose subscription row points at Paddle, with a Sanctum owner token. */
+/** Org whose subscription row points at Paddle, with a re-authed owner token. */
 function paddleActionOrg(string $email): array
 {
     [$user, $org] = makeOrgUser($email);
@@ -27,6 +27,16 @@ function paddleActionOrg(string $email): array
         'provider_price_id'        => 'pri_' . Str::random(8),
         'provider_status'          => 'active',
     ]);
+
+    // cancel/portal ride the reauth middleware — mark this token as
+    // recently re-authenticated (PrivacyTest pattern).
+    test()->withToken($token)
+        ->postJson('/api/auth/reauthenticate', ['password' => 'secret-password'])
+        ->assertOk();
+
+    // PaddleClient refuses to call out without a key; tests never hit the
+    // real API (Http::fake below) but the guard runs first.
+    config()->set('billing.paddle.api_key', 'pdl_test_' . Str::random(12));
 
     return [$org, $token];
 }

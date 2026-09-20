@@ -210,8 +210,11 @@ class SearchExplorer
                 'prev_clicks'      => $prevRow['clicks'] ?? 0,
                 'prev_impressions' => $prevRow['impressions'] ?? 0,
                 'prev_position'    => $prevRow['position'] ?? null,
-                'clicks_delta'     => $row['clicks'] - ($prevRow['clicks'] ?? 0),
-                'impressions_delta' => $row['impressions'] - ($prevRow['impressions'] ?? 0),
+                // With no prior-window row there is no comparison — deltas
+                // stay 0/null rather than measuring against an implied zero
+                // (a brand-new query is not "up 40 clicks", it is uncomparable).
+                'clicks_delta'     => $prevRow === null ? 0 : $row['clicks'] - $prevRow['clicks'],
+                'impressions_delta' => $prevRow === null ? 0 : $row['impressions'] - $prevRow['impressions'],
                 'position_delta'   => ($row['position'] !== null && ($prevRow['position'] ?? null) !== null)
                     ? round($row['position'] - $prevRow['position'], 2) // negative = improved
                     : null,

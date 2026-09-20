@@ -14,6 +14,7 @@ use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Str;
 
 /**
  * Search Console intelligence (Phase 5, doc 10-GOOGLE-SEARCH-CONSOLE.md).
@@ -84,10 +85,11 @@ class SearchController extends Controller
             'type' => ['sometimes', 'in:' . implode(',', self::OPPORTUNITY_TYPES)],
         ]);
 
-        [$site, $from, $to, $prevFrom, $prevTo] = $this->window($request, $this->site($request));
+        $site = $this->site($request);
+        [$from, $to, $prevFrom, $prevTo] = $this->window($request, $site);
 
         $reports = isset($validated['type'])
-            ? [$validated['type'] => $this->engine->{$validated['type']}($site, $from, $to, $prevFrom, $prevTo)]
+            ? [$validated['type'] => $this->engine->{Str::camel($validated['type'])}($site, $from, $to, $prevFrom, $prevTo)]
             : $this->engine->all($site, $from, $to, $prevFrom, $prevTo);
 
         return response()->json([

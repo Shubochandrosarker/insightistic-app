@@ -179,7 +179,8 @@ it('exports the queries report as csv', function () {
     $response = $this->actingAs($user)
         ->get("/api/sites/{$site->id}/search/export.csv?type=queries")
         ->assertOk()
-        ->assertHeader('Content-Type', 'text/csv');
+        // Symfony appends the charset to the streamed header.
+        ->assertHeader('Content-Type', 'text/csv; charset=utf-8');
 
     $csv = $response->streamedContent();
 

@@ -376,7 +376,14 @@ class OpportunityEngine
         // aggregate maps — a hash with no aggregate row would otherwise leak
         // its sha1 into the UI.
         $queryTexts = $this->labelsFor(SeoQueryDaily::query()->where('site_id', $site->id), 'query_hash', 'query', array_keys($grouped));
-        $pageTexts = $this->labelsFor(SeoPageDaily::query()->where('site_id', $site->id), 'page_hash', 'page_path', array_merge(...array_map(fn (array $pages) => array_column($pages, 'page_hash'), $grouped ?: [[]])));
+
+        $pageHashes = [];
+        foreach ($grouped as $pages) {
+            foreach ($pages as $p) {
+                $pageHashes[] = (string) $p['page_hash'];
+            }
+        }
+        $pageTexts = $this->labelsFor(SeoPageDaily::query()->where('site_id', $site->id), 'page_hash', 'page_path', array_values(array_unique($pageHashes)));
 
         $items = [];
         foreach ($grouped as $queryHash => $pages) {

@@ -233,6 +233,9 @@ it('flags cannibalization candidates with competing pages', function () {
     engineSeedPair($site, '2026-06-12', 'best crm for agencies', '/guides/crm-b', 5, 60, 6.0);
     engineSeedPage($site, '2026-06-05', '/guides/crm-a', 20, 100, 4.0);
     engineSeedPage($site, '2026-06-05', '/guides/crm-b', 10, 120, 6.0);
+    // Real sync always writes the query/page grain alongside query×page
+    // pairs — label resolution reads the query grain.
+    engineSeedQuery($site, '2026-06-05', 'best crm for agencies', 15, 110, 5.0);
 
     // Single landing page above the floor — not a candidate.
     engineSeedPair($site, '2026-06-05', 'single page query', '/only/page', 10, 50, 3.0);

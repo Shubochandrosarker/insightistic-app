@@ -165,8 +165,10 @@ it('backfills in 30-day chunks, tracks coverage progressively and ends done', fu
     Http::fake(function (Request $request) use (&$windows) {
         $windows[] = [$request['startDate'], $request['endDate']];
 
+        // Key each chunk's row on its own start date — an identical row for
+        // both chunks would upsert-collapse into one grain row.
         return Http::response(['rows' => [
-            ['keys' => ['2026-06-15', 'chunk row'], 'clicks' => 1, 'impressions' => 10, 'ctr' => 0.1, 'position' => 5.0],
+            ['keys' => [$request['startDate'], 'chunk row'], 'clicks' => 1, 'impressions' => 10, 'ctr' => 0.1, 'position' => 5.0],
         ]]);
     });
 
@@ -201,7 +203,14 @@ it('short-circuits a finished backfill unless forced', function () {
         'attempts'     => 1,
     ]);
 
-    Http::fake(['www.googleapis.com/webmasters/*' => Http::response(['rows' => []])]);
+    // ONE fake for the whole test: re-calling Http::fake() re-stubs the
+    // container's factory, but objects already constructed keep the first
+    // stub set — so the forced run would silently get the old response.
+    // The short-circuit run sends nothing at all, so a single stub serving
+    // the real row covers both phases.
+    Http::fake(['www.googleapis.com/webmasters/*' => Http::response(['rows' => [
+        ['keys' => ['2026-06-01', '/landing'], 'clicks' => 2, 'impressions' => 50, 'ctr' => 0.04, 'position' => 7.0],
+    ]])]);
 
     // Same range, already done: no fetches, no attempt bump, no rewrites.
     (new BackfillGscHistory($site, 'pages', '2026-06-01', '2026-06-30'))->handle(app(GscClient::class));
@@ -211,11 +220,7 @@ it('short-circuits a finished backfill unless forced', function () {
     $state = SeoBackfillState::where('site_id', $site->id)->where('dimension', 'pages')->firstOrFail();
     expect($state->status)->toBe('done')->and($state->attempts)->toBe(1);
 
-    // Forced refresh is allowed to walk the range again.
-    Http::fake(['www.googleapis.com/webmasters/*' => Http::response(['rows' => [
-        ['keys' => ['2026-06-01', '/landing'], 'clicks' => 2, 'impressions' => 50, 'ctr' => 0.04, 'position' => 7.0],
-    ]])]);
-
+    // Forced refresh is allowed to walk the range again (same stub serves it).
     (new BackfillGscHistory($site, 'pages', '2026-06-01', '2026-06-30', force: true))->handle(app(GscClient::class));
 
     $state = $state->fresh();

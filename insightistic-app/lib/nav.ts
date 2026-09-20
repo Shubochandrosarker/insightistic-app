@@ -53,7 +53,7 @@ export const NAV_GROUPS: NavGroup[] = [
       // reads better renamed inside the audit group.
       { label: "Connector health", href: "/dashboard/site-health" },
       { label: "Images", soon: true, hint: "Image audit is coming soon" },
-      { label: "Changes", soon: true, hint: "Change tracking is coming soon" },
+      { label: "Changes", href: "/dashboard/audit/changes" },
     ],
   },
   {
@@ -61,8 +61,8 @@ export const NAV_GROUPS: NavGroup[] = [
     icon: "Gauge",
     items: [
       { label: "Core Web Vitals", href: "/dashboard/performance" },
+      { label: "Cloudflare", href: "/dashboard/cloudflare" },
       { label: "Uptime", soon: true, hint: "Uptime monitoring is coming soon" },
-      { label: "Cloudflare", soon: true, hint: "Cloudflare edge data is coming soon" },
     ],
   },
   {

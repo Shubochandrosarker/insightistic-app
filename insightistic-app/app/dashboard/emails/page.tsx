@@ -62,13 +62,13 @@ const money = (v: number | null | undefined, currency: string | null) =>
   v === null || v === undefined ? "—" : `${currency ? currency + " " : ""}${v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 export default function EmailsPage() {
-  const { siteId, sites } = useDashboard();
+  const { siteId, sites, rangeQuery } = useDashboard();
   const site = sites.find((s) => s.id === siteId);
   const [days, setDays] = useState(90);
 
   const overview = useApi<{ connection: Connection; overview: Overview }>(
-    siteId ? `/sites/${siteId}/emails/overview?days=${days}` : null,
-    [days],
+    siteId ? `/sites/${siteId}/emails/overview?days=${days}${rangeQuery}` : null,
+    [days, rangeQuery],
   );
   const list = useApi<{ campaigns: Campaign[] }>(siteId ? `/sites/${siteId}/emails/campaigns` : null);
 

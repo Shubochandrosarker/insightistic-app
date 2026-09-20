@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { ErrorState } from "@/components/dashboard/states";
 
 export type Column<T> = {
   key: string;
@@ -17,13 +18,20 @@ export function ResponsiveTable<T>({
   rows,
   empty = "No data.",
   rowKey,
+  error = null,
+  emptyMessage,
 }: {
   columns: Column<T>[];
   rows: T[];
   empty?: string;
+  /** Phase 3: when the fetch behind these rows failed, show an error card instead of pretending the table is just empty. */
+  error?: string | null;
+  /** Phase 3: alias for `empty`; takes precedence when both are provided. */
+  emptyMessage?: string;
   rowKey: (row: T, i: number) => string | number;
 }) {
-  if (!rows.length) return <p className="py-6 text-center text-sm text-muted">{empty}</p>;
+  if (error) return <ErrorState message={error} />;
+  if (!rows.length) return <p className="py-6 text-center text-sm text-muted">{emptyMessage ?? empty}</p>;
 
   const cell = (col: Column<T>, row: T) => (col.render ? col.render(row) : ((row as any)[col.key] ?? "—"));
 

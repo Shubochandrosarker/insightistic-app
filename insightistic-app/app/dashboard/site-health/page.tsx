@@ -5,6 +5,7 @@ import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { PageHeader } from "@/components/dashboard/PageHeader";
 import { EmptyState } from "@/components/dashboard/EmptyState";
+import { ErrorState, SourceFreshness } from "@/components/dashboard/states";
 import { Spinner } from "@/components/ui/Spinner";
 import { num, timeAgo } from "@/lib/format";
 import { Activity } from "lucide-react";
@@ -25,10 +26,20 @@ function HealthCard({ title, status, detail }: { title: string; status: "Healthy
 export default function SiteHealthPage() {
   const { siteId, sites } = useDashboard();
   const site = sites.find((s) => s.id === siteId);
-  const { data, loading } = useApi<any>(siteId ? `/sites/${siteId}/health` : null);
+  const { data, loading, error, reload } = useApi<any>(siteId ? `/sites/${siteId}/health` : null);
 
   if (!siteId) return <EmptyState icon={<Activity size={20} />} title="No site connected" hint="Connect a store to monitor its sync health." />;
-  if (loading || !data) return <Spinner />;
+  if (loading) return <Spinner />;
+
+  // A failed fetch is not the same as "all clear" — say so and offer a retry.
+  if (error)
+    return (
+      <div>
+        <PageHeader title="Site Health" subtitle={`Connection, sync, and data integrity for ${site?.name || "your store"}.`} />
+        <ErrorState message={error} onRetry={reload} />
+      </div>
+    );
+  if (!data) return <Spinner />;
 
   const s = data.site || {};
   const connected = s.connection_status === "connected";
@@ -57,7 +68,16 @@ export default function SiteHealthPage() {
         />
       </div>
 
-      <Card className="mt-5" title="Sync log" right={<span className="text-xs text-muted">{site?.domain}</span>}>
+      <Card
+        className="mt-5"
+        title="Sync log"
+        right={
+          <span className="flex items-center gap-3">
+            <SourceFreshness label="Last sync" asOf={synced} />
+            <span className="text-xs text-muted">{site?.domain}</span>
+          </span>
+        }
+      >
         {logs.length === 0 ? (
           <p className="py-6 text-center text-sm text-muted">No sync activity recorded yet.</p>
         ) : (

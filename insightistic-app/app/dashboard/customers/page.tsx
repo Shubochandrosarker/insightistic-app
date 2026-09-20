@@ -4,18 +4,32 @@ import { useApi } from "@/lib/useApi";
 import { Card } from "@/components/ui/Card";
 import { PageHeader } from "@/components/dashboard/PageHeader";
 import { EmptyState } from "@/components/dashboard/EmptyState";
+import { ErrorState } from "@/components/dashboard/states";
 import { Spinner } from "@/components/ui/Spinner";
 import { money, num, initials } from "@/lib/format";
 import { Users } from "lucide-react";
 
 export default function CustomersPage() {
-  const { siteId, period, sites } = useDashboard();
+  const { siteId, period, sites, rangeQuery } = useDashboard();
   const site = sites.find((s) => s.id === siteId);
   const cur = site?.currency as string | undefined;
-  const { data, loading } = useApi<any>(siteId ? `/sites/${siteId}/analytics/customers?period=${period}` : null, [period]);
+  const { data, loading, error, reload } = useApi<any>(
+    siteId ? `/sites/${siteId}/analytics/customers?period=${period}${rangeQuery}` : null,
+    [period, rangeQuery],
+  );
 
   if (!siteId) return <EmptyState icon={<Users size={20} />} title="No site connected" hint="Connect a store to see customer insights." />;
-  if (loading || !data) return <Spinner />;
+  if (loading) return <Spinner />;
+
+  // A failed fetch is not the same as "no customers yet" — say so and offer a retry.
+  if (error)
+    return (
+      <div>
+        <PageHeader title="Customers" subtitle="Who’s buying, who’s loyal, and who’s slipping away." />
+        <ErrorState message={error} onRetry={reload} />
+      </div>
+    );
+  if (!data) return <Spinner />;
 
   const newC = data.new_customers ?? 0;
   const retC = data.returning_customers ?? 0;

@@ -7,6 +7,7 @@ import { AreaTrend } from "@/components/dashboard/Charts";
 import { Card } from "@/components/ui/Card";
 import { PageHeader } from "@/components/dashboard/PageHeader";
 import { EmptyState } from "@/components/dashboard/EmptyState";
+import { ErrorState } from "@/components/dashboard/states";
 import { Spinner } from "@/components/ui/Spinner";
 import { num } from "@/lib/format";
 import { Globe, TrendingUp } from "lucide-react";
@@ -20,13 +21,13 @@ const DIMENSIONS: { key: string; label: string }[] = [
 ];
 
 export default function TrafficPage() {
-  const { siteId, period, sites } = useDashboard();
+  const { siteId, period, sites, rangeQuery } = useDashboard();
   const site = sites.find((s) => s.id === siteId);
   const base = siteId ? `/sites/${siteId}/analytics/traffic` : null;
 
-  const ov = useApi<any>(base ? `${base}/overview?period=${period}` : null, [period]);
+  const ov = useApi<any>(base ? `${base}/overview?period=${period}${rangeQuery}` : null, [period, rangeQuery]);
   const [dimension, setDimension] = useState("channel");
-  const dim = useApi<any>(base ? `${base}/dimensions/${dimension}?period=${period}` : null, [period, dimension]);
+  const dim = useApi<any>(base ? `${base}/dimensions/${dimension}?period=${period}${rangeQuery}` : null, [period, rangeQuery, dimension]);
 
   if (!siteId)
     return (
@@ -38,6 +39,15 @@ export default function TrafficPage() {
     );
 
   if (ov.loading) return <Spinner />;
+
+  // A failed overview fetch is not the same as an empty site — say so and offer a retry.
+  if (ov.error)
+    return (
+      <div>
+        <PageHeader title="Traffic Analytics" subtitle={`${site?.name || ""} · sourced from Google Analytics 4`} />
+        <ErrorState message={ov.error} onRetry={ov.reload} />
+      </div>
+    );
 
   const m = ov.data?.metrics || {};
   const d = ov.data?.deltas || {};
@@ -90,6 +100,8 @@ export default function TrafficPage() {
 
             {dim.loading ? (
               <Spinner />
+            ) : dim.error && !dim.data ? (
+              <ErrorState message={dim.error} onRetry={dim.reload} />
             ) : (dim.data?.rows || []).length === 0 ? (
               <p className="py-8 text-center text-sm text-muted">No breakdown data for this period yet.</p>
             ) : (

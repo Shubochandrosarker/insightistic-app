@@ -7,6 +7,7 @@ import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { PageHeader } from "@/components/dashboard/PageHeader";
 import { EmptyState } from "@/components/dashboard/EmptyState";
+import { ErrorState } from "@/components/dashboard/states";
 import { Spinner } from "@/components/ui/Spinner";
 import { num } from "@/lib/format";
 import { Search } from "lucide-react";
@@ -19,13 +20,13 @@ const OPPORTUNITY_LABEL: Record<string, { label: string; tone: "amber" | "red" |
 };
 
 export default function SeoPage() {
-  const { siteId, period, sites } = useDashboard();
+  const { siteId, period, sites, rangeQuery } = useDashboard();
   const site = sites.find((s) => s.id === siteId);
   const base = siteId ? `/sites/${siteId}/analytics/seo` : null;
 
-  const ov = useApi<any>(base ? `${base}/overview?period=${period}` : null, [period]);
-  const q = useApi<any>(base ? `${base}/queries?period=${period}&limit=15` : null, [period]);
-  const p = useApi<any>(base ? `${base}/pages?period=${period}&limit=15` : null, [period]);
+  const ov = useApi<any>(base ? `${base}/overview?period=${period}${rangeQuery}` : null, [period, rangeQuery]);
+  const q = useApi<any>(base ? `${base}/queries?period=${period}${rangeQuery}&limit=15` : null, [period, rangeQuery]);
+  const p = useApi<any>(base ? `${base}/pages?period=${period}${rangeQuery}&limit=15` : null, [period, rangeQuery]);
 
   if (!siteId)
     return (
@@ -37,6 +38,15 @@ export default function SeoPage() {
     );
 
   if (ov.loading) return <Spinner />;
+
+  // A failed overview fetch is not the same as an empty site — say so and offer a retry.
+  if (ov.error)
+    return (
+      <div>
+        <PageHeader title="SEO Analytics" subtitle={`${site?.name || ""} · sourced from Google Search Console`} />
+        <ErrorState message={ov.error} onRetry={ov.reload} />
+      </div>
+    );
 
   const m = ov.data?.metrics || {};
   const d = ov.data?.deltas || {};
@@ -74,6 +84,8 @@ export default function SeoPage() {
             <Card title="Top queries">
               {q.loading ? (
                 <Spinner />
+              ) : q.error && !q.data ? (
+                <ErrorState message={q.error} onRetry={q.reload} />
               ) : (q.data?.queries || []).length === 0 ? (
                 <p className="py-6 text-center text-sm text-muted">No query data for this period yet.</p>
               ) : (
@@ -97,6 +109,8 @@ export default function SeoPage() {
             <Card title="Top pages">
               {p.loading ? (
                 <Spinner />
+              ) : p.error && !p.data ? (
+                <ErrorState message={p.error} onRetry={p.reload} />
               ) : (p.data?.pages || []).length === 0 ? (
                 <p className="py-6 text-center text-sm text-muted">No page data for this period yet.</p>
               ) : (

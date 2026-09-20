@@ -5,6 +5,7 @@ import { Card } from "@/components/ui/Card";
 import { AreaTrend, Bars, Donut } from "@/components/dashboard/Charts";
 import { PageHeader } from "@/components/dashboard/PageHeader";
 import { EmptyState } from "@/components/dashboard/EmptyState";
+import { ErrorState } from "@/components/dashboard/states";
 import { Spinner } from "@/components/ui/Spinner";
 import { money0, num } from "@/lib/format";
 import { TrendingUp } from "lucide-react";
@@ -12,14 +13,24 @@ import { TrendingUp } from "lucide-react";
 const SEG_COLORS = ["#00C04B", "#00D084", "#F6A609", "#6C5CE7", "#9FB4AD"];
 
 export default function RevenuePage() {
-  const { siteId, period, sites } = useDashboard();
+  const { siteId, period, sites, rangeQuery } = useDashboard();
   const site = sites.find((s) => s.id === siteId);
   const cur = site?.currency as string | undefined;
-  const rev = useApi<any>(siteId ? `/sites/${siteId}/analytics/revenue?period=${period}` : null, [period]);
+  const rev = useApi<any>(siteId ? `/sites/${siteId}/analytics/revenue?period=${period}${rangeQuery}` : null, [period, rangeQuery]);
   const ord = useApi<any>(siteId ? `/sites/${siteId}/orders` : null);
 
   if (!siteId) return <EmptyState icon={<TrendingUp size={20} />} title="No site connected" hint="Connect a store to see revenue analytics." />;
-  if (rev.loading || !rev.data) return <Spinner />;
+  if (rev.loading) return <Spinner />;
+
+  // A failed fetch is not the same as a store with no revenue — say so and offer a retry.
+  if (rev.error)
+    return (
+      <div>
+        <PageHeader title="Revenue" subtitle={`${site?.name || ""} · ${period.replace(/_/g, " ")}`} />
+        <ErrorState message={rev.error} onRetry={rev.reload} />
+      </div>
+    );
+  if (!rev.data) return <Spinner />;
 
   const series = rev.data.series || [];
   const total = series.reduce((s: number, r: any) => s + (r.revenue || 0), 0);
@@ -70,7 +81,11 @@ export default function RevenuePage() {
           {weeks.length ? <Bars data={weeks} dataKey="v" /> : <p className="py-10 text-center text-sm text-muted">Not enough data.</p>}
         </Card>
         <Card title="Payment methods" subtitle="From recent orders">
-          {pm.length ? (
+          {ord.loading ? (
+            <Spinner />
+          ) : ord.error && !ord.data ? (
+            <ErrorState message={ord.error} onRetry={ord.reload} />
+          ) : pm.length ? (
             <>
               <Donut data={pm} />
               <div className="mt-3 space-y-2">

@@ -29,16 +29,28 @@ interface DashState {
   setSiteId: (id: number) => void;
   period: string;
   setPeriod: (p: string) => void;
+  /** "" for presets, or "&from=YYYY-MM-DD&to=YYYY-MM-DD" for a custom range. */
+  rangeQuery: string;
+  setCustomRange: (from: string, to: string) => void;
   reloadSites: () => Promise<void>;
   loading: boolean;
 }
 
 const Ctx = createContext<DashState | null>(null);
 
+/** Stored shape for `ins_period`. A legacy value was a bare period key. */
+type SavedPeriod = { key: string; from?: string; to?: string };
+
+/** ISO dates compare correctly as strings; anything malformed is rejected. */
+function validRange(from?: string, to?: string): boolean {
+  return Boolean(from && to && /^\d{4}-\d{2}-\d{2}$/.test(from) && /^\d{4}-\d{2}-\d{2}$/.test(to) && from <= to);
+}
+
 export function DashboardProvider({ children }: { children: ReactNode }) {
   const [sites, setSites] = useState<Site[]>([]);
   const [siteId, setSiteIdState] = useState<number | null>(null);
   const [period, setPeriodState] = useState("last_30_days");
+  const [custom, setCustom] = useState<{ from: string; to: string } | null>(null);
   const [loading, setLoading] = useState(true);
 
   async function reloadSites() {
@@ -49,8 +61,21 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
   }
 
   useEffect(() => {
-    const savedPeriod = localStorage.getItem("ins_period");
-    if (savedPeriod) setPeriodState(savedPeriod);
+    const saved = localStorage.getItem("ins_period");
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved) as SavedPeriod;
+        if (parsed && typeof parsed.key === "string" && parsed.key !== "custom") {
+          setPeriodState(parsed.key);
+        } else if (parsed && parsed.key === "custom" && validRange(parsed.from, parsed.to)) {
+          setPeriodState("custom");
+          setCustom({ from: parsed.from as string, to: parsed.to as string });
+        }
+      } catch {
+        // Legacy plain-string format (pre-custom-range).
+        setPeriodState(saved);
+      }
+    }
     const savedSite = localStorage.getItem("ins_site");
     if (savedSite) setSiteIdState(Number(savedSite));
     reloadSites().finally(() => setLoading(false));
@@ -65,10 +90,27 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const setSiteId = (id: number) => { setSiteIdState(id); localStorage.setItem("ins_site", String(id)); };
-  const setPeriod = (p: string) => { setPeriodState(p); localStorage.setItem("ins_period", p); };
+
+  // Choosing a preset always clears any custom range.
+  const setPeriod = (p: string) => {
+    setPeriodState(p);
+    setCustom(null);
+    localStorage.setItem("ins_period", JSON.stringify({ key: p } satisfies SavedPeriod));
+  };
+
+  // The backend silently coerces an end before the start; we keep to >= from
+  // client-side so the picker can never produce a misleading range.
+  const setCustomRange = (from: string, to: string) => {
+    if (!validRange(from, to)) return;
+    setPeriodState("custom");
+    setCustom({ from, to });
+    localStorage.setItem("ins_period", JSON.stringify({ key: "custom", from, to } satisfies SavedPeriod));
+  };
+
+  const rangeQuery = custom ? `&from=${custom.from}&to=${custom.to}` : "";
 
   return (
-    <Ctx.Provider value={{ sites, siteId, setSiteId, period, setPeriod, reloadSites, loading }}>
+    <Ctx.Provider value={{ sites, siteId, setSiteId, period, setPeriod, rangeQuery, setCustomRange, reloadSites, loading }}>
       {children}
     </Ctx.Provider>
   );

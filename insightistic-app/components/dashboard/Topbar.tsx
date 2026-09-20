@@ -1,24 +1,51 @@
 "use client";
 import { useState } from "react";
 import { useAuth } from "@/lib/auth";
-import { useDashboard } from "@/lib/dashboard";
-import { ChevronDown, LogOut, Check } from "lucide-react";
+import { useDashboard, PERIODS } from "@/lib/dashboard";
+import { CalendarDays, ChevronDown, LogOut, Check } from "lucide-react";
 import { ThemeToggle } from "./ThemeToggle";
 import { NotificationCenter } from "@/components/app-shell/NotificationCenter";
 import { initials, timeAgo } from "@/lib/format";
 
-const TOPBAR_PERIODS = [
-  { key: "today", label: "Today" },
-  { key: "last_7_days", label: "7 days" },
-  { key: "last_30_days", label: "30 days" },
-  { key: "this_month", label: "This month" },
-];
+/** "2026-09-07" → "Sep 7", parsed by hand so no timezone can shift the day. */
+function shortDate(iso: string): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
+  if (!m) return iso;
+  const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  return `${months[Number(m[2]) - 1]} ${Number(m[3])}`;
+}
 
 export function Topbar() {
   const { user, logout } = useAuth();
-  const { sites, siteId, setSiteId, period, setPeriod } = useDashboard();
+  const { sites, siteId, setSiteId, period, setPeriod, rangeQuery, setCustomRange } = useDashboard();
   const [siteMenu, setSiteMenu] = useState(false);
+  const [periodMenu, setPeriodMenu] = useState(false);
+  const [customOpen, setCustomOpen] = useState(false);
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
   const active = sites.find((s) => s.id === siteId);
+
+  const preset = PERIODS.find((p) => p.key === period);
+  const customMatch = /&from=(\d{4}-\d{2}-\d{2})&to=(\d{4}-\d{2}-\d{2})/.exec(rangeQuery);
+  const periodLabel = customMatch
+    ? `${shortDate(customMatch[1])} – ${shortDate(customMatch[2])}`
+    : preset?.label ?? "Period";
+
+  const applyCustom = () => {
+    // setCustomRange ignores an inverted range; only close when it was valid.
+    if (!from || !to || from > to) return;
+    setCustomRange(from, to);
+    setCustomOpen(false);
+    setPeriodMenu(false);
+  };
+
+  const clearCustom = () => {
+    setPeriod("last_30_days");
+    setFrom("");
+    setTo("");
+    setCustomOpen(false);
+    setPeriodMenu(false);
+  };
 
   return (
     <header className="sticky top-0 z-20 flex flex-wrap items-center gap-3 border-b border-line bg-bg/85 px-5 py-3 backdrop-blur">
@@ -56,19 +83,83 @@ export function Topbar() {
         )}
       </div>
 
-      {/* Period pills */}
-      <div className="flex items-center gap-1 rounded-xl border border-line bg-card p-1 shadow-sm">
-        {TOPBAR_PERIODS.map((p) => (
-          <button
-            key={p.key}
-            onClick={() => setPeriod(p.key)}
-            className={`rounded-lg px-3 py-1.5 text-xs font-medium transition ${
-              period === p.key ? "bg-brand text-white" : "text-muted hover:text-fg"
-            }`}
-          >
-            {p.label}
-          </button>
-        ))}
+      {/* Period dropdown: presets + custom range */}
+      <div className="relative">
+        <button
+          onClick={() => setPeriodMenu((m) => !m)}
+          aria-label="Date period"
+          aria-expanded={periodMenu}
+          className="flex items-center gap-2 rounded-xl border border-line bg-card px-3 py-1.5 text-xs font-medium text-fg shadow-sm hover:text-brand"
+        >
+          <CalendarDays size={14} className="text-muted" />
+          {periodLabel}
+          <ChevronDown size={13} className="text-muted" />
+        </button>
+
+        {periodMenu && (
+          <div className="absolute left-0 z-30 mt-2 w-64 rounded-xl border border-line bg-card p-1.5 shadow-card">
+            {PERIODS.map((p) => (
+              <button
+                key={p.key}
+                onClick={() => { setPeriod(p.key); setPeriodMenu(false); }}
+                className="flex w-full items-center justify-between rounded-lg px-2.5 py-2 text-sm text-fg hover:bg-black/[0.04] dark:hover:bg-white/5"
+              >
+                {p.label}
+                {period === p.key && <Check size={15} className="text-brand" />}
+              </button>
+            ))}
+
+            <div className="my-1 border-t border-line" />
+
+            <button
+              onClick={() => setCustomOpen((v) => !v)}
+              aria-expanded={customOpen}
+              className="flex w-full items-center justify-between rounded-lg px-2.5 py-2 text-sm font-medium text-fg hover:bg-black/[0.04] dark:hover:bg-white/5"
+            >
+              Custom range…
+              {period === "custom" && <Check size={15} className="text-brand" />}
+            </button>
+
+            {customOpen && (
+              <div className="px-2.5 pb-2 pt-1">
+                <div className="flex items-center gap-2">
+                  <input
+                    type="date"
+                    value={from}
+                    max={to || undefined}
+                    onChange={(e) => setFrom(e.target.value)}
+                    aria-label="Range start"
+                    className="w-full rounded-lg border border-line bg-bg px-2 py-1.5 text-xs text-fg outline-none focus:border-brand"
+                  />
+                  <span className="text-xs text-muted">–</span>
+                  <input
+                    type="date"
+                    value={to}
+                    min={from || undefined}
+                    onChange={(e) => setTo(e.target.value)}
+                    aria-label="Range end"
+                    className="w-full rounded-lg border border-line bg-bg px-2 py-1.5 text-xs text-fg outline-none focus:border-brand"
+                  />
+                </div>
+                <div className="mt-2 flex gap-2">
+                  <button
+                    onClick={applyCustom}
+                    disabled={!from || !to}
+                    className="flex-1 rounded-lg bg-brand px-2.5 py-1.5 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    Apply
+                  </button>
+                  <button
+                    onClick={clearCustom}
+                    className="flex-1 rounded-lg border border-line px-2.5 py-1.5 text-xs font-semibold text-muted hover:text-fg"
+                  >
+                    Clear
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       <div className="ml-auto flex items-center gap-2.5">

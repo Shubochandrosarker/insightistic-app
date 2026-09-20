@@ -1,0 +1,120 @@
+/**
+ * Target dashboard IA (roadmap §21 "Information architecture").
+ *
+ * Single source of truth for every nav surface: desktop sidebar, mobile
+ * bottom tabs + More sheet, and the command palette. Pages that don't exist
+ * yet carry `soon: true` and never get an href — a nav entry that 404s is
+ * worse than no entry at all.
+ */
+export type NavItem = { label: string; href?: string; soon?: boolean; hint?: string };
+export type NavGroup = { label: string; icon: string; items: NavItem[] };
+
+export const NAV_GROUPS: NavGroup[] = [
+  {
+    label: "Overview",
+    icon: "LayoutDashboard",
+    items: [{ label: "Overview", href: "/dashboard" }],
+  },
+  {
+    label: "Search Intelligence",
+    icon: "Search",
+    items: [
+      { label: "Search Performance", href: "/dashboard/seo" },
+      { label: "Rank Tracker", soon: true, hint: "Keyword rank tracking is coming soon" },
+      { label: "Opportunities", soon: true, hint: "Content opportunities are coming soon" },
+      { label: "Index Coverage", soon: true, hint: "Index coverage reporting is coming soon" },
+      { label: "Bing Webmaster", soon: true, hint: "Bing Webmaster integration is coming soon" },
+    ],
+  },
+  {
+    label: "AI Visibility",
+    icon: "Sparkles",
+    items: [
+      { label: "Overview", soon: true, hint: "AI visibility overview is coming soon" },
+      { label: "Prompts", soon: true, hint: "Prompt tracking is coming soon" },
+      { label: "Mentions", soon: true, hint: "Brand mention tracking is coming soon" },
+      { label: "Citations", soon: true, hint: "Citation tracking is coming soon" },
+      { label: "Competitors", soon: true, hint: "Competitor visibility comparison is coming soon" },
+    ],
+  },
+  {
+    label: "Site Audit",
+    icon: "FileSearch",
+    items: [
+      // Site Health is the audit section's live page today; the crawl-
+      // centric views below land in a later phase.
+      { label: "Site Health", href: "/dashboard/site-health" },
+      { label: "Overview", soon: true, hint: "Crawl overview is coming soon" },
+      { label: "Pages", soon: true, hint: "Crawled pages report is coming soon" },
+      { label: "Links", soon: true, hint: "Internal & external links are coming soon" },
+      { label: "Images", soon: true, hint: "Image audit is coming soon" },
+      { label: "Issues", soon: true, hint: "Issue explorer is coming soon" },
+      { label: "Changes", soon: true, hint: "Change tracking is coming soon" },
+    ],
+  },
+  {
+    label: "Performance",
+    icon: "Gauge",
+    items: [
+      { label: "Core Web Vitals", href: "/dashboard/performance" },
+      { label: "Uptime", soon: true, hint: "Uptime monitoring is coming soon" },
+      { label: "Cloudflare", soon: true, hint: "Cloudflare edge data is coming soon" },
+    ],
+  },
+  {
+    label: "Traffic",
+    icon: "BarChart3",
+    items: [
+      { label: "Analytics", href: "/dashboard/traffic" },
+      { label: "Landing Pages", soon: true, hint: "Landing page report is coming soon" },
+      { label: "AI Referrals", soon: true, hint: "AI referral traffic is coming soon" },
+    ],
+  },
+  {
+    label: "Commerce",
+    icon: "ShoppingCart",
+    items: [
+      { label: "Revenue", href: "/dashboard/revenue" },
+      { label: "Orders", href: "/dashboard/orders" },
+      { label: "Products", href: "/dashboard/products" },
+      { label: "Customers", href: "/dashboard/customers" },
+      { label: "Email Campaigns", href: "/dashboard/emails" },
+    ],
+  },
+  {
+    label: "Intelligence",
+    icon: "Lightbulb",
+    items: [
+      { label: "Insights", href: "/dashboard/insights" },
+      { label: "Copilot", href: "/dashboard/copilot" },
+      { label: "Knowledge Bases", href: "/dashboard/knowledge" },
+      { label: "Deep Dives", href: "/dashboard/intelligence" },
+      { label: "Alerts", href: "/dashboard/alerts" },
+      { label: "Automations", soon: true, hint: "Automation workflows are coming soon" },
+    ],
+  },
+  {
+    label: "Reports",
+    icon: "FileText",
+    items: [{ label: "Reports & Schedules", href: "/dashboard/reports" }],
+  },
+  {
+    label: "Settings",
+    icon: "Settings",
+    items: [
+      { label: "Sites & Connector", href: "/dashboard/settings" },
+      { label: "Integrations", href: "/dashboard/integrations" },
+      { label: "Team", href: "/dashboard/team" },
+      { label: "Branding", href: "/dashboard/branding" },
+      { label: "Licenses", href: "/dashboard/licenses" },
+      { label: "Billing", href: "/dashboard/billing" },
+      { label: "Security", href: "/dashboard/security" },
+      { label: "Privacy", href: "/dashboard/privacy" },
+    ],
+  },
+];
+
+/** Every route that exists today, flat — used by tests and the palette. */
+export const FLAT_ROUTES: string[] = NAV_GROUPS.flatMap((g) =>
+  g.items.filter((i) => i.href && !i.soon).map((i) => i.href as string),
+);

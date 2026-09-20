@@ -112,16 +112,18 @@ function SchedulesCard({ siteId }: { siteId: number }) {
 
 function ExportsCard({ siteId }: { siteId: number }) {
   const [busy, setBusy] = useState<string | null>(null);
+  // Exports follow the dashboard's active period + custom range.
+  const { period, rangeQuery } = useDashboard();
 
   async function download(key: string) {
     setBusy(key);
-    try { await apiDownload(`/sites/${siteId}/exports/${key}.csv?period=last_30_days`, `${key}-export.csv`); }
+    try { await apiDownload(`/sites/${siteId}/exports/${key}.csv?period=${period}${rangeQuery}`, `${key}-export.csv`); }
     catch { /* apiDownload already surfaces a readable error; nothing else to do here */ }
     finally { setBusy(null); }
   }
 
   return (
-    <Card className="mt-5" title="CSV exports" subtitle="Last 30 days, per data source.">
+    <Card className="mt-5" title="CSV exports" subtitle="Selected period, per data source.">
       <div className="flex flex-wrap gap-2">
         {EXPORTS.map((e) => (
           <Button key={e.key} variant="ghost" onClick={() => download(e.key)} disabled={busy === e.key}>

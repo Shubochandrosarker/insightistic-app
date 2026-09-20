@@ -275,3 +275,39 @@ it('does not duplicate page or frontier rows on a second run of the same URLs', 
         ->toBe(DB::table('crawl_frontier')->where('run_id', $second->id)->count())
         ->and($second->pages_crawled)->toBe(2);
 });
+
+it('enqueues a redirect target so a 301 seed does not dead-end the run', function () {
+    [, $org] = makeOrgUser('crawl-redirect@example.com');
+    $site = crawlSiteFor($org);
+
+    // The seed URL is a 301 to its www canonical; the real site lives there.
+    $target = crawlPageHtml('https://www.crawl.example.com/', 'Real Home', [
+        'https://www.crawl.example.com/about',
+    ]);
+    $about = crawlPageHtml('https://www.crawl.example.com/about', 'About');
+
+    Http::fake([
+        'https://crawl.example.com/robots.txt' => Http::response("User-agent: *\nAllow: /\n", 200),
+        'https://www.crawl.example.com/robots.txt' => Http::response("User-agent: *\nAllow: /\n", 200),
+        'https://crawl.example.com/' => Http::response('', 301, ['Location' => 'https://www.crawl.example.com/']),
+        'https://www.crawl.example.com/' => Http::response($target, 200, ['Content-Type' => 'text/html; charset=UTF-8']),
+        'https://www.crawl.example.com/about' => Http::response($about, 200, ['Content-Type' => 'text/html; charset=UTF-8']),
+    ]);
+
+    CrawlSiteJob::dispatch($site->id, 50, 'manual', 0);
+
+    $run = CrawlRun::query()->sole();
+
+    expect($run->status)->toBe('completed')
+        // Seed redirect + real home + about: the chain continued past the 301.
+        ->and($run->pages_crawled)->toBe(3);
+
+    $home = CrawlPage::query()->where('url', 'https://www.crawl.example.com/')->first();
+
+    expect($home)->not->toBeNull()
+        ->and($home->title)->toBe('Real Home')
+        ->and(CrawlPage::query()->where('url', 'https://www.crawl.example.com/about')->count())->toBe(1)
+        // The seed recorded its redirect as data.
+        ->and(CrawlPage::query()->where('url', 'https://crawl.example.com/')->first()->redirect_to)
+        ->toBe('https://www.crawl.example.com/');
+});

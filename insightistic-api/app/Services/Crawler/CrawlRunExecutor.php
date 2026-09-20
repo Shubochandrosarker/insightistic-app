@@ -304,6 +304,25 @@ class CrawlRunExecutor
             ]
         );
 
+        // A redirect at the seed (non-www → www, http → https) must not dead-end
+        // the run: the target joins the frontier at the same depth, budget-capped
+        // like discovery.
+        if (in_array($status, [301, 302, 307, 308], true) && $page->redirect_to) {
+            $siteHost = strtolower((string) parse_url((string) $run->config('base_url'), PHP_URL_HOST));
+
+            if (self::isSameHost($page->redirect_to, $siteHost) && $this->frontierTotal($run) < $run->max_pages * self::DISCOVERY_FACTOR) {
+                CrawlFrontier::query()->insertOrIgnore([
+                    'run_id'     => $run->id,
+                    'site_id'    => $run->site_id,
+                    'url_hash'   => sha1($page->redirect_to),
+                    'url'        => mb_substr($page->redirect_to, 0, 1000),
+                    'depth'      => $row->depth,
+                    'status'     => CrawlFrontier::STATUS_PENDING,
+                    'created_at' => Carbon::now(),
+                ]);
+            }
+        }
+
         if ($isHtml) {
             $inspection = $this->inspector->inspect(
                 $row->url,

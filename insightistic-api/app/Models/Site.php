@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Concerns\BelongsToOrganization;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Str;
 
@@ -16,7 +17,7 @@ class Site extends Model
         'connector_key_id', 'connector_secret', 'connection_status', 'last_sync_at',
         'timezone', 'currency', 'wp_version', 'wc_version', 'plugin_version',
         'cloudflare_zone_id', 'cloudflare_account_id', 'cloudflare_api_token',
-        'archived_at',
+        'archived_at', 'client_id', // optional agency portfolio grouping (Phase 13, doc 20)
     ];
 
     // Never expose credentials in API responses.
@@ -35,6 +36,12 @@ class Site extends Model
     public function orders(): HasMany
     {
         return $this->hasMany(WcOrder::class);
+    }
+
+    /** The optional agency portfolio client this site is grouped under (null = unassigned). */
+    public function client(): BelongsTo
+    {
+        return $this->belongsTo(AgencyClient::class, 'client_id');
     }
 
     public function products(): HasMany

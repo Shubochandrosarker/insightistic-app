@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\AutomationRule;
 use App\Models\Site;
 use App\Services\Actions\ActionType;
+use App\Services\Automation\AutomationCatalog;
 use App\Services\Automation\AutomationDispatcher;
 use Illuminate\Http\Request;
 
@@ -124,6 +125,14 @@ class AutomationRuleController extends Controller
         $runs = $rule->runs()->orderByDesc('fired_at')->limit(100)->get();
 
         return response()->json(['automation_runs' => $runs]);
+    }
+
+    /** GET .../catalog — what the rule builder can offer: triggers AutomationDispatcher really implements and actions ActionExecutor really runs (AutomationCatalog::catalog()). Read-only, so any site-access role may load it — same policy as index/show/runs above. */
+    public function catalog(Request $request)
+    {
+        $this->site($request); // site already resolved + org-scoped by the site.access middleware
+
+        return response()->json(AutomationCatalog::catalog());
     }
 
     private function validatePayload(Request $request, bool $partial = false, ?AutomationRule $existing = null): mixed

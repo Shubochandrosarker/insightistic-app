@@ -54,6 +54,16 @@ class AutomationDispatcher
             if ($triggerType === 'schedule' ? ! $this->shouldFireSchedule($rule) : ! $this->matchesContext($rule, $context)) {
                 continue;
             }
+
+            // Doc 19 "rate limits per rule": skip when this rule already
+            // fired within its cooldown window (default 60 min; override per
+            // rule via trigger_config_json.cooldown_minutes). Manual
+            // POST .../run calls fire() directly and is unaffected.
+            $cooldownMinutes = max(1, (int) (($rule->trigger_config_json ?? [])['cooldown_minutes'] ?? 60));
+            if ($rule->last_fired_at !== null && $rule->last_fired_at->diffInMinutes(now()) < $cooldownMinutes) {
+                continue;
+            }
+
             $fired[] = $this->fire($rule, $site, $context);
         }
 

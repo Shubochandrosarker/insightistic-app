@@ -109,3 +109,21 @@ it('never fires a rule belonging to another site', function () {
 
     expect($runs)->toBe([]);
 });
+
+it('rate-limits repeated event dispatches with a per-rule cooldown (doc 19)', function () {
+    // First dispatch fires; an immediate second dispatch — even for a
+    // genuinely NEW alert — is suppressed by the 60-minute default cooldown.
+    Mail::fake();
+    [, $org] = makeOrgUser('dispatch-cooldown@example.com');
+    $site = dispatcherSite($org);
+    dispatcherRule($org, $site); // alert_created, empty config (matches any alert)
+
+    $dispatcher = app(AutomationDispatcher::class);
+
+    $first = $dispatcher->dispatch('alert_created', $site, ['alert_type' => 'revenue_drop', 'alert_id' => 1]);
+    expect($first)->toHaveCount(1);
+
+    $second = $dispatcher->dispatch('alert_created', $site, ['alert_type' => 'revenue_drop', 'alert_id' => 2]);
+    expect($second)->toBe([]); // cooldown: the rule already fired moments ago
+});
+

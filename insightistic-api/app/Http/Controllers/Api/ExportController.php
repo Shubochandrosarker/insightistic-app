@@ -270,4 +270,60 @@ class ExportController extends Controller
             $r->first_seen_at?->toDateString(), $r->last_seen_at?->toDateString(),
         ]);
     }
+
+    /**
+     * GET /sites/{site}/rank.csv — rank tracker export (Phase 10, doc 13):
+     * the latest observation per ACTIVE tracked keyword (10k cap, same
+     * bound as the crawl export). Positions here are the tracker's own
+     * point-in-time SERP observations — not GSC averages (doc 13 keeps the
+     * two labeled apart). Not-checked keywords export with an empty
+     * position/URL rather than being dropped, so the file always covers
+     * the tracked set.
+     */
+    public function rank(Request $request)
+    {
+        $site = $this->site($request);
+
+        $keywords = \App\Models\RankKeyword::where('site_id', $site->id)
+            ->where('active', true)
+            ->orderBy('id')
+            ->limit(10000)
+            ->get(['id', 'keyword', 'engine', 'country', 'device']);
+
+        // Newest observation per keyword in one windowed pass (rn=1).
+        $latest = \App\Models\RankObservation::query()
+            ->select('keyword_id', 'position', 'ranking_url', 'checked_at')
+            ->fromSub(function ($query) use ($keywords) {
+                $query->from('rank_observations')
+                    ->selectRaw('keyword_id, position, ranking_url, checked_at,
+                        row_number() over (partition by keyword_id order by checked_at desc, id desc) as rn')
+                    ->whereIn('keyword_id', $keywords->modelKeys());
+            }, 'ranked')
+            ->where('rn', 1)
+            ->get()
+            ->keyBy('keyword_id');
+
+        $cost = \App\Models\RankObservation::whereIn('keyword_id', $keywords->modelKeys())
+            ->where('checked_at', '>=', now()->subDays(30))
+            ->groupBy('keyword_id')
+            ->selectRaw('keyword_id, sum(cost_units) as total')
+            ->pluck('total', 'keyword_id');
+
+        return $this->csv('rank', [
+            'Keyword', 'Engine', 'Country', 'Device', 'Position', 'URL', 'Last checked', 'Cost 30d',
+        ], $keywords, function ($r) use ($latest, $cost) {
+            $observation = $latest->get($r->id);
+            $checkedAt = $observation->checked_at ?? null;
+            $checkedAt = $checkedAt instanceof \DateTimeInterface
+                ? $checkedAt->toIso8601String()
+                : $checkedAt;
+
+            return [
+                $r->keyword, $r->engine, $r->country, $r->device,
+                $observation->position ?? null, $observation->ranking_url ?? null,
+                $checkedAt,
+                isset($cost[$r->id]) ? round((float) $cost[$r->id], 2) : 0,
+            ];
+        });
+    }
 }

@@ -50,4 +50,12 @@ return [
         // 'common' allows both work/school and personal Microsoft accounts.
         'tenant' => env('MICROSOFT_TENANT', 'common'),
     ],
+
+    // DataForSEO SERP API (rank tracking, Phase 10) — HTTP Basic auth.
+    // Rank checks are skipped entirely while either value is empty, so an
+    // install without credentials costs nothing.
+    'dataforseo' => [
+        'login' => env('DATAFORSEO_LOGIN'),
+        'password' => env('DATAFORSEO_PASSWORD'),
+    ],
 ];

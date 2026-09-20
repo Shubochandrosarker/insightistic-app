@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import {
   LayoutDashboard, Search, Sparkles, FileSearch, Gauge, BarChart3,
   ShoppingCart, Lightbulb, FileText, Settings, Globe, LogOut, X,
+  Building2,
   type LucideIcon,
 } from "lucide-react";
 import { TrialBanner } from "@/components/dashboard/TrialBanner";
@@ -24,7 +25,7 @@ import { useAuth } from "@/lib/auth";
 /** Icon ids are data in lib/nav.ts; the lucide mapping lives here. */
 const GROUP_ICONS: Record<string, LucideIcon> = {
   LayoutDashboard, Search, Sparkles, FileSearch, Gauge,
-  BarChart3, ShoppingCart, Lightbulb, FileText, Settings,
+  BarChart3, ShoppingCart, Lightbulb, FileText, Settings, Building2,
 };
 
 function groupIcon(name: string): LucideIcon {

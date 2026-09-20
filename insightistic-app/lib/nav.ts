@@ -96,13 +96,20 @@ export const NAV_GROUPS: NavGroup[] = [
       { label: "Knowledge Bases", href: "/dashboard/knowledge" },
       { label: "Deep Dives", href: "/dashboard/intelligence" },
       { label: "Alerts", href: "/dashboard/alerts" },
-      { label: "Automations", soon: true, hint: "Automation workflows are coming soon" },
+      { label: "Automations", href: "/dashboard/automation" },
     ],
   },
   {
     label: "Reports",
     icon: "FileText",
     items: [{ label: "Reports & Schedules", href: "/dashboard/reports" }],
+  },
+  {
+    // Agency workspace (roadmap doc 20): one group for the cross-site,
+    // multi-client surfaces. The portfolio overview is its first page.
+    label: "Agency",
+    icon: "Building2",
+    items: [{ label: "Portfolio", href: "/dashboard/agency" }],
   },
   {
     label: "Settings",

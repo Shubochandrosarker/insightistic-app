@@ -7,8 +7,10 @@ use App\Models\SeoQueryDaily;
 use App\Models\SeoQueryPageDaily;
 use App\Models\Site;
 
-/** Local site factory — each test file stays self-contained when run alone. */
-function engineSite($org): Site
+/** Local site factory — each test file stays self-contained when run alone.
+ *  Prefixed opp* because Pest loads every test file into one process and
+ *  SafeWooQueryEngineTest already declares an engineSite(). */
+function oppEngineSite($org): Site
 {
     return Site::withoutGlobalScope('organization')->create([
         'organization_id' => $org->id,
@@ -84,7 +86,7 @@ function engineFor(Site $site): OpportunityEngine
 
 it('flags winners with a human reason', function () {
     [$user, $org] = makeOrgUser('seo-win@example.com');
-    $site = engineSite($org);
+    $site = oppEngineSite($org);
     [$from, $to, $prevFrom, $prevTo] = engineWindows();
 
     engineSeedQuery($site, '2026-06-05', 'best running shoes', 30, 200, 3.0);
@@ -103,7 +105,7 @@ it('flags winners with a human reason', function () {
 
 it('caps every list at fifty items', function () {
     [$user, $org] = makeOrgUser('seo-cap@example.com');
-    $site = engineSite($org);
+    $site = oppEngineSite($org);
     [$from, $to, $prevFrom, $prevTo] = engineWindows();
 
     for ($i = 0; $i < 60; $i++) {
@@ -118,7 +120,7 @@ it('caps every list at fifty items', function () {
 
 it('flags losers but floors tiny prior impressions', function () {
     [$user, $org] = makeOrgUser('seo-lose@example.com');
-    $site = engineSite($org);
+    $site = oppEngineSite($org);
     [$from, $to, $prevFrom, $prevTo] = engineWindows();
 
     // Real loser: 300 prior impressions, 80 → 10 clicks.
@@ -140,7 +142,7 @@ it('flags losers but floors tiny prior impressions', function () {
 
 it('flags striking distance queries with the expected ctr in the reason', function () {
     [$user, $org] = makeOrgUser('seo-strike@example.com');
-    $site = engineSite($org);
+    $site = oppEngineSite($org);
     [$from, $to, $prevFrom, $prevTo] = engineWindows();
 
     // Position 6.5, 1000 impressions, 4% CTR — inside the 4-20 band, above
@@ -166,7 +168,7 @@ it('flags striking distance queries with the expected ctr in the reason', functi
 
 it('flags ctr opportunities against the sites own band curve with a fallback', function () {
     [$user, $org] = makeOrgUser('seo-ctr@example.com');
-    $site = engineSite($org);
+    $site = oppEngineSite($org);
     [$from, $to, $prevFrom, $prevTo] = engineWindows();
 
     // Band 6-8 gets 1400 site impressions (>= 500): the site's own curve
@@ -196,7 +198,7 @@ it('flags ctr opportunities against the sites own band curve with a fallback', f
 
 it('flags decayed content but ignores low-volume noise', function () {
     [$user, $org] = makeOrgUser('seo-decay@example.com');
-    $site = engineSite($org);
+    $site = oppEngineSite($org);
     [$from, $to, $prevFrom, $prevTo] = engineWindows();
 
     // Real decay: 40 prior clicks → 5.
@@ -222,7 +224,7 @@ it('flags decayed content but ignores low-volume noise', function () {
 
 it('flags cannibalization candidates with competing pages', function () {
     [$user, $org] = makeOrgUser('seo-cann@example.com');
-    $site = engineSite($org);
+    $site = oppEngineSite($org);
     [$from, $to, $prevFrom, $prevTo] = engineWindows();
 
     engineSeedPair($site, '2026-06-05', 'best crm for agencies', '/guides/crm-a', 10, 50, 4.0);
@@ -251,7 +253,7 @@ it('flags cannibalization candidates with competing pages', function () {
 
 it('returns every report from all() with non-empty reasons', function () {
     [$user, $org] = makeOrgUser('seo-all@example.com');
-    $site = engineSite($org);
+    $site = oppEngineSite($org);
     [$from, $to, $prevFrom, $prevTo] = engineWindows();
 
     engineSeedQuery($site, '2026-06-05', 'all winner query', 50, 300, 3.0);

@@ -4,19 +4,27 @@ namespace App\Services\Integrations;
 
 use App\Models\DataSourceCredential;
 use App\Models\SeoDaily;
+use App\Models\SeoPageDaily;
 use App\Models\SeoPageSnapshot;
+use App\Models\SeoQueryDaily;
+use App\Models\SeoQueryPageDaily;
 use App\Models\SeoQuerySnapshot;
 use App\Models\Site;
+use App\Support\SeoGrain;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 
 /**
  * Google Search Console — property discovery plus a bounded pull into
- * `seo_daily`, `seo_query_snapshots` and `seo_page_snapshots`.
+ * `seo_daily`, `seo_query_snapshots` and `seo_page_snapshots`, and since
+ * Phase 5 the daily-grain tables (`seo_query_daily`, `seo_page_daily`,
+ * `seo_query_page_daily`) used by search intelligence.
  *
  * Query and page snapshots carry previous-period figures so the dashboard can
  * show movement without a second round-trip, and a coarse `opportunity` tag
  * (high impressions + low CTR) that the SEO page already knows how to render.
+ * The daily-grain tables are UPSERT-written (doc 08): replaying any window
+ * refreshes metrics in place instead of duplicating rows.
  */
 class GscClient
 {
@@ -74,7 +82,7 @@ class GscClient
     }
 
     /**
-     * @return array{days:int,queries:int,pages:int,latest_date:?string}
+     * @return array{days:int,queries:int,pages:int,latest_date:?string,daily_query_rows:int,daily_page_rows:int,daily_query_page_rows:int}
      */
     public function sync(Site $site, DataSourceCredential $credential, int $days = 30): array
     {
@@ -124,7 +132,21 @@ class GscClient
         $queries = $this->syncDimension($site, $token, $siteUrl, 'query', $start, $end, $prevStart, $prevEnd);
         $pages = $this->syncDimension($site, $token, $siteUrl, 'page', $start, $end, $prevStart, $prevEnd);
 
-        return ['days' => $dayRows, 'queries' => $queries, 'pages' => $pages, 'latest_date' => $latestDate];
+        // Daily grain (Phase 5): one row per (date, query/page) per pull.
+        // Idempotent upserts, pagination-aware — safe to replay any window.
+        $dailyQueryRows = $this->fetchDailyWindow($site, $credential, $start, $end, 'queries');
+        $dailyPageRows = $this->fetchDailyWindow($site, $credential, $start, $end, 'pages');
+        $dailyQueryPageRows = $this->fetchDailyWindow($site, $credential, $start, $end, 'query_page');
+
+        return [
+            'days'        => $dayRows,
+            'queries'     => $queries,
+            'pages'       => $pages,
+            'latest_date' => $latestDate,
+            'daily_query_rows'      => $dailyQueryRows,
+            'daily_page_rows'       => $dailyPageRows,
+            'daily_query_page_rows' => $dailyQueryPageRows,
+        ];
     }
 
     /** Shared query/page snapshot writer — same shape, different table. */
@@ -211,6 +233,166 @@ class GscClient
 
             return $written;
         });
+    }
+
+    /**
+     * One date-window pull of one daily-grain dimension into the Phase 5
+     * grain tables. Shared by sync() and the historical backfill job.
+     *
+     * Pagination-aware: GSC silently truncates at rowLimit per call, so a
+     * FULL page is followed by another request and only a short page ends
+     * the loop — data completeness beats saving a call. Writes are chunked
+     * UPSERTs, so replaying the same window refreshes metrics in place.
+     *
+     * @param  'queries'|'pages'|'query_page'  $dimension
+     * @return int Rows written (updated rows count too).
+     */
+    public function fetchDailyWindow(
+        Site $site,
+        DataSourceCredential $credential,
+        string $from,
+        string $to,
+        string $dimension,
+    ): int {
+        $dimensions = match ($dimension) {
+            'queries'    => ['date', 'query'],
+            'pages'      => ['date', 'page'],
+            'query_page' => ['date', 'query', 'page'],
+            default      => throw new \InvalidArgumentException("Unknown SEO daily dimension '{$dimension}'."),
+        };
+
+        $siteUrl = $this->siteUrl($credential);
+        $token = $this->oauth->freshAccessToken($credential);
+        $limit = $this->rowLimit();
+
+        $written = 0;
+        $startRow = 0;
+
+        do {
+            $body = $this->query($token, $siteUrl, [
+                'startDate'  => $from,
+                'endDate'    => $to,
+                'dimensions' => $dimensions,
+                'rowLimit'   => $limit,
+                'startRow'   => $startRow,
+            ], "gsc_{$dimension}_daily_failed");
+
+            $rows = $body['rows'] ?? [];
+            $written += $this->writeDailyGrain($site, $dimension, $rows);
+            $startRow += count($rows);
+        } while (count($rows) === $limit);
+
+        return $written;
+    }
+
+    /** Chunked UPSERT writer for the daily-grain tables (doc 08: replay-safe). */
+    private function writeDailyGrain(Site $site, string $dimension, array $rows): int
+    {
+        if ($rows === []) {
+            return 0;
+        }
+
+        $now = now();
+        $written = 0;
+
+        foreach (array_chunk($rows, 500) as $chunk) {
+            $payload = [];
+
+            foreach ($chunk as $row) {
+                $keys = $row['keys'] ?? [];
+                $date = (string) ($keys[0] ?? '');
+                if ($date === '') {
+                    continue;
+                }
+
+                $metrics = [
+                    'clicks'      => (int) ($row['clicks'] ?? 0),
+                    'impressions' => (int) ($row['impressions'] ?? 0),
+                    'position'    => round((float) ($row['position'] ?? 0), 2),
+                ];
+
+                switch ($dimension) {
+                    case 'queries':
+                        $query = mb_substr((string) ($keys[1] ?? ''), 0, 500);
+                        if ($query === '') {
+                            continue 2;
+                        }
+                        // Hash the STORED (truncated) value, so a reader can
+                        // rebuild the hash from the row itself.
+                        $payload[] = $metrics + [
+                            'site_id'    => $site->id,
+                            'date'       => $date,
+                            'query_hash' => SeoGrain::hash($query),
+                            'query'      => $query,
+                            'ctr'        => round((float) ($row['ctr'] ?? 0), 4),
+                            'created_at' => $now,
+                        ];
+                        break;
+
+                    case 'pages':
+                        // Same normalization as the legacy page snapshots:
+                        // path only — no scheme/host/query/fragment.
+                        $path = mb_substr($this->pathOf((string) ($keys[1] ?? '')), 0, 1000);
+                        if ($path === '') {
+                            continue 2;
+                        }
+                        $payload[] = $metrics + [
+                            'site_id'    => $site->id,
+                            'date'       => $date,
+                            'page_hash'  => SeoGrain::hash($path),
+                            'page_path'  => $path,
+                            'ctr'        => round((float) ($row['ctr'] ?? 0), 4),
+                            'created_at' => $now,
+                        ];
+                        break;
+
+                    case 'query_page':
+                        $query = mb_substr((string) ($keys[1] ?? ''), 0, 500);
+                        $path = mb_substr($this->pathOf((string) ($keys[2] ?? '')), 0, 1000);
+                        if ($query === '' || $path === '') {
+                            continue 2;
+                        }
+                        $payload[] = $metrics + [
+                            'site_id'    => $site->id,
+                            'date'       => $date,
+                            'query_hash' => SeoGrain::hash($query),
+                            'page_hash'  => SeoGrain::hash($path),
+                            'created_at' => $now,
+                        ];
+                        break;
+                }
+            }
+
+            if ($payload === []) {
+                continue;
+            }
+
+            $update = ['clicks', 'impressions', 'position'];
+            if ($dimension !== 'query_page') {
+                $update[] = 'ctr';
+            }
+
+            $model = match ($dimension) {
+                'queries'    => SeoQueryDaily::class,
+                'pages'      => SeoPageDaily::class,
+                'query_page' => SeoQueryPageDaily::class,
+            };
+
+            $unique = $dimension === 'query_page'
+                ? ['site_id', 'date', 'query_hash', 'page_hash']
+                : ['site_id', 'date', $dimension === 'queries' ? 'query_hash' : 'page_hash'];
+
+            $model::upsert($payload, $unique, $update);
+            $written += count($payload);
+        }
+
+        return $written;
+    }
+
+    /** GSC's hard per-call row cap; config only exists so tests can shrink it. */
+    private function rowLimit(): int
+    {
+        return max(1, (int) config('insightistic.integrations.gsc_row_limit', 25000));
     }
 
     private function query(string $token, string $siteUrl, array $body, string $errorCode): array

@@ -54,6 +54,7 @@ use App\Http\Controllers\Api\PrivacyController;
 use App\Http\Controllers\Api\PublicPlanController;
 use App\Http\Controllers\Api\ReportController;
 use App\Http\Controllers\Api\ReportScheduleController;
+use App\Http\Controllers\Api\SearchController;
 use App\Http\Controllers\Api\SeoController;
 use App\Http\Controllers\Api\SiteController;
 use App\Http\Controllers\Api\TeamController;
@@ -327,6 +328,19 @@ Route::middleware(['auth:sanctum', 'tenant', 'restrict.impersonation'])->group(f
         Route::get('sites/{site}/analytics/seo/queries', [SeoController::class, 'queries']);
         Route::get('sites/{site}/analytics/seo/pages', [SeoController::class, 'pages']);
 
+        // Search Intelligence (Phase 5, roadmap 10-GOOGLE-SEARCH-CONSOLE).
+        // Reads the full daily GSC fact tables with window comparison and the
+        // opportunity engine — deeper than the snapshot-backed SEO routes
+        // above. Reads are open to anyone with site access; the backfill is
+        // a queued, quota-consuming heavy action, so owner/admin like every
+        // other sync/run endpoint in this file.
+        Route::get('sites/{site}/search/queries', [SearchController::class, 'queries']);
+        Route::get('sites/{site}/search/pages', [SearchController::class, 'pages']);
+        Route::get('sites/{site}/search/opportunities', [SearchController::class, 'opportunities']);
+        Route::get('sites/{site}/search/backfill-status', [SearchController::class, 'status']);
+        Route::post('sites/{site}/search/backfill', [SearchController::class, 'backfill'])
+            ->middleware('role:owner,admin');
+
         Route::get('sites/{site}/analytics/performance/history', [PerformanceController::class, 'history']);
         Route::get('sites/{site}/analytics/performance/latest', [PerformanceController::class, 'latest']);
         // Run PageSpeed from the SaaS backend (spec Phase 3.3). Queued, and
@@ -427,6 +441,8 @@ Route::middleware(['auth:sanctum', 'tenant', 'restrict.impersonation'])->group(f
             Route::get('sites/{site}/exports/seo.csv', [ExportController::class, 'seo']);
             Route::get('sites/{site}/exports/performance.csv', [ExportController::class, 'performance']);
             Route::get('sites/{site}/exports/commerce.csv', [ExportController::class, 'commerce']);
+            // Search Intelligence export (Phase 5) — ?type= picks the report.
+            Route::get('sites/{site}/search/export.csv', [ExportController::class, 'search']);
         });
     });
 

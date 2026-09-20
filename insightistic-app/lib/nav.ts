@@ -20,8 +20,10 @@ export const NAV_GROUPS: NavGroup[] = [
     icon: "Search",
     items: [
       { label: "Search Performance", href: "/dashboard/seo" },
+      { label: "Queries explorer", href: "/dashboard/seo/queries" },
+      { label: "Pages explorer", href: "/dashboard/seo/pages" },
+      { label: "Opportunities", href: "/dashboard/seo/opportunities" },
       { label: "Rank Tracker", soon: true, hint: "Keyword rank tracking is coming soon" },
-      { label: "Opportunities", soon: true, hint: "Content opportunities are coming soon" },
       { label: "Index Coverage", soon: true, hint: "Index coverage reporting is coming soon" },
       { label: "Bing Webmaster", soon: true, hint: "Bing Webmaster integration is coming soon" },
     ],

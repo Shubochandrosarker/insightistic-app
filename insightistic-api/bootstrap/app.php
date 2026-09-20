@@ -43,6 +43,16 @@ return Application::configure(basePath: dirname(__DIR__))
          */
         \Sentry\Laravel\Integration::handles($exceptions);
 
+        // The API has no `login` route, so Laravel's default unauthenticated
+        // renderer (redirect()->guest(route('login'))) crashes with a 500 for
+        // any non-JSON client hitting a protected route — e.g. a browser POST
+        // without an Accept header. API routes always answer 401 JSON.
+        $exceptions->render(function (\Illuminate\Auth\AuthenticationException $e, \Illuminate\Http\Request $request) {
+            if ($request->is('api/*')) {
+                return response()->json(['message' => 'Unauthenticated.'], 401);
+            }
+        });
+
         // Never let a database error leak schema/table/SQL details to an API
         // client — regardless of APP_DEBUG, which can be misconfigured on any
         // given environment. Laravel's default debug-mode renderer would

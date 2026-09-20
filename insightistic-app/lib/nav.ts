@@ -23,6 +23,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { label: "Queries explorer", href: "/dashboard/seo/queries" },
       { label: "Pages explorer", href: "/dashboard/seo/pages" },
       { label: "Opportunities", href: "/dashboard/seo/opportunities" },
+      { label: "Index Now", href: "/dashboard/indexnow" },
       { label: "Rank Tracker", soon: true, hint: "Keyword rank tracking is coming soon" },
       { label: "Index Coverage", soon: true, hint: "Index coverage reporting is coming soon" },
       { label: "Bing Webmaster", soon: true, hint: "Bing Webmaster integration is coming soon" },

@@ -10,11 +10,22 @@
 [extend]
 useDefault = true
 
-[allowlist]
+[[allowlists]]
 description = "Known, documented historical leak pending rotation (docs/DEPLOYMENT.md)"
 # Only these two exact (already-compromised, rotation-scheduled) values are
 # allowlisted — any OTHER secret, in any file including this one, still fails.
 regexes = [
   '''WkabxlKyJvbSVsSHCwAf3Fv88UqY8BOdkfRAnwAwZpo=''',
   '''7281cb7aff2cbf4a75b6e38e0e6a81b05ce1939df813e8d1cde1c477c3119097''',
+]
+
+# Test fixtures: obviously-fake keys inside the two test suites (an
+# assertion once referenced the hex form, so it lives in this PR's commit
+# range forever). Scoped to the exact file paths — real secrets in ANY other
+# file, including these paths' source code, still fail.
+[[allowlists]]
+description = "Fake keys in test fixtures only"
+paths = [
+  '''^insightistic-app/tests/indexnow-page\.test\.tsx$''',
+  '''^insightistic-api/tests/Feature/BingIntegrationTest\.php$''',
 ]

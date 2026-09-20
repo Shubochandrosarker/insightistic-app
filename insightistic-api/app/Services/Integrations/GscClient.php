@@ -113,7 +113,9 @@ class GscClient
                 }
 
                 SeoDaily::updateOrCreate(
-                    ['site_id' => $site->id, 'date' => $date],
+                    // source is part of the unique key since Bing rows moved
+                    // into this table — never match (and stomp) those.
+                    ['site_id' => $site->id, 'source' => 'gsc', 'date' => $date],
                     [
                         'clicks'       => (int) ($row['clicks'] ?? 0),
                         'impressions'  => (int) ($row['impressions'] ?? 0),

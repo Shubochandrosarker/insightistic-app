@@ -327,6 +327,8 @@ Route::middleware(['auth:sanctum', 'tenant', 'restrict.impersonation'])->group(f
         Route::get('sites/{site}/analytics/seo/overview', [SeoController::class, 'overview']);
         Route::get('sites/{site}/analytics/seo/queries', [SeoController::class, 'queries']);
         Route::get('sites/{site}/analytics/seo/pages', [SeoController::class, 'pages']);
+        // Bing weekly query buckets (Phase 6, roadmap 11-BING-WEBMASTER-INDEXNOW).
+        Route::get('sites/{site}/analytics/seo/bing', [SeoController::class, 'bing']);
 
         // Search Intelligence (Phase 5, roadmap 10-GOOGLE-SEARCH-CONSOLE).
         // Reads the full daily GSC fact tables with window comparison and the
@@ -348,6 +350,21 @@ Route::middleware(['auth:sanctum', 'tenant', 'restrict.impersonation'])->group(f
         Route::post('sites/{site}/analytics/performance/run', [PerformanceController::class, 'runNow'])
             ->middleware('role:owner,admin');
 
+        // IndexNow (Phase 6, roadmap 11-BING-WEBMASTER-INDEXNOW). The SaaS
+        // holds the key and the submission log; the WordPress plugin hosts
+        // the {key}.txt file. History/status is open to anyone with site
+        // access; submitting burns shared provider quota and regenerating a
+        // key invalidates the plugin's key file — so submit is owner/admin
+        // and regenerate is owner-only. Submits are synchronous but bounded
+        // (max 1000 URLs) and rate-limited via the bounded-heavy-action
+        // exports limiter (provider calls, like CSV generation, must not be
+        // spammable).
+        Route::get('sites/{site}/indexnow', [\App\Http\Controllers\Api\IndexNowController::class, 'index']);
+        Route::post('sites/{site}/indexnow/submit', [\App\Http\Controllers\Api\IndexNowController::class, 'submit'])
+            ->middleware(['role:owner,admin', 'throttle:exports']);
+        Route::post('sites/{site}/indexnow/regenerate-key', [\App\Http\Controllers\Api\IndexNowController::class, 'regenerateKey'])
+            ->middleware('role:owner');
+
         // Email/campaign analytics (spec Phase 3.4). Reading is open to
         // anyone with site access; connecting a provider is owner/admin.
         Route::get('sites/{site}/emails/overview', [EmailController::class, 'overview']);
@@ -365,6 +382,7 @@ Route::middleware(['auth:sanctum', 'tenant', 'restrict.impersonation'])->group(f
 
         Route::middleware('role:owner,admin')->group(function () {
             Route::post('sites/{site}/integrations/cloudflare/connect', [IntegrationsController::class, 'connectCloudflare']);
+            Route::post('sites/{site}/integrations/bing/connect', [IntegrationsController::class, 'connectBing']);
             Route::post('sites/{site}/integrations/{source}/authorize-url', [IntegrationsController::class, 'authorizeUrl']);
             Route::get('sites/{site}/integrations/{source}/resources', [IntegrationsController::class, 'resources']);
             Route::post('sites/{site}/integrations/{source}/select', [IntegrationsController::class, 'select']);
@@ -639,6 +657,14 @@ Route::prefix('connector/v1')->middleware(['connector.auth', 'throttle:connector
     // Connector v2 — WordPress content → AI knowledge base (opt-in,
     // plugin-side privacy toggle; ingestion is queued + idempotent).
     Route::post('content/bulk', [\App\Http\Controllers\Api\Connector\ContentSyncController::class, 'contentBulk']);
+
+    // IndexNow bridge (Phase 6, roadmap 11-BING-WEBMASTER-INDEXNOW) — the
+    // SaaS generates/holds the key; the plugin hosts {key}.txt on the site,
+    // confirms it (?confirmed=1), then pushes eligible URLs for submission.
+    // GET and POST both land on key() so the plugin can confirm either way.
+    Route::get('indexnow/key', [\App\Http\Controllers\Api\Connector\ConnectorIndexNowController::class, 'key']);
+    Route::post('indexnow/key', [\App\Http\Controllers\Api\Connector\ConnectorIndexNowController::class, 'key']);
+    Route::post('indexnow/submit', [\App\Http\Controllers\Api\Connector\ConnectorIndexNowController::class, 'submit']);
 });
 
 // ---- Stripe webhook (no tenant, signature-verified) -----------------------

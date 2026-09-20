@@ -11,7 +11,7 @@ class SeoDaily extends Model
     // "seo_dailies", real table is singular "seo_daily".
     protected $table = 'seo_daily';
 
-    protected $fillable = ['site_id', 'date', 'clicks', 'impressions', 'ctr', 'avg_position'];
+    protected $fillable = ['site_id', 'source', 'date', 'clicks', 'impressions', 'ctr', 'avg_position'];
 
     protected function casts(): array
     {

@@ -28,6 +28,7 @@ const CURRENT_ROUTES = [
   "/dashboard/seo/queries",
   "/dashboard/seo/pages",
   "/dashboard/seo/opportunities",
+  "/dashboard/indexnow",
   "/dashboard/performance",
   "/dashboard/revenue",
   "/dashboard/products",

@@ -21,6 +21,7 @@ const SOURCE_LABEL: Record<string, string> = {
   gsc: "Google Search Console",
   pagespeed: "PageSpeed Insights",
   cloudflare: "Cloudflare",
+  bing: "Bing Webmaster",
   engagement: "Engagement tracking",
 };
 
@@ -29,6 +30,7 @@ const RESOURCE_NOUN: Record<string, string> = {
   ga4: "property",
   gsc: "property",
   cloudflare: "zone",
+  bing: "site",
 };
 
 const STATE_TONE: Record<string, "green" | "amber" | "red" | "slate"> = {
@@ -59,7 +61,7 @@ type Source = {
   last_error_code: string | null;
   last_error_message: string | null;
   connectable: boolean;
-  auth_type: "oauth" | "api_token" | "plugin";
+  auth_type: "oauth" | "api_token" | "api_key" | "plugin";
   configured: boolean;
   connected: boolean;
   detail: { connected_account: string | null; resource: { id: string } | null } | null;
@@ -181,6 +183,7 @@ function DirectSourceCard({ source: s, siteId, onChanged }: { source: Source; si
   const [err, setErr] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
   const [token, setToken] = useState("");
+  const [apiKey, setApiKey] = useState("");
   const [resources, setResources] = useState<Resource[] | null>(null);
   const [confirmOff, setConfirmOff] = useState(false);
 
@@ -214,6 +217,16 @@ function DirectSourceCard({ source: s, siteId, onChanged }: { source: Source; si
       () => apiPost(`/sites/${siteId}/integrations/cloudflare/connect`, { api_token: token }),
       () => {
         setToken("");
+        onChanged();
+      },
+    );
+
+  const connectBing = () =>
+    run(
+      "connect",
+      () => apiPost(`/sites/${siteId}/integrations/bing/connect`, { api_key: apiKey }),
+      () => {
+        setApiKey("");
         onChanged();
       },
     );
@@ -312,6 +325,23 @@ function DirectSourceCard({ source: s, siteId, onChanged }: { source: Source; si
           />
           <Button disabled={token.length < 20 || busy === "connect"} onClick={connectCloudflare}>
             {busy === "connect" ? "Verifying…" : "Connect Cloudflare"}
+          </Button>
+        </div>
+      )}
+
+      {/* Bing Webmaster: pasted API key, same flow shape as Cloudflare (min:16 server-side). */}
+      {s.state === "not_configured" && s.auth_type === "api_key" && (
+        <div className="mt-4 space-y-2">
+          <Field
+            label="Bing Webmaster API key"
+            type="password"
+            value={apiKey}
+            onChange={(e) => setApiKey(e.target.value)}
+            placeholder="API key from Bing Webmaster Tools"
+            hint="Created in Bing Webmaster Tools under Settings → API Access. Stored encrypted; never shown again."
+          />
+          <Button disabled={apiKey.length < 16 || busy === "connect"} onClick={connectBing}>
+            {busy === "connect" ? "Verifying…" : "Connect Bing Webmaster"}
           </Button>
         </div>
       )}

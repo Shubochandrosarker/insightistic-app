@@ -22,6 +22,7 @@ class IntegrationManager
         private readonly Ga4Client $ga4,
         private readonly GscClient $gsc,
         private readonly CloudflareClient $cloudflare,
+        private readonly BingConnectionService $bing,
     ) {
     }
 
@@ -67,6 +68,12 @@ class IntegrationManager
         ]);
     }
 
+    /** Verify and store a Bing Webmaster API key (roadmap 11-BING-WEBMASTER). */
+    public function connectBing(Site $site, string $apiKey, int $userId): DataSourceCredential
+    {
+        return $this->bing->connect($site, $apiKey, $userId);
+    }
+
     /**
      * Properties/sites/zones the stored credential can see.
      *
@@ -83,8 +90,9 @@ class IntegrationManager
         }
 
         return match ($source) {
-            'ga4' => $this->ga4->listResources($this->credentialOrFail($site, $source)),
-            'gsc' => $this->gsc->listResources($this->credentialOrFail($site, $source)),
+            'ga4'  => $this->ga4->listResources($this->credentialOrFail($site, $source)),
+            'gsc'  => $this->gsc->listResources($this->credentialOrFail($site, $source)),
+            'bing' => $this->bing->listResources($this->credentialOrFail($site, $source)),
             default => throw new IntegrationFailure('unsupported_source', "Source {$source} cannot be connected directly."),
         };
     }
@@ -117,6 +125,7 @@ class IntegrationManager
                 'ga4'        => $this->ga4->testConnection($this->credentialOrFail($site, $source)),
                 'gsc'        => $this->gsc->testConnection($this->credentialOrFail($site, $source)),
                 'cloudflare' => $this->cloudflare->testConnection($site),
+                'bing'       => $this->bing->testConnection($site, $this->credentialOrFail($site, $source)),
                 default      => throw new IntegrationFailure('unsupported_source', "Source {$source} cannot be tested."),
             };
 
@@ -147,6 +156,7 @@ class IntegrationManager
                 'ga4'        => $this->ga4->sync($site, $this->credentialOrFail($site, $source), $days),
                 'gsc'        => $this->gsc->sync($site, $this->credentialOrFail($site, $source), $days),
                 'cloudflare' => $this->cloudflare->sync($site, $days),
+                'bing'       => $this->bing->sync($site, $this->credentialOrFail($site, $source)),
                 default      => throw new IntegrationFailure('unsupported_source', "Source {$source} cannot be synced."),
             };
 
@@ -179,7 +189,12 @@ class IntegrationManager
             $credential = $this->credential($site, $source);
 
             if ($credential) {
-                $this->google->revoke($credential);
+                // Only Google grants have something to revoke upstream; an
+                // API-key credential (Bing) is simply deleted locally.
+                if ($credential->provider === 'google') {
+                    $this->google->revoke($credential);
+                }
+
                 $credential->delete();
             }
         }

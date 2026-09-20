@@ -10,7 +10,7 @@ class SeoPageSnapshot extends Model
     public $timestamps = false;
 
     protected $fillable = [
-        'site_id', 'period_start', 'period_end', 'page_path',
+        'site_id', 'source', 'period_start', 'period_end', 'page_path',
         'clicks', 'impressions', 'ctr', 'position',
         'prev_clicks', 'prev_impressions', 'prev_ctr', 'prev_position',
         'created_at',

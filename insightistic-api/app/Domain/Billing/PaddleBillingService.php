@@ -59,6 +59,7 @@ final class PaddleBillingService
             'currency'     => $price->currency,
             'amount_minor' => $price->amount_minor,
             'client_token' => config('billing.paddle.client_token'),
+            'environment'  => config('billing.paddle.sandbox') ? 'sandbox' : 'production',
             'customer'     => ['email' => $org->owner?->email],
             'custom_data'  => [
                 'organization_id' => $org->id,
@@ -66,6 +67,22 @@ final class PaddleBillingService
                 'plan_slug'       => $plan->slug,
             ],
         ];
+    }
+
+    /**
+     * Temporary customer-portal deep link, generated per request and never
+     * persisted (roadmap doc 22). Null when Paddle gives no portal URL
+     * (e.g. missing customer) — the controller renders that as a plain error.
+     */
+    public function portalUrl(Organization $org): ?string
+    {
+        $sub = $org->subscription;
+
+        if (! $sub?->provider_customer_id || $sub->billing_provider !== 'paddle') {
+            return null;
+        }
+
+        return $this->client->customerPortalSession($sub->provider_customer_id);
     }
 
     /**

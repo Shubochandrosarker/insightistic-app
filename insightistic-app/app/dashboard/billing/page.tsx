@@ -1,20 +1,31 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useApi } from "@/lib/useApi";
 import { useDashboard } from "@/lib/dashboard";
-import { apiPost } from "@/lib/api";
+import { apiGet, apiPost } from "@/lib/api";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { PageHeader } from "@/components/dashboard/PageHeader";
 import { Spinner } from "@/components/ui/Spinner";
+import { initPaddle, openPaddleCheckout } from "@/lib/paddle";
+import type { PaddleEnvironment } from "@/lib/paddle";
 import { num } from "@/lib/format";
 
-// Public lineup — Growth is the featured "Best Value" plan.
+// Fallback lineup — Growth is the featured "Best Value" plan. Live names and
+// featured flags come from /public/plans once loaded; this constant wins only
+// while that request is in flight or failed.
 const PLANS = [
-  { slug: "starter", name: "Starter" },
-  { slug: "growth", name: "Growth — Best Value" },
-  { slug: "agency", name: "Agency" },
+  { slug: "starter", name: "Starter", featured: false },
+  { slug: "growth", name: "Growth — Best Value", featured: true },
+  { slug: "agency", name: "Agency", featured: false },
+  { slug: "agency_pro", name: "Agency Pro", featured: false },
 ];
+
+type PlanOption = { slug: string; name: string };
+type Phase = "idle" | "processing";
+
+const POLL_TRIES = 15;
+const POLL_INTERVAL_MS = 2000;
 
 function UsageBar({ label, used, limit }: { label: string; used: number; limit: number | null }) {
   const ratio = limit ? Math.min(100, Math.round((used / limit) * 100)) : 0;
@@ -31,13 +42,21 @@ function UsageBar({ label, used, limit }: { label: string; used: number; limit: 
   );
 }
 
+/** The 501/code shape the API returns when the Paddle flag is off for an org. */
+function isPaddleNotEnabled(e: any): boolean {
+  return e?.status === 501 || e?.data?.code === "paddle_not_enabled" || e?.code === "paddle_not_enabled";
+}
+
 export default function BillingPage() {
   const { data, loading, reload } = useApi<any>("/billing/subscription");
+  const { data: plansData } = useApi<any>("/public/plans");
   const { sites } = useDashboard();
   const [plan, setPlan] = useState("growth");
   const [interval, setIntervalSel] = useState("monthly");
   const [msg, setMsg] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [phase, setPhase] = useState<Phase>("idle");
+  const paidRef = useRef(false);
 
   // Preselect the plan passed from the marketing-site CTA (?plan=).
   useEffect(() => {
@@ -45,11 +64,86 @@ export default function BillingPage() {
     if (p && PLANS.some((x) => x.slug === p)) setPlan(p);
   }, []);
 
+  // Live catalog names/featured flags win once loaded; the constant covers
+  // the window while /public/plans is loading or failed.
+  const planOptions: PlanOption[] = (() => {
+    const live = plansData?.plans;
+    if (!Array.isArray(live) || live.length === 0) return PLANS;
+    return live
+      .filter((p: any) => p?.slug)
+      .map((p: any) => {
+        const name = String(p.name ?? p.slug);
+        return {
+          slug: String(p.slug),
+          name:
+            p.is_featured && !name.includes("Best Value") ? `${name} — Best Value` : name,
+        };
+      });
+  })();
+
+  /**
+   * Paddle webhook, not the checkout callback, makes a subscription real.
+   * Poll until the org's subscription is projected as Paddle (or the plan
+   * visibly changed), then refresh the page data (roadmap 22A §9).
+   */
+  async function finishSetup(beforePlanName: string | undefined) {
+    setPhase("processing");
+    for (let attempt = 0; attempt < POLL_TRIES; attempt++) {
+      const d = await apiGet("/billing/subscription").catch(() => null);
+      const name = d?.plan?.name;
+      if (d?.subscription?.billing_provider === "paddle" || (name && name !== beforePlanName)) {
+        setMsg(`You're on ${name || plan} — everything is active.`);
+        setPhase("idle");
+        setBusy(false);
+        reload();
+        return;
+      }
+      await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
+    }
+    setMsg("Payment received — your subscription is finishing setup. Refresh in a moment.");
+    setPhase("idle");
+    setBusy(false);
+    reload();
+  }
+
   async function checkout() {
     setBusy(true); setMsg(null);
-    try { const r = await apiPost("/billing/checkout", { plan, interval }); window.location.href = r.url; }
-    catch (e: any) { setMsg(e.message); setBusy(false); }
+    const beforePlanName = data?.plan?.name;
+    try {
+      let cfg: any;
+      try {
+        cfg = await apiPost("/billing/checkout-config", { plan, kind: interval });
+      } catch (e: any) {
+        // Organizations still billed through Stripe keep the legacy redirect.
+        if (!isPaddleNotEnabled(e)) throw e;
+        const r = await apiPost("/billing/checkout", { plan, interval });
+        window.location.href = r.url;
+        return;
+      }
+
+      const environment: PaddleEnvironment = cfg?.environment === "sandbox" ? "sandbox" : "production";
+      await initPaddle(cfg.client_token, environment);
+      paidRef.current = false;
+      openPaddleCheckout({
+        priceId: cfg.price_id,
+        email: cfg.customer?.email,
+        customData: cfg.custom_data,
+        onSuccess: () => { paidRef.current = true; finishSetup(beforePlanName); },
+        onClose: (completed) => {
+          // A completed close is the success flow's business; only an
+          // abandoned checkout resets the form (silently).
+          if (completed || paidRef.current) return;
+          setBusy(false);
+          setPhase("idle");
+        },
+      });
+    } catch (e: any) {
+      setMsg(e?.message || "Checkout could not be started.");
+      setPhase("idle");
+      setBusy(false);
+    }
   }
+
   async function portal() {
     setBusy(true); setMsg(null);
     try { const r = await apiPost("/billing/portal"); window.location.href = r.url; }
@@ -72,8 +166,11 @@ export default function BillingPage() {
   if (loading || !data) return <Spinner />;
   const usage = data.usage || {};
   const planObj = data.plan || {};
-  const cancelPending = !!data.subscription?.cancel_at_period_end;
-  const hasSubscription = !!data.subscription?.stripe_subscription_id;
+  const provider: string | null =
+    data.subscription?.billing_provider ?? (data.subscription?.stripe_subscription_id ? "stripe" : null);
+  const cancelPending =
+    !!data.subscription?.cancel_at_period_end || data.subscription?.scheduled_change_action === "cancel";
+  const hasSubscription = !!data.subscription?.stripe_subscription_id || !!provider;
 
   return (
     <div>
@@ -104,7 +201,8 @@ export default function BillingPage() {
             {hasSubscription && !cancelPending && (
               <Button variant="danger" onClick={cancelSub} disabled={busy}>Cancel subscription</Button>
             )}
-            {cancelPending && (
+            {/* Paddle cancellations are final — a new checkout is the way back. */}
+            {cancelPending && provider !== "paddle" && (
               <Button variant="soft" onClick={reactivateSub} disabled={busy}>Reactivate</Button>
             )}
           </div>
@@ -126,7 +224,7 @@ export default function BillingPage() {
             <span className="mb-1.5 block text-xs font-semibold text-fg">Plan</span>
             <select value={plan} onChange={(e) => setPlan(e.target.value)}
               className="w-full rounded-xl border border-line bg-card2 px-3 py-2 text-sm text-fg outline-none focus:border-brand">
-              {PLANS.map((p) => <option key={p.slug} value={p.slug}>{p.name}</option>)}
+              {planOptions.map((p) => <option key={p.slug} value={p.slug}>{p.name}</option>)}
             </select>
           </label>
           <label className="block">
@@ -139,8 +237,14 @@ export default function BillingPage() {
           </label>
         </div>
         <div className="mt-4">
-          <Button onClick={checkout} disabled={busy}>{busy ? "Redirecting…" : "Continue to checkout"}</Button>
-          <p className="mt-2 text-xs text-muted">Secure checkout via Stripe.</p>
+          {phase === "processing" ? (
+            <Spinner label="Finishing your subscription setup…" />
+          ) : (
+            <>
+              <Button onClick={checkout} disabled={busy}>{busy ? "Opening checkout…" : "Continue to checkout"}</Button>
+              <p className="mt-2 text-xs text-muted">Secure checkout via {provider === "stripe" ? "Stripe" : "Paddle"}.</p>
+            </>
+          )}
         </div>
       </Card>
     </div>

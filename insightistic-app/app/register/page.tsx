@@ -8,8 +8,9 @@ import { OAuthButtons } from "@/components/auth/OAuthButtons";
 
 const PLAN_LABELS: Record<string, string> = {
   starter: "Starter",
-  pro: "Pro",
+  growth: "Growth",
   agency: "Agency",
+  agency_pro: "Agency Pro",
 };
 
 export default function Register() {

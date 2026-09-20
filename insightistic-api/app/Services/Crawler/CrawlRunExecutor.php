@@ -197,6 +197,16 @@ class CrawlRunExecutor
 
             $issuesFound = $this->issues->finalize($fresh);
 
+            // Phase 8 change monitoring (doc 12 §Change monitoring): diff
+            // this run against the previous completed run now that the issue
+            // lifecycle has settled. Separate service — must never be able
+            // to fail an otherwise complete crawl.
+            try {
+                app(ChangeDetection::class)->detect($fresh, $fresh->site);
+            } catch (Throwable $e) {
+                logger()->warning('ChangeDetection failed for run '.$fresh->id.': '.$e->getMessage());
+            }
+
             $fresh->forceFill([
                 'status' => 'completed',
                 'completed_at' => Carbon::now(),

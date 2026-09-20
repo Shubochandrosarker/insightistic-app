@@ -4,11 +4,13 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Jobs\CrawlSiteJob;
+use App\Models\CrawlChange;
 use App\Models\CrawlIssue;
 use App\Models\CrawlLink;
 use App\Models\CrawlPage;
 use App\Models\CrawlRun;
 use App\Models\Site;
+use App\Services\Crawler\ChangeDetection;
 use App\Services\Crawler\CrawlHealthScore;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -299,16 +301,56 @@ class CrawlController extends Controller
     {
         $site = $this->site($request);
 
-        $result = app(CrawlHealthScore::class)->forSite($site);
+        // ?weighted=1 opts into the GSC-impact mode (Phase 8): penalties
+        // scaled by each page's 28-day impressions. Default response is
+        // untouched — the mode flag only surfaces for weighted requests.
+        $weighted = $request->boolean('weighted');
+        $result = app(CrawlHealthScore::class)->forSite($site, $weighted);
 
-        return response()->json([
+        $response = [
             'score'       => $result['score'],
             'breakdown'   => $result['breakdown'],
             'top_issues'  => collect($result['top_issues'])->map->only([
                 'id', 'issue_code', 'severity', 'category', 'target_url',
                 'first_seen_at', 'last_seen_at',
             ])->values(),
+        ];
+
+        if ($weighted) {
+            $response['mode'] = $result['mode'];
+        }
+
+        return response()->json($response);
+    }
+
+    /**
+     * GET /sites/{site}/crawl/changes?run_id=&severity=&per_page=&cursor=
+     * (Phase 8 change monitoring) — the (page, field) diffs ChangeDetection
+     * logged at run finalize. Defaults to the latest COMPLETED run, since
+     * changes only exist for finished runs.
+     */
+    public function changes(Request $request): JsonResponse
+    {
+        $site = $this->site($request);
+
+        $runId = $request->filled('run_id')
+            ? (int) $request->query('run_id')
+            : CrawlRun::where('site_id', $site->id)
+                ->where('status', 'completed')
+                ->orderByDesc('id')
+                ->value('id');
+
+        $query = app(ChangeDetection::class)
+            ->historyFor($site, $runId)
+            ->when(in_array($request->query('severity'), CrawlChange::SEVERITIES, true),
+                fn ($q) => $q->where('severity', $request->query('severity')));
+
+        [$page, $meta] = $this->paginate($query, $request, [
+            'url', 'field', 'severity', 'old_value', 'new_value',
+            'impressions', 'created_at',
         ]);
+
+        return response()->json(['data' => $page] + $meta);
     }
 
     /**

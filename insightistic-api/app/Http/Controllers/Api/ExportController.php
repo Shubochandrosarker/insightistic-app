@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Domain\Search\OpportunityEngine;
+use App\Domain\Search\SearchExplorer;
 use App\Http\Controllers\Controller;
 use App\Models\MetricSnapshot;
 use App\Models\SeoDaily;
@@ -24,6 +26,9 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 class ExportController extends Controller
 {
     private const MAX_DAYS = 90;
+
+    /** Row cap for the Search Intelligence export (search() below). */
+    private const EXPORT_ROW_LIMIT = 10000;
 
     /** GET /sites/{site}/exports/traffic.csv */
     public function traffic(Request $request)
@@ -84,6 +89,100 @@ class ExportController extends Controller
         return $this->csv('commerce', ['Date', 'Revenue', 'Orders', 'Refunds', 'AOV', 'New customers', 'Returning customers'], $rows, fn ($r) => [
             $r->date->toDateString(), $r->revenue, $r->orders, $r->refunds, $r->average_order_value, $r->new_customers, $r->returning_customers,
         ]);
+    }
+
+    /**
+     * GET /sites/{site}/search/export.csv — Search Intelligence export
+     * (Phase 5, roadmap 10-GOOGLE-SEARCH-CONSOLE). ?type= picks the report:
+     * queries|pages|winners|losers|striking_distance|ctr_opportunities|
+     * content_decay|cannibalization. Follows the bounded synchronous idiom
+     * of every other export here: the 90-day DateRange ceiling bounds the
+     * underlying daily table scan, and the grouped explorer output is
+     * truncated at EXPORT_ROW_LIMIT rows (the API contract's own
+     * "bounded exports" posture — not a silent queue that never queues).
+     */
+    public function search(Request $request)
+    {
+        [$site, $range] = $this->siteAndRange($request);
+
+        $type = $request->query('type', 'queries');
+        if (! in_array($type, [
+            'queries', 'pages', 'winners', 'losers', 'striking_distance',
+            'ctr_opportunities', 'content_decay', 'cannibalization',
+        ], true)) {
+            abort(422, 'Unknown search export type.');
+        }
+
+        // Explorer/engine windows: inclusive calendar dates; the export's
+        // period range is the current window and the equal-length window
+        // before it is the comparison window (same as the search endpoints).
+        $from = $range->startLocal;
+        $to = $range->endExclusiveLocal->subDay();
+        $prev = $range->previous();
+        $prevFrom = $prev->startLocal;
+        $prevTo = $prev->endExclusiveLocal->subDay();
+
+        $explorer = app(SearchExplorer::class);
+        $engine = app(OpportunityEngine::class);
+
+        $rows = [];
+        $header = [];
+        $mapRow = fn ($r) => $r;
+
+        switch ($type) {
+            case 'queries':
+            case 'pages':
+                $result = $type === 'queries'
+                    ? $explorer->exploreQueries($site, $from, $to, $prevFrom, $prevTo, [], self::EXPORT_ROW_LIMIT)
+                    : $explorer->explorePages($site, $from, $to, $prevFrom, $prevTo, [], self::EXPORT_ROW_LIMIT);
+                $rows = $result['data'];
+                $labelKey = $type === 'queries' ? 'query' : 'page_path';
+                $header = [$type === 'queries' ? 'Query' : 'Page', 'Clicks', 'Impressions', 'CTR', 'Position', 'Prev clicks', 'Prev impressions', 'Prev position', 'Clicks delta', 'Impressions delta', 'Position delta'];
+                $mapRow = fn ($r) => [
+                    $r[$labelKey], $r['clicks'], $r['impressions'], $r['ctr'], $r['position'],
+                    $r['prev_clicks'], $r['prev_impressions'], $r['prev_position'],
+                    $r['clicks_delta'], $r['impressions_delta'], $r['position_delta'],
+                ];
+                break;
+
+            case 'winners':
+            case 'losers':
+                $rows = $type === 'winners'
+                    ? $engine->winners($site, $from, $to, $prevFrom, $prevTo)
+                    : $engine->losers($site, $from, $to, $prevFrom, $prevTo);
+                $header = ['Query', 'Clicks', 'Prev clicks', 'Clicks delta', 'Impressions', 'Reason'];
+                $mapRow = fn ($r) => [$r['query'], $r['clicks'], $r['prev_clicks'], $r['clicks_delta'], $r['impressions'], $r['reason']];
+                break;
+
+            case 'striking_distance':
+                $rows = $engine->strikingDistance($site, $from, $to, $prevFrom, $prevTo);
+                $header = ['Query', 'Position', 'Impressions', 'Clicks', 'CTR', 'Expected CTR', 'Score', 'Reason'];
+                $mapRow = fn ($r) => [$r['query'], $r['position'], $r['impressions'], $r['clicks'], $r['ctr'], $r['expected_ctr'], $r['score'], $r['reason']];
+                break;
+
+            case 'ctr_opportunities':
+                $rows = $engine->ctrOpportunities($site, $from, $to, $prevFrom, $prevTo);
+                $header = ['Query', 'Position', 'Band', 'Impressions', 'Clicks', 'CTR', 'Expected CTR', 'Missed clicks', 'Reason'];
+                $mapRow = fn ($r) => [$r['query'], $r['position'], $r['band'], $r['impressions'], $r['clicks'], $r['ctr'], $r['expected_ctr'], $r['missed_clicks'], $r['reason']];
+                break;
+
+            case 'content_decay':
+                $rows = $engine->contentDecay($site, $from, $to, $prevFrom, $prevTo);
+                $header = ['Dimension', 'Query or page', 'Prev clicks', 'Clicks', 'Reason'];
+                $mapRow = fn ($r) => [$r['dimension'], $r['query'] ?? $r['page_path'], $r['prev_clicks'], $r['clicks'], $r['reason']];
+                break;
+
+            case 'cannibalization':
+                $rows = $engine->cannibalization($site, $from, $to, $prevFrom, $prevTo);
+                $header = ['Query', 'Competing pages', 'Top page', 'Total clicks', 'Total impressions', 'Reason'];
+                $mapRow = fn ($r) => [
+                    $r['query'], count($r['pages']), $r['pages'][0]['page_path'] ?? '',
+                    $r['total_clicks'], $r['total_impressions'], $r['reason'],
+                ];
+                break;
+        }
+
+        return $this->csv("search-{$type}", $header, $rows, $mapRow);
     }
 
     private function csv(string $domain, array $header, $rows, callable $mapRow): StreamedResponse

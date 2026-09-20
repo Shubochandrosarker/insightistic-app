@@ -5,19 +5,33 @@ import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { PageHeader } from "@/components/dashboard/PageHeader";
 import { EmptyState } from "@/components/dashboard/EmptyState";
+import { ErrorState } from "@/components/dashboard/states";
 import { Spinner } from "@/components/ui/Spinner";
 import { ResponsiveTable, type Column } from "@/components/app-shell/ResponsiveTable";
 import { money, num } from "@/lib/format";
 import { Package } from "lucide-react";
 
 export default function ProductsPage() {
-  const { siteId, period, sites } = useDashboard();
+  const { siteId, period, sites, rangeQuery } = useDashboard();
   const site = sites.find((s) => s.id === siteId);
   const cur = site?.currency as string | undefined;
-  const { data, loading } = useApi<any>(siteId ? `/sites/${siteId}/analytics/products?period=${period}` : null, [period]);
+  const { data, loading, error, reload } = useApi<any>(
+    siteId ? `/sites/${siteId}/analytics/products?period=${period}${rangeQuery}` : null,
+    [period, rangeQuery],
+  );
 
   if (!siteId) return <EmptyState icon={<Package size={20} />} title="No site connected" hint="Connect a store to see product performance." />;
-  if (loading || !data) return <Spinner />;
+  if (loading) return <Spinner />;
+
+  // A failed fetch is not the same as "no product sales" — say so and offer a retry.
+  if (error)
+    return (
+      <div>
+        <PageHeader title="Products" subtitle={`Winners and stock risk for ${site?.name || "your store"}.`} />
+        <ErrorState message={error} onRetry={reload} />
+      </div>
+    );
+  if (!data) return <Spinner />;
 
   const top = data.top_products || [];
   const low = data.low_stock || [];

@@ -122,12 +122,14 @@ const RISK_TONE: Record<string, "red" | "amber" | "green" | "slate"> = {
 };
 
 export default function IntelligencePage() {
-  const { siteId, sites, period } = useDashboard();
+  // rangeQuery defaults to "" so consumers that mock useDashboard without the
+  // field (tests) still build the same URLs as before.
+  const { siteId, sites, period, rangeQuery = "" } = useDashboard();
   const site = sites.find((s) => s.id === siteId);
   const [tab, setTab] = useState<Tab>("customers");
 
   const base = siteId ? `/sites/${siteId}/intelligence` : null;
-  const q = period ? `?period=${period}` : "";
+  const q = period ? `?period=${period}${rangeQuery}` : "";
 
   if (!siteId) {
     return <EmptyState icon={<Brain size={20} />} title="No site connected" hint="Connect a store to see business intelligence." />;

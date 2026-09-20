@@ -8,6 +8,7 @@ import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { PageHeader } from "@/components/dashboard/PageHeader";
 import { EmptyState } from "@/components/dashboard/EmptyState";
+import { ErrorState } from "@/components/dashboard/states";
 import { Spinner } from "@/components/ui/Spinner";
 import { Gauge } from "lucide-react";
 import { Button } from "@/components/ui/Button";
@@ -68,6 +69,39 @@ export default function PerformancePage() {
     );
 
   if (latest.loading) return <Spinner />;
+
+  // A failed fetch is not the same as "never tested" — say so and offer a retry.
+  // The header stays so the "Run test" action remains reachable.
+  if (latest.error)
+    return (
+      <div>
+        <PageHeader
+          title="Performance Tracking"
+          subtitle={`${site?.name || ""} · sourced from PageSpeed Insights / Lighthouse`}
+          right={
+            <div className="flex items-center gap-2">
+              <Button variant="ghost" disabled={running} onClick={runTest}>
+                {running ? "Queuing…" : "Run test"}
+              </Button>
+              <div className="flex gap-1 rounded-full bg-card2 p-1">
+                {(["mobile", "desktop"] as const).map((s) => (
+                  <button
+                    key={s}
+                    onClick={() => setStrategy(s)}
+                    className={`rounded-full px-3 py-1 text-xs font-semibold capitalize transition ${
+                      strategy === s ? "bg-brand text-white" : "text-muted hover:text-fg"
+                    }`}
+                  >
+                    {s}
+                  </button>
+                ))}
+              </div>
+            </div>
+          }
+        />
+        <ErrorState message={latest.error} onRetry={latest.reload} />
+      </div>
+    );
 
   const run = latest.data?.run;
   const issues = latest.data?.issues || [];
@@ -154,10 +188,16 @@ export default function PerformancePage() {
             </div>
           </Card>
 
-          {series.length > 1 && (
+          {history.error && !history.data ? (
             <Card className="mt-5" title="Performance score history">
-              <LineTrend data={series} dataKey="v" height={220} />
+              <ErrorState message={history.error} onRetry={history.reload} />
             </Card>
+          ) : (
+            series.length > 1 && (
+              <Card className="mt-5" title="Performance score history">
+                <LineTrend data={series} dataKey="v" height={220} />
+              </Card>
+            )
           )}
 
           {issues.length > 0 && (

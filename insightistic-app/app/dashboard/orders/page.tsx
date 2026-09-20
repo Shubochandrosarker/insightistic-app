@@ -5,6 +5,7 @@ import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { PageHeader } from "@/components/dashboard/PageHeader";
 import { EmptyState } from "@/components/dashboard/EmptyState";
+import { ErrorState } from "@/components/dashboard/states";
 import { Spinner } from "@/components/ui/Spinner";
 import { ResponsiveTable, type Column } from "@/components/app-shell/ResponsiveTable";
 import { money, timeAgo } from "@/lib/format";
@@ -20,7 +21,7 @@ const STATUS_TONE: Record<string, "green" | "amber" | "red" | "violet" | "slate"
 export default function OrdersPage() {
   const { siteId, sites } = useDashboard();
   const site = sites.find((s) => s.id === siteId);
-  const { data, loading } = useApi<any>(siteId ? `/sites/${siteId}/orders` : null);
+  const { data, loading, error, reload } = useApi<any>(siteId ? `/sites/${siteId}/orders` : null);
 
   if (!siteId) return <EmptyState icon={<ShoppingCart size={20} />} title="No site connected" hint="Connect a store to see its order feed." />;
 
@@ -39,7 +40,14 @@ export default function OrdersPage() {
     <div>
       <PageHeader title="Orders" subtitle={`Live order feed for ${site?.name || "your store"}.`} />
       <Card>
-        {loading ? <Spinner /> : <ResponsiveTable columns={columns} rows={orders} rowKey={(o, i) => `${o.order_number}-${i}`} empty="No orders synced yet." />}
+        {/* A failed feed is not the same as "no orders synced yet" — say so and offer a retry. */}
+        {loading ? (
+          <Spinner />
+        ) : error ? (
+          <ErrorState message={error} onRetry={reload} />
+        ) : (
+          <ResponsiveTable columns={columns} rows={orders} rowKey={(o, i) => `${o.order_number}-${i}`} empty="No orders synced yet." />
+        )}
       </Card>
     </div>
   );

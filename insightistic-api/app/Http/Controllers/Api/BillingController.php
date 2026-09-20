@@ -84,6 +84,20 @@ class BillingController extends Controller
     public function portal()
     {
         $org = $this->tenancy->organization();
+
+        // Provider-aware: Paddle orgs get a temporary Paddle customer-portal
+        // link, Stripe orgs keep the Stripe portal. Paddle links are generated
+        // per request and never persisted.
+        if ($org->subscription?->billing_provider === 'paddle') {
+            $url = $this->paddleBilling->portalUrl($org);
+
+            if (! $url) {
+                return response()->json(['message' => 'Could not open the Paddle portal. Contact support if this persists.'], 502);
+            }
+
+            return response()->json(['url' => $url]);
+        }
+
         $customerId = $org->subscription?->stripe_customer_id;
 
         if (! $customerId) {
@@ -100,6 +114,16 @@ class BillingController extends Controller
     {
         $org = $this->tenancy->organization();
         $sub = $org->subscription;
+
+        if ($sub?->billing_provider === 'paddle') {
+            $paddleSub = $this->paddleBilling->cancel($org);
+
+            return response()->json([
+                'ok'      => true,
+                'ends_at' => $paddleSub->current_period_end?->toIso8601String(),
+                'message' => 'Subscription will end at the close of the current billing period.',
+            ]);
+        }
 
         if (! $sub?->stripe_subscription_id) {
             return response()->json(['message' => 'No active subscription to cancel.', 'code' => 'no_subscription'], 422);
@@ -124,6 +148,15 @@ class BillingController extends Controller
     {
         $org = $this->tenancy->organization();
         $sub = $org->subscription;
+
+        // Paddle has no un-cancel: a canceled Paddle subscription is final,
+        // the customer returns via a new checkout (roadmap doc 23 §Phase 6).
+        if ($sub?->billing_provider === 'paddle') {
+            return response()->json([
+                'message' => 'Paddle subscriptions can’t be reactivated — after the period ends, start a new checkout to return.',
+                'code'    => 'paddle_no_reactivate',
+            ], 422);
+        }
 
         if (! $sub?->stripe_subscription_id || ! $sub->cancel_at_period_end) {
             return response()->json(['message' => 'Nothing to reactivate — start a new checkout instead.', 'code' => 'no_pending_cancel'], 422);

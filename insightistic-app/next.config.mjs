@@ -38,17 +38,24 @@ const API_ORIGIN = (process.env.NEXT_PUBLIC_API_URL || "").replace(/\/$/, "");
  * snippet in app/layout.tsx and (b) Next.js's own inline RSC/hydration
  * scripts on statically prerendered pages. Tightening to nonces requires
  * dynamic rendering via middleware — tracked as a follow-up. Everything else
- * is locked down: no foreign script origins, no framing, no plugins.
+ * is locked down: no foreign script origins beyond the approved payment
+ * provider, no framing, no plugins.
+ *
+ * Paddle.js (roadmap 22/22A) needs explicit allowances: its loader comes off
+ * cdn.paddle.com and the overlay checkout renders inside an iframe served
+ * from buy.paddle.com (sandbox-buy.paddle.com in the sandbox environment).
+ * Without frame-src the default-src 'self' rule silently blocks the overlay.
  */
 const csp = [
   "default-src 'self'",
-  "script-src 'self' 'unsafe-inline'",
+  "script-src 'self' 'unsafe-inline' https://cdn.paddle.com",
   "style-src 'self' 'unsafe-inline'",
   // data:/blob: for chart exports + inline SVG; https: for OAuth avatars and
   // white-label logos served from the API/storage origin.
   "img-src 'self' data: blob: https:",
   "font-src 'self' data:",
-  `connect-src 'self'${API_ORIGIN ? ` ${API_ORIGIN}` : ""}`,
+  "frame-src https://buy.paddle.com https://sandbox-buy.paddle.com",
+  `connect-src 'self'${API_ORIGIN ? ` ${API_ORIGIN}` : ""} https://api.paddle.com https://sandbox-api.paddle.com`,
   "object-src 'none'",
   "base-uri 'self'",
   "form-action 'self'",

@@ -163,6 +163,17 @@ Route::middleware(['auth:sanctum', 'tenant', 'restrict.impersonation'])->group(f
     // AgencyController's docblock.
     Route::get('agency/overview', [AgencyController::class, 'overview']);
 
+    // Agency portfolio (Phase 13, doc 20) — per-site health/uptime/search
+    // rows over the caller's own organization, with the optional client
+    // grouping. Reads mirror agency/overview access (any org member);
+    // client CRUD and site assignment are owner/admin writes.
+    Route::get('agency/portfolio', [AgencyController::class, 'portfolio']);
+    Route::get('agency/clients', [AgencyController::class, 'index']);
+    Route::post('agency/clients', [AgencyController::class, 'store'])->middleware('role:owner,admin');
+    Route::patch('agency/clients/{client}', [AgencyController::class, 'update'])->middleware('role:owner,admin');
+    Route::delete('agency/clients/{client}', [AgencyController::class, 'destroy'])->middleware('role:owner,admin');
+    Route::post('agency/clients/{client}/sites', [AgencyController::class, 'assignSites'])->middleware('role:owner,admin');
+
     // Team management (Week 5) — owner/admin can view & invite; owner-only mutations.
     Route::get('organizations/users', [TeamController::class, 'index'])->middleware('role:owner,admin');
     Route::post('organizations/users/invite', [TeamController::class, 'invite'])->middleware('role:owner,admin');
@@ -269,6 +280,11 @@ Route::middleware(['auth:sanctum', 'tenant', 'restrict.impersonation'])->group(f
         // approved by configuration; contrast with P9's ActionProposal,
         // which always requires an explicit human approval per action.
         Route::get('sites/{site}/automation-rules', [AutomationRuleController::class, 'index']);
+        // Rule-builder catalog (triggers/actions the dispatcher really
+        // supports) — read-only, any site-access role. MUST be matched
+        // before the {automationRule} show route below, or "catalog" would
+        // be swallowed as a rule id.
+        Route::get('sites/{site}/automation-rules/catalog', [AutomationRuleController::class, 'catalog']);
         Route::get('sites/{site}/automation-rules/{automationRule}', [AutomationRuleController::class, 'show']);
         Route::get('sites/{site}/automation-rules/{automationRule}/runs', [AutomationRuleController::class, 'runs']);
         // Configuring or firing a rule executes real side effects (webhooks,

@@ -10,7 +10,7 @@ class DataSourceConnection extends Model
 {
     use BelongsToOrganization; // tenant-scoped + auto organization_id
 
-    public const SOURCES = ['wordpress', 'woocommerce', 'ga4', 'gsc', 'pagespeed', 'cloudflare', 'engagement', 'email'];
+    public const SOURCES = ['wordpress', 'woocommerce', 'ga4', 'gsc', 'pagespeed', 'cloudflare', 'engagement', 'email', 'bing'];
 
     public const STATES = ['connected', 'not_configured', 'syncing', 'degraded', 'error', 'disabled'];
 

@@ -10,8 +10,9 @@ class SeoQuerySnapshot extends Model
     public $timestamps = false;
 
     protected $fillable = [
-        'site_id', 'period_start', 'period_end', 'query',
+        'site_id', 'source', 'period_start', 'period_end', 'query',
         'clicks', 'impressions', 'ctr', 'position',
+        'avg_click_position', 'avg_impression_position',
         'prev_clicks', 'prev_impressions', 'prev_ctr', 'prev_position',
         'opportunity', 'created_at',
     ];
@@ -23,6 +24,8 @@ class SeoQuerySnapshot extends Model
             'period_end'   => 'date',
             'ctr'          => 'float',
             'position'     => 'float',
+            'avg_click_position'      => 'float',
+            'avg_impression_position' => 'float',
             'prev_ctr'     => 'float',
             'prev_position' => 'float',
             'created_at'   => 'datetime',

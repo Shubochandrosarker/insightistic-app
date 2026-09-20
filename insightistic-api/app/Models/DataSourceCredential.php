@@ -18,12 +18,13 @@ class DataSourceCredential extends Model
     use BelongsToOrganization;
 
     /** Sources that are connected directly by the SaaS rather than the plugin. */
-    public const DIRECT_SOURCES = ['ga4', 'gsc', 'cloudflare'];
+    public const DIRECT_SOURCES = ['ga4', 'gsc', 'cloudflare', 'bing'];
 
     public const PROVIDER_FOR_SOURCE = [
         'ga4'        => 'google',
         'gsc'        => 'google',
         'cloudflare' => 'cloudflare',
+        'bing'       => 'bing',
     ];
 
     protected $fillable = [

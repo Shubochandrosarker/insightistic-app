@@ -57,7 +57,11 @@ class IntegrationsController extends Controller
 
                 // Connection workflow metadata for the Integrations page.
                 'connectable'        => $direct,
-                'auth_type'          => $direct ? ($source === 'cloudflare' ? 'api_token' : 'oauth') : 'plugin',
+                'auth_type'          => $direct ? match ($source) {
+                    'cloudflare' => 'api_token',
+                    'bing'       => 'api_key', // pasted key, no OAuth dance
+                    default      => 'oauth',
+                } : 'plugin',
                 'configured'         => $direct ? $this->serverConfigured($source) : true,
                 'connected'          => $direct && $this->manager->isConnected($site, $source),
                 'detail'             => $direct ? $this->manager->publicDetail($site, $source) : null,
@@ -145,6 +149,21 @@ class IntegrationsController extends Controller
         return response()->json(['status' => 'connected']);
     }
 
+    /** POST /sites/{site}/integrations/bing/connect */
+    public function connectBing(Request $request)
+    {
+        $site = $this->site($request);
+        $data = $request->validate(['api_key' => ['required', 'string', 'min:16', 'max:200']]);
+
+        try {
+            $this->manager->connectBing($site, $data['api_key'], (int) $request->user()->id);
+        } catch (IntegrationFailure $e) {
+            return $this->failure($e);
+        }
+
+        return response()->json(['status' => 'connected']);
+    }
+
     /** GET /sites/{site}/integrations/{source}/resources */
     public function resources(Request $request, string $siteId, string $source)
     {
@@ -225,7 +244,9 @@ class IntegrationsController extends Controller
 
     private function serverConfigured(string $source): bool
     {
-        return $source === 'cloudflare' ? true : $this->google->isConfigured();
+        // Cloudflare and Bing need no server-level credential — the user
+        // supplies their own token/key at connect time.
+        return in_array($source, ['cloudflare', 'bing'], true) ? true : $this->google->isConfigured();
     }
 
     private function assertDirectSource(string $source): void

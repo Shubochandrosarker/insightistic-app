@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-labelledby="title desc">
+  <title id="title">Tripistic icon</title>
+  <desc id="desc">An abstract T-shaped route ending at a compass point.</desc>
+  <rect width="256" height="256" rx="64" fill="#059669"/>
+  <path d="M58 103h72c17 0 30-8 39-25" fill="none" stroke="#FAFAFA" stroke-width="28" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M116 103v61c0 23-11 42-34 60" fill="none" stroke="#FAFAFA" stroke-width="28" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="174" cy="76" r="17" fill="#FAFAFA"/>
+  <path d="m185 54 31-16-13 33z" fill="#FAFAFA"/>
+</svg>

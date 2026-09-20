@@ -35,8 +35,12 @@ export function AuthShell({
           }}
         />
         <div className="relative z-10 flex items-center gap-2">
-          <span className="ins-logo-dot" />
-          <span className="text-lg font-bold tracking-tight">Insightistic</span>
+          {/* Wordmark PNG ships on a white field — a white chip keeps the
+              dark brand panel behind it clean in both themes. */}
+          <span className="flex h-10 items-center rounded-lg bg-white px-3">
+            {/* eslint-disable-next-line @next/next/no-img-element -- static brand asset */}
+            <img src="/logos/insightistic-eye.png" alt="Insightistic" className="h-7 w-auto" />
+          </span>
         </div>
 
         <div className="relative z-10 max-w-md">

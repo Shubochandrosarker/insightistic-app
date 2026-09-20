@@ -23,6 +23,15 @@ return Application::configure(basePath: dirname(__DIR__))
         // Baseline security headers on every response (API serves JSON only).
         $middleware->append(\App\Http\Middleware\SecurityHeaders::class);
 
+        // Laravel's default builder registers redirectGuestsTo(route('login')).
+        // This API has no login route — an unauthenticated non-JSON request
+        // (e.g. a browser POST without an Accept header) would throw
+        // RouteNotFoundException INSIDE the auth middleware and 500 before
+        // the exception handler ever sees it. Null → a clean
+        // AuthenticationException, which the renderer below turns into 401
+        // JSON for api/* paths.
+        $middleware->redirectGuestsTo(fn () => null);
+
         // Insightistic route-middleware aliases.
         $middleware->alias([
             'tenant'                 => \App\Http\Middleware\ResolveOrganization::class,

@@ -67,21 +67,23 @@ class PlanSeeder extends Seeder
 
         // Knowledge base + Copilot entitlements (spec Phase 8), plus the
         // roadmap-era usage keys (docs 24/26): crawl pages, tracked
-        // keywords, AI visibility prompt runs. Database configuration, not
-        // frontend hardcoding — the admin plan editor can override any of
-        // these per plan.
+        // keywords, AI visibility prompt runs — and, since Phase 7 (doc 12),
+        // the crawl cadence: crawl_frequency_days (7 = weekly on
+        // free/starter, 1 = daily on the paid tiers). Database
+        // configuration, not frontend hardcoding — the admin plan editor
+        // can override any of these per plan.
         $limits = [
-            //  slug          kbs  srcs  mb    chunks  embeds   msgs  schedRpts retDays | crawl  kw    prompts
-            'free'       => [1,   5,    25,   1000,   2000,    25,   0,    180,      0,      0,     0],
-            'starter'    => [1,   10,   50,   2000,   5000,    50,   4,    365,      10000,  150,   15],
-            'growth'     => [3,   50,   250,  10000,  25000,   300,  20,   730,      50000,  750,   75],
-            'business'   => [10,  150,  1000, 50000,  100000,  1000, 100,  1095,     100000, 1500,  150],
-            'agency'     => [30,  500,  5000, 200000, 400000,  3000, 300,  1095,     200000, 3000,  250],
-            'agency_pro' => [100, 2000, 20000, 800000, 1500000, 10000, 1000, 1825,    1000000, 10000, 1000],
+            //  slug          kbs  srcs  mb    chunks  embeds   msgs  schedRpts retDays | crawl  kw    prompts  freqDays
+            'free'       => [1,   5,    25,   1000,   2000,    25,   0,    180,      500,    0,     0,       7],
+            'starter'    => [1,   10,   50,   2000,   5000,    50,   4,    365,      10000,  150,   15,      7],
+            'growth'     => [3,   50,   250,  10000,  25000,   300,  20,   730,      50000,  750,   75,      1],
+            'business'   => [10,  150,  1000, 50000,  100000,  1000, 100,  1095,     100000, 1500,  150,     1],
+            'agency'     => [30,  500,  5000, 200000, 400000,  3000, 300,  1095,     200000, 3000,  250,     1],
+            'agency_pro' => [100, 2000, 20000, 800000, 1500000, 10000, 1000, 1825,    1000000, 10000, 1000,    1],
         ];
 
         foreach ($plans as [$slug, $name, $m, $y, $sites, $users, $ai, $reports, $wl, $cd, $active, $featured]) {
-            [$kbs, $srcs, $mb, $chunks, $embeds, $msgs, $schedRpts, $retDays, $crawl, $kw, $prompts] = $limits[$slug];
+            [$kbs, $srcs, $mb, $chunks, $embeds, $msgs, $schedRpts, $retDays, $crawl, $kw, $prompts, $freqDays] = $limits[$slug];
 
             Plan::updateOrCreate(['slug' => $slug], [
                 'name'                  => $name,
@@ -106,6 +108,7 @@ class PlanSeeder extends Seeder
                     'crawl_pages_monthly'      => $crawl,
                     'tracked_keywords'         => $kw,
                     'ai_prompt_runs_monthly'   => $prompts,
+                    'crawl_frequency_days'     => $freqDays,
                 ],
                 'is_active'             => $active,
                 'is_featured'           => $featured,

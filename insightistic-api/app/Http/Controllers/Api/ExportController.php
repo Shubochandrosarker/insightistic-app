@@ -5,6 +5,9 @@ namespace App\Http\Controllers\Api;
 use App\Domain\Search\OpportunityEngine;
 use App\Domain\Search\SearchExplorer;
 use App\Http\Controllers\Controller;
+use App\Models\CrawlIssue;
+use App\Models\CrawlPage;
+use App\Models\CrawlRun;
 use App\Models\MetricSnapshot;
 use App\Models\SeoDaily;
 use App\Models\Site;
@@ -220,5 +223,51 @@ class ExportController extends Controller
     private function site(Request $request): Site
     {
         return $request->attributes->get('site');
+    }
+
+    /** GET /sites/{site}/exports/crawl.csv?type=pages|issues (latest run, 10k cap). */
+    public function crawl(Request $request)
+    {
+        $site = $this->site($request);
+        $type = $request->query('type', 'pages');
+
+        if (! in_array($type, ['pages', 'issues'], true)) {
+            abort(422, 'Unknown crawl export type.');
+        }
+
+        $runId = CrawlRun::where('site_id', $site->id)->orderByDesc('id')->value('id');
+
+        if (! $runId) {
+            abort(422, 'No crawl run yet.');
+        }
+
+        if ($type === 'pages') {
+            $rows = CrawlPage::where('run_id', $runId)
+                ->orderBy('url')
+                ->limit(10000)
+                ->get();
+
+            return $this->csv('crawl-pages', [
+                'URL', 'Status', 'Indexable', 'Title', 'Meta description', 'H1 count',
+                'Word count', 'Canonical', 'Response ms',
+            ], $rows, fn ($r) => [
+                $r->url, $r->status_code, $r->indexable ? 'yes' : 'no', $r->title,
+                $r->meta_description, $r->h1_count, $r->word_count, $r->canonical_url, $r->response_ms,
+            ]);
+        }
+
+        $rows = CrawlIssue::where('site_id', $site->id)
+            ->whereIn('status', ['open', 'ignored'])
+            ->orderByDesc('severity')
+            ->orderBy('issue_code')
+            ->limit(10000)
+            ->get();
+
+        return $this->csv('crawl-issues', [
+            'Code', 'Severity', 'Category', 'Status', 'Target URL', 'First seen', 'Last seen',
+        ], $rows, fn ($r) => [
+            $r->issue_code, $r->severity, $r->category, $r->status, $r->target_url,
+            $r->first_seen_at?->toDateString(), $r->last_seen_at?->toDateString(),
+        ]);
     }
 }

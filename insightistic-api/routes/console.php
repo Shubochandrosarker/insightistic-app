@@ -91,6 +91,19 @@ Schedule::command('insightistic:telemetry-prune')
     ->withoutOverlapping();
 
 /*
+ * Scheduled site crawls (Phase 7, doc 12). Daily at 03:00 — inside the
+ * nightly window, after the 02:00 snapshot build and before the 03:30
+ * privacy purge, so a crawl's fresh page data is in place before the day's
+ * first alert/insight reads. The command itself decides per site whether
+ * the plan's crawl_frequency_days cadence is actually due, so weekly plans
+ * only crawl on the nightly pass that is due for them. withoutOverlapping
+ * guards a slow crawl-heavy night from stacking queue entries.
+ */
+Schedule::command('insightistic:crawl-scheduled')
+    ->dailyAt('03:00')
+    ->withoutOverlapping();
+
+/*
  * Automation Studio (spec: Insightistic VNext P6) schedule-triggered
  * rules. Hourly — the finest cadence a rule can configure
  * (trigger_config.frequency = 'hourly'); AutomationDispatcher's own

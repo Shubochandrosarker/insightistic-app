@@ -36,7 +36,7 @@ class PaddleCatalogSeeder extends Seeder
         'pri_01m2y7dtzybt5qa1k6yx7ha6hz' => ['agency_pro', 'monthly',     29900,  []],
         'pri_01m2y7dvg1tk4tc7w34jtamfx4' => ['agency_pro', 'yearly',      299000, []],
 
-        // Founder LTD (one-time => permanent entitlement_grant on purchase)
+        // Angel LTD (one-time => permanent entitlement_grant on purchase)
         'pri_01m2y7dw3kd8162wzm54j6k7z3' => ['founder_tier_1', 'lifetime', 7900,  []],
         'pri_01m2y7dwmfewpennma8gjffm88' => ['founder_tier_2', 'lifetime', 14900, []],
         'pri_01m2y7dx628b2ahgzf2vqafey4' => ['founder_tier_3', 'lifetime', 24900, []],
@@ -56,15 +56,15 @@ class PaddleCatalogSeeder extends Seeder
      */
     private const HIDDEN_PLANS = [
         'founder_tier_1' => [
-            'name' => 'Founder Tier 1', 'price' => 7900, 'sites' => 3, 'users' => 1,
+            'name' => 'Angel Tier 1', 'price' => 7900, 'sites' => 3, 'users' => 1,
             'crawl' => 10000, 'kw' => 150, 'prompts' => 10, 'reports' => 4,
         ],
         'founder_tier_2' => [
-            'name' => 'Founder Tier 2', 'price' => 14900, 'sites' => 10, 'users' => 3,
+            'name' => 'Angel Tier 2', 'price' => 14900, 'sites' => 10, 'users' => 3,
             'crawl' => 40000, 'kw' => 500, 'prompts' => 40, 'reports' => 20,
         ],
         'founder_tier_3' => [
-            'name' => 'Founder Tier 3', 'price' => 24900, 'sites' => 30, 'users' => 5,
+            'name' => 'Angel Tier 3', 'price' => 24900, 'sites' => 30, 'users' => 5,
             'crawl' => 100000, 'kw' => 1500, 'prompts' => 100, 'reports' => 100,
         ],
         'insight_credits' => [

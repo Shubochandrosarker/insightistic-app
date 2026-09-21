@@ -41,7 +41,8 @@ export default function OAuthCallback() {
     <main className="flex min-h-screen items-center justify-center bg-bg px-6">
       <div className="w-full max-w-sm rounded-2xl border border-line bg-card p-8 text-center shadow-card">
         <div className="mx-auto mb-4 flex items-center justify-center gap-2">
-          <span className="ins-logo-dot" />
+          {/* eslint-disable-next-line @next/next/no-img-element -- static brand asset */}
+          <img src="/logos/insightistic-icon.svg" alt="" aria-hidden="true" className="h-7 w-7" />
           <span className="text-lg font-bold text-fg">Insightistic</span>
         </div>
 

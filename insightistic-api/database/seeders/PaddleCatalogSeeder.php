@@ -56,15 +56,15 @@ class PaddleCatalogSeeder extends Seeder
      */
     private const HIDDEN_PLANS = [
         'founder_tier_1' => [
-            'name' => 'Angel Tier 1', 'price' => 7900, 'sites' => 3, 'users' => 1,
+            'name' => 'Angel Solo', 'price' => 7900, 'sites' => 3, 'users' => 1,
             'crawl' => 10000, 'kw' => 150, 'prompts' => 10, 'reports' => 4,
         ],
         'founder_tier_2' => [
-            'name' => 'Angel Tier 2', 'price' => 14900, 'sites' => 10, 'users' => 3,
+            'name' => 'Angel Studio', 'price' => 14900, 'sites' => 10, 'users' => 3,
             'crawl' => 40000, 'kw' => 500, 'prompts' => 40, 'reports' => 20,
         ],
         'founder_tier_3' => [
-            'name' => 'Angel Tier 3', 'price' => 24900, 'sites' => 30, 'users' => 5,
+            'name' => 'Angel Agency', 'price' => 24900, 'sites' => 30, 'users' => 5,
             'crawl' => 100000, 'kw' => 1500, 'prompts' => 100, 'reports' => 100,
         ],
         'insight_credits' => [

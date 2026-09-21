@@ -40,4 +40,5 @@
 ## Angel LTD release gates
 
 - [ ] 30-day, 100% no-questions-asked refund configured in Paddle, support routing, website policy and app terms
+- [ ] Paddle notification destination subscribes to `adjustment.created` and `adjustment.updated`; sandbox test covers pending → approved full refund, partial refund, chargeback, and replay-safe entitlement revocation
 - [ ] Legal review completed for Angel claims, market comparison, guarantee, lifetime definition and AI citation language

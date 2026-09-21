@@ -18,6 +18,13 @@ use App\Services\Billing\PaddleClient;
  */
 final class PaddleBillingService
 {
+    /**
+     * The Angel campaign is a real capacity limit, not a front-end counter.
+     * A completed entitlement consumes a member slot even if it is later
+     * revoked, preserving the published first-100 promise.
+     */
+    private const ANGEL_MEMBER_CAP = 100;
+
     public function __construct(
         private PaddleClient $client,
         private PaddleSubscriptionProjector $subscriptions,
@@ -42,6 +49,10 @@ final class PaddleBillingService
         // purchasability is the ACTIVE PADDLE PRICE below, not the plan flag.
         // Recurring kinds still require an active plan.
         $recurring = in_array($kind, ['monthly', 'yearly'], true);
+
+        if ('lifetime' === $kind && str_starts_with($planSlug, 'founder_tier_')) {
+            $this->assertAngelCapacity();
+        }
 
         if (! $plan || ($recurring && ! $plan->is_active)) {
             throw new BillingConfigurationException('plan_not_available', 'This plan is not available.');
@@ -134,6 +145,26 @@ final class PaddleBillingService
         $payload = $this->client->changePlan($sub->provider_subscription_id, $price->provider_price_id, $prorationBillingMode);
 
         return $this->subscriptions->project($payload);
+    }
+
+    /**
+     * Stop new LTD checkout configuration once the first 100 Angel members
+     * have completed a lifetime purchase. Checkout config is intentionally
+     * server-side so the page cannot overrule the campaign cap.
+     */
+    private function assertAngelCapacity(): void
+    {
+        $claimed = EntitlementGrant::withoutGlobalScope('organization')
+            ->where('source', 'paddle_lifetime')
+            ->distinct()
+            ->count('organization_id');
+
+        if ($claimed >= self::ANGEL_MEMBER_CAP) {
+            throw new BillingConfigurationException(
+                'ltd_sold_out',
+                'Angel member access is closed after the first 100 lifetime memberships.',
+            );
+        }
     }
 
     // ------------------------------------------------------------------

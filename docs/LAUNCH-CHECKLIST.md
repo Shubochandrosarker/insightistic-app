@@ -35,3 +35,9 @@
 - [ ] First paid offer / LTD ready (e.g. founding-agency deal)
 - [ ] Demo account seeded for sales calls (`demo@insightistic.com / demo12345`)
 - [ ] Support inbox + basic docs linked from app
+
+
+## Angel LTD release gates
+
+- [ ] 30-day, 100% no-questions-asked refund configured in Paddle, support routing, website policy and app terms
+- [ ] Legal review completed for Angel claims, market comparison, guarantee, lifetime definition and AI citation language

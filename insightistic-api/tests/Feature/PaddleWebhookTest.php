@@ -66,6 +66,19 @@ function paddleTransactionData(string $kind, array $overrides = []): array
     ], $overrides);
 }
 
+/** Build the adjustment entity delivered for a refund or chargeback. */
+function paddleAdjustmentData(string $transactionId, array $overrides = []): array
+{
+    return array_merge([
+        'id'             => 'adj_pdl_01',
+        'action'         => 'refund',
+        'type'           => 'full',
+        'transaction_id' => $transactionId,
+        'status'         => 'pending_approval',
+        'updated_at'     => '2026-09-19T10:01:00.000Z',
+    ], $overrides);
+}
+
 /** Wrap a provider entity in the Paddle event envelope. */
 function paddleEvent(string $type, array $data, string $eventId): array
 {
@@ -218,6 +231,62 @@ it('grants lifetime access once for a completed purchase, never twice on replay'
         ->and($txn->status)->toBe('completed')
         ->and($txn->total_minor)->toBe(49900)
         ->and($txn->invoice_number)->toBe('inv_01');
+});
+
+it('revokes a lifetime grant only after an approved full adjustment and stays safe on replay', function () {
+    config()->set('billing.paddle.webhook_secret', 'pdlwh_test');
+
+    paddlePlanPrice('lifetime', 'pri_pdl_lifetime');
+    [, $org] = makeOrgUser('paddle-refund@example.com');
+
+    $transaction = paddleTransactionData('lifetime', [
+        'custom_data' => ['organization_id' => $org->id],
+    ]);
+    $processor = app(PaddleEventProcessor::class);
+    $processor->process('transaction.completed', $transaction);
+
+    $grant = EntitlementGrant::withoutGlobalScope('organization')->firstOrFail();
+    expect($grant->isActive())->toBeTrue();
+
+    // A refund awaiting Paddle approval must not remove access.
+    $pending = paddleAdjustmentData('txn_pdl_lifetime');
+    $processor->process('adjustment.created', $pending);
+    expect($grant->refresh()->isActive())->toBeTrue();
+
+    // Approval revokes once; duplicate adjustment.updated delivery is a no-op.
+    $approved = array_merge($pending, [
+        'status'     => 'approved',
+        'updated_at' => '2026-09-19T10:02:00.000Z',
+    ]);
+    $processor->process('adjustment.updated', $approved);
+    $processor->process('adjustment.updated', $approved);
+
+    expect($grant->refresh()->isActive())->toBeFalse()
+        ->and($grant->revoked_at)->not->toBeNull()
+        ->and(BillingTransaction::withoutGlobalScope('organization')->firstOrFail()->status)->toBe('refunded');
+
+    // A full transaction replay retains the refunded ledger state and cannot
+    // fulfil a second entitlement.
+    $processor->process('transaction.completed', $transaction);
+    expect(EntitlementGrant::withoutGlobalScope('organization')->count())->toBe(1)
+        ->and(BillingTransaction::withoutGlobalScope('organization')->firstOrFail()->status)->toBe('refunded');
+});
+
+it('does not revoke a lifetime grant for a partial approved adjustment', function () {
+    paddlePlanPrice('lifetime', 'pri_pdl_lifetime');
+    [, $org] = makeOrgUser('paddle-partial-refund@example.com');
+
+    $transaction = paddleTransactionData('lifetime', [
+        'custom_data' => ['organization_id' => $org->id],
+    ]);
+    $processor = app(PaddleEventProcessor::class);
+    $processor->process('transaction.completed', $transaction);
+    $processor->process('adjustment.updated', paddleAdjustmentData('txn_pdl_lifetime', [
+        'status' => 'approved',
+        'type'   => 'partial',
+    ]));
+
+    expect(EntitlementGrant::withoutGlobalScope('organization')->firstOrFail()->isActive())->toBeTrue();
 });
 
 it('credits a credit pack exactly once even when the event replays', function () {

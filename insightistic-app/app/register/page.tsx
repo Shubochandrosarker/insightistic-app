@@ -11,9 +11,9 @@ const PLAN_LABELS: Record<string, string> = {
   growth: "Growth",
   agency: "Agency",
   agency_pro: "Agency Pro",
-  founder_tier_1: "Angel Tier 1",
-  founder_tier_2: "Angel Tier 2",
-  founder_tier_3: "Angel Tier 3",
+  founder_tier_1: "Angel Solo",
+  founder_tier_2: "Angel Studio",
+  founder_tier_3: "Angel Agency",
 };
 
 export default function Register() {

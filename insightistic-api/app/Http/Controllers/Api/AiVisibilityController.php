@@ -167,13 +167,12 @@ class AiVisibilityController extends Controller
             ], 422);
         }
 
-        $tz = $site->timezone ?: config('app.timezone', 'UTC');
-
-        if ($row->last_run_at !== null
-            && $row->last_run_at->copy()->timezone($tz)->isSameDay(CarbonImmutable::today($tz))) {
+        // Rolling 24-hour cadence (mirrors RunAiVisibilityJob::duePrompts) —
+        // calendar-day suppression re-fired prompts right after midnight.
+        if ($row->last_run_at !== null && $row->last_run_at->gt(now()->subDay())) {
             return response()->json([
                 'code'    => 'already_checked_today',
-                'message' => 'This prompt was already checked today.',
+                'message' => 'This prompt was already checked in the last 24 hours.',
             ], 422);
         }
 

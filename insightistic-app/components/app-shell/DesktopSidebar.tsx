@@ -25,7 +25,8 @@ export function DesktopSidebar({
   return (
     <aside className="ins-scroll hidden w-60 shrink-0 flex-col overflow-y-auto border-r border-line bg-card lg:flex">
       <div className="flex items-center gap-2 px-5 py-5">
-        <span className="ins-logo-dot" />
+        {/* eslint-disable-next-line @next/next/no-img-element -- static brand asset */}
+        <img src="/logos/insightistic-icon.svg" alt="" aria-hidden="true" className="h-8 w-8 shrink-0" />
         <span className="text-lg font-bold tracking-tight text-fg">{brand}</span>
       </div>
 

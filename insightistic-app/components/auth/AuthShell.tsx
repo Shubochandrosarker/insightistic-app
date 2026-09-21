@@ -39,7 +39,7 @@ export function AuthShell({
               dark brand panel behind it clean in both themes. */}
           <span className="flex h-10 items-center rounded-lg bg-white px-3">
             {/* eslint-disable-next-line @next/next/no-img-element -- static brand asset */}
-            <img src="/logos/insightistic-eye.png" alt="Insightistic" className="h-7 w-auto" />
+            <img src="/logos/insightistic-logo.svg" alt="Insightistic" className="h-8 w-auto" />
           </span>
         </div>
 
@@ -73,7 +73,8 @@ export function AuthShell({
       <section className="flex w-full flex-1 items-center justify-center px-6 py-12">
         <div className="w-full max-w-md">
           <Link href="/" className="mb-8 flex items-center gap-2 lg:hidden">
-            <span className="ins-logo-dot" />
+            {/* eslint-disable-next-line @next/next/no-img-element -- static brand asset */}
+            <img src="/logos/insightistic-icon.svg" alt="" aria-hidden="true" className="h-7 w-7" />
             <span className="text-lg font-bold text-ink">Insightistic</span>
           </Link>
 

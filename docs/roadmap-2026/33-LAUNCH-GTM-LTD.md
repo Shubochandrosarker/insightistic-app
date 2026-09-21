@@ -24,15 +24,15 @@ Rank tracker/AI visibility can be included only if cost controls are proven.
 
 ## Offer design
 
-Three founder tiers are easier to communicate than complex stacking.
+Three Angel tiers are easier to communicate than complex stacking.
 
 Example:
 
 | Tier | Price hypothesis | Sites | Primary buyer |
 |---|---:|---:|---|
-| Founder 1 | $79 | 3 | site owner/freelancer |
-| Founder 2 | $149 | 10 | consultant/small agency |
-| Founder 3 | $249 | 30 | agency |
+| Angel 1 | $79 | 3 | site owner/freelancer |
+| Angel 2 | $149 | 10 | consultant/small agency |
+| Angel 3 | $249 | 30 | agency |
 
 Limits are defined in `24-PRICING-ENTITLEMENTS-CREDITS-LTD.md`.
 
@@ -40,11 +40,10 @@ Limits are defined in `24-PRICING-ENTITLEMENTS-CREDITS-LTD.md`.
 
 Close on first condition reached:
 
-- 60 days
-- 500 customers
-- $50,000 gross LTD revenue
+- First 100 Angel members
+- The separately announced limited-time campaign window
 
-Communicate the cap before launch.
+Communicate the real cap and campaign window before launch. Do not publish a countdown until the end date is configured.
 
 ## Launch sequence
 
@@ -65,7 +64,7 @@ Objectives:
 - usage/cost telemetry
 - testimonials
 
-### Stage 2 — direct Founder LTD
+### Stage 2 — direct Angel LTD
 
 Channels:
 

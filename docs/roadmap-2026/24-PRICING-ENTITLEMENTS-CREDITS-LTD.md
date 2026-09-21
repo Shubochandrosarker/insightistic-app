@@ -108,7 +108,7 @@ Core first-party data sync should not consume confusing per-request credits.
 
 ## Lifetime deal structure
 
-### Angel Tier 1 — $79
+### Angel Solo — $79
 
 - 3 sites
 - 10k crawl pages/month
@@ -116,7 +116,7 @@ Core first-party data sync should not consume confusing per-request credits.
 - 10 AI prompts or equivalent limited allowance
 - basic reports
 
-### Angel Tier 2 — $149
+### Angel Studio — $149
 
 - 10 sites
 - 40k crawl pages/month
@@ -124,7 +124,7 @@ Core first-party data sync should not consume confusing per-request credits.
 - 40 AI prompts
 - scheduled reports
 
-### Angel Tier 3 — $249
+### Angel Agency — $249
 
 - 30 sites
 - 100k crawl pages/month

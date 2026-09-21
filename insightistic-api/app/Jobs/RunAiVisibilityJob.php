@@ -111,23 +111,22 @@ class RunAiVisibilityJob implements ShouldQueue
     }
 
     /**
-     * Active prompts due for a run: never run, or last run before today
-     * started in the site's timezone (daily cadence, MVP).
+     * Active prompts due for a run: never run, or last run more than 24
+     * hours ago (daily cadence). A rolling window, not calendar-day — a
+     * 23:50 run must not re-fire at 00:10, and date-boundary math must not
+     * make tests time-of-day flaky.
      *
      * @return \Illuminate\Support\Collection<int, AiVisibilityPrompt>
      */
     private function duePrompts(Site $site, ?int $promptId)
     {
-        $timezone = $site->timezone ?: config('app.timezone', 'UTC');
-        $todayStartUtc = Carbon::today($timezone)->timezone('UTC');
-
         return AiVisibilityPrompt::query()
             ->where('site_id', $site->id)
             ->where('active', true)
             ->when($promptId !== null, fn ($query) => $query->whereKey($promptId))
-            ->where(function ($query) use ($todayStartUtc) {
+            ->where(function ($query) {
                 $query->whereNull('last_run_at')
-                    ->orWhere('last_run_at', '<', $todayStartUtc);
+                    ->orWhere('last_run_at', '<', now()->subDay());
             })
             ->orderBy('id')
             ->get();

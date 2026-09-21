@@ -6,9 +6,9 @@ import Link from "next/link";
 // Angel LTD teaser (roadmap doc 24). Static copy — the launch cap is
 // communicated without fake scarcity counters.
 const founderTiers = [
-  { name: "Angel Tier 1", price: 79, limits: "3 sites · 10k crawl pages/mo · 150 keywords · 10 AI prompts/mo · basic reports" },
-  { name: "Angel Tier 2", price: 149, limits: "10 sites · 40k crawl pages/mo · 500 keywords · 40 AI prompts/mo · scheduled reports" },
-  { name: "Angel Tier 3", price: 249, limits: "30 sites · 100k crawl pages/mo · 1,500 keywords · 100 AI prompts/mo · white-label reports · 5 team members" },
+  { name: "Angel Solo", price: 79, limits: "3 sites · 10k crawl pages/mo · 150 keywords · 10 AI prompts/mo · basic reports" },
+  { name: "Angel Studio", price: 149, limits: "10 sites · 40k crawl pages/mo · 500 keywords · 40 AI prompts/mo · scheduled reports" },
+  { name: "Angel Agency", price: 249, limits: "30 sites · 100k crawl pages/mo · 1,500 keywords · 100 AI prompts/mo · white-label reports · 5 team members" },
 ];
 
 // Sibling products in the WordPressistic ecosystem. Verifyistic has no
@@ -48,7 +48,7 @@ export default function Pricing() {
         <div className="mt-10 rounded-2xl border border-slate-200 bg-slate-50 p-6">
           <div className="flex flex-wrap items-baseline justify-between gap-2">
             <h2 className="text-lg font-semibold text-slate-900">Angel lifetime deal — first 100 members</h2>
-            <span className="text-xs text-slate-500">Limited-time one-time payment · allowances reset monthly</span>
+            <span className="text-xs text-slate-500">Limited-time one-time payment · first 100 members · 30-day guarantee</span>
           </div>
           <div className="mt-5 grid gap-4 sm:grid-cols-3">
             {founderTiers.map((t) => (
@@ -63,7 +63,7 @@ export default function Pricing() {
           </div>
           <p className="mt-4 text-xs text-slate-500">
             Lifetime = the tier&rsquo;s features for as long as Insightistic operates, with the published monthly
-            allowances. No surprise meters. <Link href="/terms" className="underline hover:text-slate-700">Deal terms</Link>
+            allowances. No surprise meters. Every Angel purchase includes a 30-day, 100% money-back guarantee with no questions asked. <Link href="/terms" className="underline hover:text-slate-700">Deal terms</Link>
           </p>
           <div className="mt-4">
             <Link

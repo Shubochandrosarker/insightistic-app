@@ -53,6 +53,14 @@ final class PaddleEventProcessor
                 $this->transactions->project($data, 'failed');
                 break;
 
+            case 'adjustment.created':
+            case 'adjustment.updated':
+                // Refunds and chargebacks are adjustment entities. Pending or
+                // partial adjustments do not revoke a lifetime grant; the
+                // transaction projector handles approved full adjustments.
+                $this->transactions->processAdjustment($data);
+                break;
+
             case 'customer.created':
             case 'customer.updated':
                 // Customer profile lives at the provider; nothing to project.

@@ -35,19 +35,19 @@ const POLL_INTERVAL_MS = 2000;
 const FOUNDER_TIERS = [
   {
     slug: "founder_tier_1",
-    name: "Angel Tier 1",
+    name: "Angel Solo",
     price: 79,
     limits: "3 sites · 10k crawl pages/mo · 150 keywords · 10 AI prompts/mo · basic reports",
   },
   {
     slug: "founder_tier_2",
-    name: "Angel Tier 2",
+    name: "Angel Studio",
     price: 149,
     limits: "10 sites · 40k crawl pages/mo · 500 keywords · 40 AI prompts/mo · scheduled reports",
   },
   {
     slug: "founder_tier_3",
-    name: "Angel Tier 3",
+    name: "Angel Agency",
     price: 249,
     limits: "30 sites · 100k crawl pages/mo · 1,500 keywords · 100 AI prompts/mo · white-label reports · 5 team members",
   },

@@ -108,7 +108,7 @@ Core first-party data sync should not consume confusing per-request credits.
 
 ## Lifetime deal structure
 
-### Founder Tier 1 — example $79
+### Angel Tier 1 — $79
 
 - 3 sites
 - 10k crawl pages/month
@@ -116,7 +116,7 @@ Core first-party data sync should not consume confusing per-request credits.
 - 10 AI prompts or equivalent limited allowance
 - basic reports
 
-### Founder Tier 2 — example $149
+### Angel Tier 2 — $149
 
 - 10 sites
 - 40k crawl pages/month
@@ -124,7 +124,7 @@ Core first-party data sync should not consume confusing per-request credits.
 - 40 AI prompts
 - scheduled reports
 
-### Founder Tier 3 — example $249
+### Angel Tier 3 — $249
 
 - 30 sites
 - 100k crawl pages/month
@@ -133,7 +133,7 @@ Core first-party data sync should not consume confusing per-request credits.
 - white-label reports
 - 5 team members
 
-These are launch hypotheses, not immutable promises until cost-tested.
+The launch offer is limited to the first 100 Angel members and a separately announced campaign window. Publish the final limits and fair-use terms before accepting payment.
 
 ## LTD billing implementation
 

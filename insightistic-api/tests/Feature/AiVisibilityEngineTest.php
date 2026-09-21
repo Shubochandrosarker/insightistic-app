@@ -333,8 +333,10 @@ it('skips archived sites and plans with no allowance without touching the provid
         ->and($fake->scriptRemaining())->toBe(1);
 });
 
-it('never re-runs a prompt already checked today (daily cadence)', function () {
+it('never re-runs a prompt checked within the last 24 hours (daily cadence)', function () {
     [, , $site] = aivEngineSite('aiv-engine-cadence@example.com');
+    // 2h old: under the rolling-24h cadence this is suppressed at any wall
+    // clock time — calendar-day seeds made the test flaky near UTC midnight.
     aivEnginePrompt($site, 'already done today', ['last_run_at' => now()->subHours(2)]);
 
     $fake = new FakeScriptedAiProvider([aivEngineAnswer()]);

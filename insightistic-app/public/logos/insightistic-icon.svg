@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 180" role="img" aria-label="Insightistic icon">
+  <defs>
+    <linearGradient id="insightistic-gradient" x1="18" y1="20" x2="220" y2="160" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#16D9C1"/>
+      <stop offset="1" stop-color="#1F67F2"/>
+    </linearGradient>
+  </defs>
+  <g fill="url(#insightistic-gradient)">
+    <path d="M18 90C43 49 85 23 136 15c-12 21-27 39-46 54-12 10-21 16-28 21 7 5 16 12 28 21 19 15 34 33 46 54C85 157 43 131 18 90Z"/>
+    <path d="M222 90c-25-41-67-67-118-75 12 21 27 39 46 54 12 10 21 16 28 21-7 5-16 12-28 21-19 15-34 33-46 54 51-8 93-34 118-75Z"/>
+    <rect x="78" y="57" width="28" height="75" rx="14"/>
+    <rect x="113" y="24" width="30" height="108" rx="15"/>
+    <rect x="150" y="48" width="28" height="84" rx="14"/>
+    <circle cx="128" cy="12" r="12"/>
+  </g>
+</svg>

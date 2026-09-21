@@ -257,10 +257,10 @@ it('dispatches a single-prompt check and enforces the same-day cadence', functio
         ->assertOk()
         ->assertJsonPath('dispatched', true);
 
-    // Same-day re-check is refused BEFORE dispatch (house rank-tracker guard).
-    // 30 minutes, not subHour: an hour-old run crosses UTC midnight when CI
-    // lands just after 00:00 and calendar-day suppression then allows a rerun.
-    $checked = aivApiPrompt($site, 'checked already', ['last_run_at' => now()->subMinutes(30)]);
+    // A check inside the rolling 24-hour window is refused BEFORE dispatch
+    // (house rank-tracker guard). 2h-old seed: suppressed at any wall clock
+    // time — calendar-day seeds were flaky near UTC midnight.
+    $checked = aivApiPrompt($site, 'checked already', ['last_run_at' => now()->subHours(2)]);
 
     $this->actingAs($owner)
         ->postJson("/api/sites/{$site->id}/ai-visibility/prompts/{$checked->id}/check")

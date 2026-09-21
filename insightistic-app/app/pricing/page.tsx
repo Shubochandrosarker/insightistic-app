@@ -3,12 +3,12 @@ import { Footer } from "@/components/marketing/Footer";
 import { PricingCards } from "@/components/marketing/PricingCards";
 import Link from "next/link";
 
-// Founder LTD teaser (roadmap doc 24). Static copy — the launch cap is
+// Angel LTD teaser (roadmap doc 24). Static copy — the launch cap is
 // communicated without fake scarcity counters.
 const founderTiers = [
-  { name: "Founder Tier 1", price: 79, limits: "3 sites · 10k crawl pages/mo · 150 keywords · 10 AI prompts/mo · basic reports" },
-  { name: "Founder Tier 2", price: 149, limits: "10 sites · 40k crawl pages/mo · 500 keywords · 40 AI prompts/mo · scheduled reports" },
-  { name: "Founder Tier 3", price: 249, limits: "30 sites · 100k crawl pages/mo · 1,500 keywords · 100 AI prompts/mo · white-label reports · 5 team members" },
+  { name: "Angel Tier 1", price: 79, limits: "3 sites · 10k crawl pages/mo · 150 keywords · 10 AI prompts/mo · basic reports" },
+  { name: "Angel Tier 2", price: 149, limits: "10 sites · 40k crawl pages/mo · 500 keywords · 40 AI prompts/mo · scheduled reports" },
+  { name: "Angel Tier 3", price: 249, limits: "30 sites · 100k crawl pages/mo · 1,500 keywords · 100 AI prompts/mo · white-label reports · 5 team members" },
 ];
 
 // Sibling products in the WordPressistic ecosystem. Verifyistic has no
@@ -47,8 +47,8 @@ export default function Pricing() {
 
         <div className="mt-10 rounded-2xl border border-slate-200 bg-slate-50 p-6">
           <div className="flex flex-wrap items-baseline justify-between gap-2">
-            <h2 className="text-lg font-semibold text-slate-900">Founder lifetime deals — first 500 customers</h2>
-            <span className="text-xs text-slate-500">One-time payment · allowances reset monthly</span>
+            <h2 className="text-lg font-semibold text-slate-900">Angel lifetime deal — first 100 members</h2>
+            <span className="text-xs text-slate-500">Limited-time one-time payment · allowances reset monthly</span>
           </div>
           <div className="mt-5 grid gap-4 sm:grid-cols-3">
             {founderTiers.map((t) => (
@@ -70,13 +70,13 @@ export default function Pricing() {
               href="/register?plan=founder_tier_2"
               className="inline-flex items-center justify-center rounded-xl bg-slate-900 px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-slate-700"
             >
-              Claim founder pricing
+              Join the first 100 Angel members
             </Link>
           </div>
         </div>
 
         <p className="mt-10 text-center text-sm text-slate-500">
-          Lifetime deals available at launch · Insight Credit packs are one-time top-ups that don&rsquo;t expire.
+          Angel lifetime access is limited to the first 100 members · Insight Credit packs are one-time top-ups that don&rsquo;t expire.
         </p>
 
         <div className="mt-16 border-t border-slate-200 pt-12">

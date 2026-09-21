@@ -53,6 +53,7 @@ const CURRENT_ROUTES = [
   "/dashboard/licenses",
   "/dashboard/branding",
   "/dashboard/team",
+  "/dashboard/usage",
   "/dashboard/billing",
   "/dashboard/security",
   "/dashboard/privacy",

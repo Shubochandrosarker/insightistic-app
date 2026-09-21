@@ -120,3 +120,39 @@ it('answers 422 price_not_configured when the plan has no Paddle price', functio
         ->assertStatus(422)
         ->assertJson(['code' => 'price_not_configured']);
 });
+
+it('sells lifetime and credit-pack kinds from hidden (is_active=false) plans', function () {
+    config()->set('feature-flags.paddle', true);
+    config()->set('billing.paddle.client_token', 'tok_hidden_plans');
+
+    [, , $token] = paddleConfigOwner('paddle-hidden@example.com');
+
+    // Founder LTD tiers are seeded is_active=false on purpose: hidden plans
+    // sell one-time kinds through their active Paddle price, not the plan flag.
+    $hidden = Plan::create([
+        'name'      => 'Founder Tier (hidden) ' . Str::random(4),
+        'slug'      => 'paddle-hidden-' . Str::random(4),
+        'is_active' => false,
+    ]);
+    PlanPrice::create([
+        'plan_id'           => $hidden->id,
+        'provider'          => 'paddle',
+        'kind'              => 'lifetime',
+        'provider_price_id' => 'pri_hidden_' . Str::random(8),
+        'currency'          => 'USD',
+        'amount_minor'      => 7900,
+        'is_active'         => true,
+    ]);
+
+    $this->withToken($token)
+        ->postJson('/api/billing/checkout-config', ['plan' => $hidden->slug, 'kind' => 'lifetime'])
+        ->assertOk()
+        ->assertJsonPath('amount_minor', 7900);
+
+    // Recurring kinds on a hidden plan stay rejected — hiding a plan must
+    // take it off the subscription menu.
+    $this->withToken($token)
+        ->postJson('/api/billing/checkout-config', ['plan' => $hidden->slug, 'kind' => 'monthly'])
+        ->assertStatus(422)
+        ->assertJson(['code' => 'plan_not_available']);
+});

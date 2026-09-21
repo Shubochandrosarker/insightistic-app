@@ -120,6 +120,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { label: "Team", href: "/dashboard/team" },
       { label: "Branding", href: "/dashboard/branding" },
       { label: "Licenses", href: "/dashboard/licenses" },
+      { label: "Usage", href: "/dashboard/usage" },
       { label: "Billing", href: "/dashboard/billing" },
       { label: "Security", href: "/dashboard/security" },
       { label: "Privacy", href: "/dashboard/privacy" },

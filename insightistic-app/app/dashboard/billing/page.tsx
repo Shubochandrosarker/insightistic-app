@@ -1,10 +1,12 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { useApi } from "@/lib/useApi";
 import { useDashboard } from "@/lib/dashboard";
 import { apiGet, apiPost } from "@/lib/api";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
+import { Badge } from "@/components/ui/Badge";
 import { PageHeader } from "@/components/dashboard/PageHeader";
 import { Spinner } from "@/components/ui/Spinner";
 import { initPaddle, openPaddleCheckout } from "@/lib/paddle";
@@ -26,6 +28,51 @@ type Phase = "idle" | "processing";
 
 const POLL_TRIES = 15;
 const POLL_INTERVAL_MS = 2000;
+
+// Founder LTD (roadmap doc 24): one-time Paddle prices mapped to a permanent
+// entitlement grant — the webhook fulfills it, the checkout never creates a
+// subscription. Prices mirror the seeded Paddle catalog ($79/$149/$249).
+const FOUNDER_TIERS = [
+  {
+    slug: "founder_tier_1",
+    name: "Founder Tier 1",
+    price: 79,
+    limits: "3 sites · 10k crawl pages/mo · 150 keywords · 10 AI prompts/mo · basic reports",
+  },
+  {
+    slug: "founder_tier_2",
+    name: "Founder Tier 2",
+    price: 149,
+    limits: "10 sites · 40k crawl pages/mo · 500 keywords · 40 AI prompts/mo · scheduled reports",
+  },
+  {
+    slug: "founder_tier_3",
+    name: "Founder Tier 3",
+    price: 249,
+    limits: "30 sites · 100k crawl pages/mo · 1,500 keywords · 100 AI prompts/mo · white-label reports · 5 team members",
+  },
+];
+
+// Insight Credit packs: one-time purchases granted to the credit ledger by
+// the webhook (credits arrive in price metadata). Core syncs never consume
+// credits — see /terms for the fine print.
+const CREDIT_PACKS = [
+  { credits: 5000, price: 15 },
+  { credits: 20000, price: 49 },
+  { credits: 50000, price: 99 },
+];
+
+/** The lifetime grant rides on the subscription payload (or alongside it). */
+function lifetimeGrantOf(d: any): { active?: boolean; plan_slug?: string } | null {
+  const g = d?.lifetime_grant ?? d?.subscription?.lifetime_grant;
+  return g?.active && g?.plan_slug ? g : null;
+}
+
+/** Tier number from a grant's plan slug ("founder_tier_2" -> "Tier 2"). */
+function grantTierLabel(planSlug: string): string {
+  const m = planSlug.match(/founder_tier_(\d+)/);
+  return m ? `Tier ${m[1]}` : planSlug.replace(/_/g, " ");
+}
 
 function UsageBar({ label, used, limit }: { label: string; used: number; limit: number | null }) {
   const ratio = limit ? Math.min(100, Math.round((used / limit) * 100)) : 0;
@@ -56,6 +103,7 @@ export default function BillingPage() {
   const [msg, setMsg] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [phase, setPhase] = useState<Phase>("idle");
+  const [finishLabel, setFinishLabel] = useState("Finishing your subscription setup…");
   const paidRef = useRef(false);
 
   // Preselect the plan passed from the marketing-site CTA (?plan=).
@@ -87,6 +135,7 @@ export default function BillingPage() {
    * visibly changed), then refresh the page data (roadmap 22A §9).
    */
   async function finishSetup(beforePlanName: string | undefined) {
+    setFinishLabel("Finishing your subscription setup…");
     setPhase("processing");
     for (let attempt = 0; attempt < POLL_TRIES; attempt++) {
       const d = await apiGet("/billing/subscription").catch(() => null);
@@ -144,6 +193,70 @@ export default function BillingPage() {
     }
   }
 
+  /**
+   * One-time purchases (founder lifetime / credit packs) reuse the same
+   * Paddle overlay, but the webhook grants entitlements/credits instead of
+   * projecting a subscription — so the completion poll watches for the
+   * lifetime grant appearing rather than billing_provider flipping.
+   */
+  async function oneTimeCheckout(planSlug: string, kind: "lifetime" | "credit_pack") {
+    setBusy(true); setMsg(null);
+    try {
+      const cfg: any = await apiPost("/billing/checkout-config", { plan: planSlug, kind });
+      const environment: PaddleEnvironment = cfg?.environment === "sandbox" ? "sandbox" : "production";
+      await initPaddle(cfg.client_token, environment);
+      paidRef.current = false;
+      openPaddleCheckout({
+        priceId: cfg.price_id,
+        email: cfg.customer?.email,
+        customData: cfg.custom_data,
+        onSuccess: () => { paidRef.current = true; finishOneTime(planSlug, kind); },
+        onClose: (completed) => {
+          if (completed || paidRef.current) return;
+          setBusy(false);
+          setPhase("idle");
+        },
+      });
+    } catch (e: any) {
+      setMsg(e?.message || "Checkout could not be started.");
+      setPhase("idle");
+      setBusy(false);
+    }
+  }
+
+  async function finishOneTime(planSlug: string, kind: "lifetime" | "credit_pack") {
+    setFinishLabel("Finishing your lifetime setup…");
+    setPhase("processing");
+
+    // The subscription payload exposes no credit balance today, so there is
+    // nothing observable to poll — say where the credits land instead of
+    // inventing a number (they appear once the webhook fulfills the pack).
+    if (kind === "credit_pack") {
+      setMsg("Payment received — your credits land after checkout completes. Refresh in a moment if the balance hasn't moved.");
+      setPhase("idle");
+      setBusy(false);
+      reload();
+      return;
+    }
+
+    for (let attempt = 0; attempt < POLL_TRIES; attempt++) {
+      const d = await apiGet("/billing/subscription").catch(() => null);
+      const grant = lifetimeGrantOf(d);
+      if (grant) {
+        setMsg(`Lifetime ${grantTierLabel(grant.plan_slug!)} is active — welcome, founder.`);
+        setPhase("idle");
+        setBusy(false);
+        reload();
+        return;
+      }
+      await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
+    }
+    setMsg("Payment received — your lifetime access is finishing setup. Refresh in a moment.");
+    setPhase("idle");
+    setBusy(false);
+    reload();
+  }
+
   async function portal() {
     setBusy(true); setMsg(null);
     try { const r = await apiPost("/billing/portal"); window.location.href = r.url; }
@@ -171,6 +284,7 @@ export default function BillingPage() {
   const cancelPending =
     !!data.subscription?.cancel_at_period_end || data.subscription?.scheduled_change_action === "cancel";
   const hasSubscription = !!data.subscription?.stripe_subscription_id || !!provider;
+  const lifetimeGrant = lifetimeGrantOf(data);
 
   return (
     <div>
@@ -238,7 +352,7 @@ export default function BillingPage() {
         </div>
         <div className="mt-4">
           {phase === "processing" ? (
-            <Spinner label="Finishing your subscription setup…" />
+            <Spinner label={finishLabel} />
           ) : (
             <>
               <Button onClick={checkout} disabled={busy}>{busy ? "Opening checkout…" : "Continue to checkout"}</Button>
@@ -246,6 +360,68 @@ export default function BillingPage() {
             </>
           )}
         </div>
+      </Card>
+
+      <Card id="founder-lifetime" className="mt-5" title="Founder lifetime deals"
+        subtitle="One-time purchase — the tier's features and published monthly allowances for as long as Insightistic operates.">
+        {lifetimeGrant ? (
+          <div>
+            <Badge tone="green" dot>Lifetime {grantTierLabel(lifetimeGrant.plan_slug!)} active</Badge>
+            <p className="mt-3 text-sm text-muted">
+              Your founder tier is a permanent entitlement — no further purchase needed. Credit packs below still
+              top up AI usage anytime.
+            </p>
+          </div>
+        ) : (
+          <div className="grid gap-4 sm:grid-cols-3">
+            {FOUNDER_TIERS.map((t) => (
+              <div key={t.slug} className="flex flex-col rounded-xl border border-line bg-card2 p-4">
+                <div className="flex items-baseline justify-between">
+                  <span className="text-sm font-semibold text-fg">{t.name}</span>
+                  <span className="text-lg font-bold text-fg">${t.price}</span>
+                </div>
+                <p className="mt-2 flex-1 text-xs leading-relaxed text-muted">{t.limits}</p>
+                <Button
+                  variant="soft"
+                  className="mt-3"
+                  disabled={busy}
+                  onClick={() => oneTimeCheckout(t.slug, "lifetime")}
+                >
+                  Buy {t.name.replace("Founder ", "")} — ${t.price}
+                </Button>
+              </div>
+            ))}
+          </div>
+        )}
+        <p className="mt-3 text-xs text-muted">
+          Lifetime = the tier's features for as long as Insightistic operates, with the published monthly
+          allowances. No surprise meters. See <Link href="/terms" className="underline hover:text-fg">the terms</Link> for details.
+        </p>
+      </Card>
+
+      <Card id="credit-packs" className="mt-5" title="Insight credit packs"
+        subtitle="One-time top-ups — they don't expire while the service operates.">
+        <div className="grid gap-4 sm:grid-cols-3">
+          {CREDIT_PACKS.map((p) => (
+            <div key={p.credits} className="flex flex-col rounded-xl border border-line bg-card2 p-4">
+              <div className="flex items-baseline justify-between">
+                <span className="text-sm font-semibold text-fg">{num(p.credits)} credits</span>
+                <span className="text-lg font-bold text-fg">${p.price}</span>
+              </div>
+              <Button
+                variant="soft"
+                className="mt-3"
+                disabled={busy}
+                onClick={() => oneTimeCheckout("insight_credits", "credit_pack")}
+              >
+                Buy {num(p.credits)} credits — ${p.price}
+              </Button>
+            </div>
+          ))}
+        </div>
+        <p className="mt-3 text-xs text-muted">
+          Credits power AI visibility runs, AI inference and SERP checks. Core syncs never consume credits.
+        </p>
       </Card>
     </div>
   );

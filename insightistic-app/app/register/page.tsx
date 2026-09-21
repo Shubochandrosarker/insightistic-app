@@ -11,6 +11,9 @@ const PLAN_LABELS: Record<string, string> = {
   growth: "Growth",
   agency: "Agency",
   agency_pro: "Agency Pro",
+  founder_tier_1: "Founder Tier 1",
+  founder_tier_2: "Founder Tier 2",
+  founder_tier_3: "Founder Tier 3",
 };
 
 export default function Register() {
@@ -73,7 +76,8 @@ export default function Register() {
     >
       {plan && (
         <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-brand/30 bg-brand/10 px-3 py-1 text-xs font-semibold text-brand-700">
-          <span className="ins-logo-dot" /> {PLAN_LABELS[plan]} plan selected
+          {/* eslint-disable-next-line @next/next/no-img-element -- static brand asset */}
+          <img src="/logos/insightistic-icon.svg" alt="" aria-hidden="true" className="h-4 w-4" /> {PLAN_LABELS[plan]} plan selected
         </div>
       )}
 

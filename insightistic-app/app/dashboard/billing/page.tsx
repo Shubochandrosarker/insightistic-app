@@ -29,25 +29,25 @@ type Phase = "idle" | "processing";
 const POLL_TRIES = 15;
 const POLL_INTERVAL_MS = 2000;
 
-// Founder LTD (roadmap doc 24): one-time Paddle prices mapped to a permanent
+// Angel LTD (roadmap doc 24): one-time Paddle prices mapped to a permanent
 // entitlement grant — the webhook fulfills it, the checkout never creates a
 // subscription. Prices mirror the seeded Paddle catalog ($79/$149/$249).
 const FOUNDER_TIERS = [
   {
     slug: "founder_tier_1",
-    name: "Founder Tier 1",
+    name: "Angel Tier 1",
     price: 79,
     limits: "3 sites · 10k crawl pages/mo · 150 keywords · 10 AI prompts/mo · basic reports",
   },
   {
     slug: "founder_tier_2",
-    name: "Founder Tier 2",
+    name: "Angel Tier 2",
     price: 149,
     limits: "10 sites · 40k crawl pages/mo · 500 keywords · 40 AI prompts/mo · scheduled reports",
   },
   {
     slug: "founder_tier_3",
-    name: "Founder Tier 3",
+    name: "Angel Tier 3",
     price: 249,
     limits: "30 sites · 100k crawl pages/mo · 1,500 keywords · 100 AI prompts/mo · white-label reports · 5 team members",
   },
@@ -243,7 +243,7 @@ export default function BillingPage() {
       const d = await apiGet("/billing/subscription").catch(() => null);
       const grant = lifetimeGrantOf(d);
       if (grant) {
-        setMsg(`Lifetime ${grantTierLabel(grant.plan_slug!)} is active — welcome, founder.`);
+        setMsg(`Lifetime ${grantTierLabel(grant.plan_slug!)} is active — welcome, Angel member.`);
         setPhase("idle");
         setBusy(false);
         reload();
@@ -362,7 +362,7 @@ export default function BillingPage() {
         </div>
       </Card>
 
-      <Card id="founder-lifetime" className="mt-5" title="Founder lifetime deals"
+      <Card id="founder-lifetime" className="mt-5" title="Angel lifetime membership"
         subtitle="One-time purchase — the tier's features and published monthly allowances for as long as Insightistic operates.">
         {lifetimeGrant ? (
           <div>

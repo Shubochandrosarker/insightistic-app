@@ -3,6 +3,7 @@
 namespace App\Domain\Billing;
 
 use App\Domain\Billing\Exceptions\BillingConfigurationException;
+use App\Models\EntitlementGrant;
 use App\Models\Organization;
 use App\Models\Plan;
 use App\Models\PlanPrice;
@@ -44,7 +45,7 @@ final class PaddleBillingService
     {
         $plan = Plan::where('slug', $planSlug)->first();
 
-        // Hidden plans (founder LTD tiers, credit packs) are seeded
+        // Hidden plans (Angel LTD tiers, credit packs) are seeded
         // is_active=false so they never appear as subscribable plans — their
         // purchasability is the ACTIVE PADDLE PRICE below, not the plan flag.
         // Recurring kinds still require an active plan.

@@ -1,7 +1,11 @@
 <?php
 
+use App\Http\Controllers\Api\Connector\SyncV2Controller;
 use App\Models\DataSourceConnection;
+use App\Models\ProviderAccount;
 use App\Models\Site;
+use App\Services\Integrations\ProviderAccountManager;
+use Illuminate\Support\Str;
 
 /**
  * Connection-method clarity (spec §12) — the advisor's launch blocker:
@@ -10,15 +14,14 @@ use App\Models\Site;
  * Google connection: not connected [Connect directly]" — never a flat
  * "Not connected" while data is flowing.
  */
-
 function pushPluginGscDaily(Site $site, array $days): void
 {
     $payload = ['days' => $days];
     $body = json_encode($payload);
     $ts = (string) now()->timestamp;
-    $nonce = \Illuminate\Support\Str::random(16);
+    $nonce = Str::random(16);
     $path = '/api/connector/v1/sync/seo/daily';
-    $sig = hash_hmac('sha256', "POST\n{$path}\n{$ts}\n{$nonce}\n" . hash('sha256', $body), $site->connector_secret);
+    $sig = hash_hmac('sha256', "POST\n{$path}\n{$ts}\n{$nonce}\n".hash('sha256', $body), $site->connector_secret);
 
     test()->postJson('/api/connector/v1/sync/seo/daily', $payload, [
         'X-INS-Key-Id' => $site->connector_key_id,
@@ -61,13 +64,13 @@ it('plugin push does not masquerade as oauth when a direct credential exists', f
     $site->issueConnectorToken();
 
     // direct OAuth credential attached (org account path)
-    $account = \App\Models\ProviderAccount::withoutGlobalScope('organization')->create([
+    $account = ProviderAccount::withoutGlobalScope('organization')->create([
         'organization_id' => $org->id, 'provider' => 'google',
         'external_account_id' => 'sub-x', 'email' => 'x@gmail.com',
         'access_token' => 'at', 'refresh_token' => 'rt',
         'token_expires_at' => now()->addHour(), 'status' => 'active',
     ]);
-    app(\App\Services\Integrations\ProviderAccountManager::class)
+    app(ProviderAccountManager::class)
         ->attachGoogleSource($site, 'gsc', $account, $user->id);
 
     pushPluginGscDaily($site, [['date' => now()->subDay()->toDateString(), 'clicks' => 7]]);
@@ -88,20 +91,20 @@ it('plugin failure never degrades a healthy direct source', function () {
     ]);
     $site->issueConnectorToken();
 
-    $account = \App\Models\ProviderAccount::withoutGlobalScope('organization')->create([
+    $account = ProviderAccount::withoutGlobalScope('organization')->create([
         'organization_id' => $org->id, 'provider' => 'google',
         'external_account_id' => 'sub-y', 'email' => 'y@gmail.com',
         'access_token' => 'at', 'refresh_token' => 'rt',
         'token_expires_at' => now()->addHour(), 'status' => 'active',
     ]);
-    app(\App\Services\Integrations\ProviderAccountManager::class)
+    app(ProviderAccountManager::class)
         ->attachGoogleSource($site, 'ga4', $account, $user->id);
 
     // simulate a plugin push failure for ga4 (invalid payload → 422, then
     // record the failed state the way a handled failure would)
-    $reflection = new \ReflectionMethod(\App\Http\Controllers\Api\Connector\SyncV2Controller::class, 'recordSource');
+    $reflection = new ReflectionMethod(SyncV2Controller::class, 'recordSource');
     $reflection->setAccessible(true);
-    $controller = app(\App\Http\Controllers\Api\Connector\SyncV2Controller::class);
+    $controller = app(SyncV2Controller::class);
     $reflection->invoke($controller, $site, 'ga4', false);
 
     $row = DataSourceConnection::withoutGlobalScope('organization')
@@ -126,9 +129,9 @@ it('email plugin pushes record connection_method wordpress_plugin', function () 
     ]]];
     $body = json_encode($payload);
     $ts = (string) now()->timestamp;
-    $nonce = \Illuminate\Support\Str::random(16);
+    $nonce = Str::random(16);
     $path = '/api/connector/v1/sync/email/campaigns';
-    $sig = hash_hmac('sha256', "POST\n{$path}\n{$ts}\n{$nonce}\n" . hash('sha256', $body), $site->connector_secret);
+    $sig = hash_hmac('sha256', "POST\n{$path}\n{$ts}\n{$nonce}\n".hash('sha256', $body), $site->connector_secret);
 
     $this->postJson('/api/connector/v1/sync/email/campaigns', $payload, [
         'X-INS-Key-Id' => $site->connector_key_id,
@@ -151,7 +154,7 @@ it('org google account surfaces on the site integrations payload', function () {
         'organization_id' => $org->id, 'name' => 'O', 'domain' => 'o.example.com',
         'normalized_domain' => 'o.example.com', 'platform' => 'generic',
     ]);
-    \App\Models\ProviderAccount::withoutGlobalScope('organization')->create([
+    ProviderAccount::withoutGlobalScope('organization')->create([
         'organization_id' => $org->id, 'provider' => 'google',
         'external_account_id' => 'sub-z', 'email' => 'z@gmail.com',
         'access_token' => 'at', 'refresh_token' => 'rt',

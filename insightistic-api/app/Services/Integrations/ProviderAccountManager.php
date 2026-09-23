@@ -7,7 +7,6 @@ use App\Models\DataSourceCredential;
 use App\Models\Organization;
 use App\Models\ProviderAccount;
 use App\Models\Site;
-use App\Models\User;
 
 /**
  * Org-level provider account lifecycle (spec §5): connect ONE Google (or
@@ -17,9 +16,7 @@ use App\Models\User;
  */
 class ProviderAccountManager
 {
-    public function __construct(private readonly GoogleOAuthService $google)
-    {
-    }
+    public function __construct(private readonly GoogleOAuthService $google) {}
 
     /**
      * Complete the org-level Google OAuth flow: exchange the code, identify
@@ -30,7 +27,7 @@ class ProviderAccountManager
     public function connectGoogle(Organization $org, int $userId, string $code, string $verifier): ProviderAccount
     {
         $tokens = $this->google->exchangeCode($code, $verifier);
-        $info   = $this->google->accountInfo($tokens['access_token']);
+        $info = $this->google->accountInfo($tokens['access_token']);
 
         return static::upsertFromTokens($org, $tokens, $info, $userId);
     }
@@ -49,26 +46,26 @@ class ProviderAccountManager
      * (used by both the org-level flow and the legacy site-level consent, so
      * the latter also ends with an org account for future sites).
      *
-     * @param array{access_token:string,refresh_token:?string,expires_in:int,scope:string} $tokens
-     * @param array{email:?string,sub:?string}|null $info
+     * @param  array{access_token:string,refresh_token:?string,expires_in:int,scope:string}  $tokens
+     * @param  array{email:?string,sub:?string}|null  $info
      */
     public static function upsertFromTokens(Organization $org, array $tokens, ?array $info, int $userId): ProviderAccount
     {
         return ProviderAccount::withoutGlobalScope('organization')->updateOrCreate(
             [
-                'organization_id'     => $org->id,
-                'provider'            => 'google',
-                'external_account_id' => $info['sub'] ?? $info['email'] ?? ('unknown-' . $org->id),
+                'organization_id' => $org->id,
+                'provider' => 'google',
+                'external_account_id' => $info['sub'] ?? $info['email'] ?? ('unknown-'.$org->id),
             ],
             [
-                'email'                => $info['email'] ?? null,
-                'display_name'         => $info['email'] ?? 'Google account',
-                'access_token'         => $tokens['access_token'],
-                'refresh_token'        => $tokens['refresh_token'],
-                'token_expires_at'     => now()->addSeconds($tokens['expires_in']),
-                'scopes_json'          => array_values(array_filter(explode(' ', $tokens['scope'] ?? ''))),
+                'email' => $info['email'] ?? null,
+                'display_name' => $info['email'] ?? 'Google account',
+                'access_token' => $tokens['access_token'],
+                'refresh_token' => $tokens['refresh_token'],
+                'token_expires_at' => now()->addSeconds($tokens['expires_in']),
+                'scopes_json' => array_values(array_filter(explode(' ', $tokens['scope'] ?? ''))),
                 'connected_by_user_id' => $userId,
-                'status'               => 'active',
+                'status' => 'active',
             ],
         );
     }
@@ -91,26 +88,26 @@ class ProviderAccountManager
         $credential = DataSourceCredential::withoutGlobalScope('organization')->updateOrCreate(
             ['site_id' => $site->id, 'source' => $source],
             [
-                'organization_id'      => $site->organization_id,
-                'provider_account_id'  => $account->id,
-                'provider'             => 'google',
+                'organization_id' => $site->organization_id,
+                'provider_account_id' => $account->id,
+                'provider' => 'google',
                 // Copy of the (already fresh) access token so GscClient /
                 // Ga4Client can run immediately; refresh flows through the
                 // account once it expires.
-                'access_token'         => $account->access_token,
-                'refresh_token'        => null,
-                'token_expires_at'     => $account->token_expires_at,
-                'scopes_json'          => $account->scopes_json ?? [],
-                'external_account_id'  => $account->email,
+                'access_token' => $account->access_token,
+                'refresh_token' => null,
+                'token_expires_at' => $account->token_expires_at,
+                'scopes_json' => $account->scopes_json ?? [],
+                'external_account_id' => $account->email,
                 'connected_by_user_id' => $userId ?? $account->connected_by_user_id,
             ],
         );
 
         DataSourceConnection::recordAttempt($site->organization_id, $site->id, $source, [
-            'state'             => $credential->resource_json ? 'connected' : 'degraded',
+            'state' => $credential->resource_json ? 'connected' : 'degraded',
             'connection_method' => 'oauth',
-            'label'             => $account->email,
-            'last_error_code'   => $credential->resource_json ? null : 'no_property_selected',
+            'label' => $account->email,
+            'last_error_code' => $credential->resource_json ? null : 'no_property_selected',
             'last_error_message' => $credential->resource_json ? null : 'Choose a property to finish setting up this integration.',
         ]);
 
@@ -136,14 +133,14 @@ class ProviderAccountManager
                 $credential->site_id,
                 $credential->source,
                 [
-                    'state'              => 'not_configured',
-                    'connection_method'  => null,
-                    'label'              => null,
-                    'last_error_code'    => null,
+                    'state' => 'not_configured',
+                    'connection_method' => null,
+                    'label' => null,
+                    'last_error_code' => null,
                     'last_error_message' => null,
                     'last_successful_at' => null,
-                    'latest_data_at'     => null,
-                    'freshness'          => 'unknown',
+                    'latest_data_at' => null,
+                    'freshness' => 'unknown',
                 ],
             );
             $credential->delete();
@@ -159,20 +156,20 @@ class ProviderAccountManager
 
         if (! $account) {
             return [
-                'connected'    => false,
-                'configured'   => $this->google->isConfigured(),
-                'connect_url'  => null,
-                'account'      => null,
-                'sites_using'  => 0,
+                'connected' => false,
+                'configured' => $this->google->isConfigured(),
+                'connect_url' => null,
+                'account' => null,
+                'sites_using' => 0,
             ];
         }
 
         return [
-            'connected'    => true,
-            'configured'   => true,
-            'connect_url'  => null,
-            'account'      => $account->publicSummary(),
-            'sites_using'  => DataSourceCredential::withoutGlobalScope('organization')
+            'connected' => true,
+            'configured' => true,
+            'connect_url' => null,
+            'account' => $account->publicSummary(),
+            'sites_using' => DataSourceCredential::withoutGlobalScope('organization')
                 ->where('provider_account_id', $account->id)
                 ->distinct('site_id')
                 ->count('site_id'),

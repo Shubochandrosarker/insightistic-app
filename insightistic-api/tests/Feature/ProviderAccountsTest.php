@@ -1,10 +1,10 @@
 <?php
 
+use App\Models\DataSourceConnection;
 use App\Models\DataSourceCredential;
 use App\Models\ProviderAccount;
 use App\Models\Site;
 use App\Services\Integrations\GoogleOAuthService;
-use App\Services\Integrations\IntegrationFailure;
 use App\Services\Integrations\ProviderAccountManager;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
@@ -17,16 +17,16 @@ use Illuminate\Support\Facades\Http;
 function makeOrgGoogleAccount($org, string $email = 'owner@gmail.com', array $attrs = []): ProviderAccount
 {
     return ProviderAccount::withoutGlobalScope('organization')->create(array_merge([
-        'organization_id'     => $org->id,
-        'provider'            => 'google',
-        'external_account_id' => 'sub-' . md5($email),
-        'email'               => $email,
-        'display_name'        => $email,
-        'access_token'        => 'at-org',
-        'refresh_token'       => 'rt-org',
-        'token_expires_at'    => now()->addHour(),
-        'scopes_json'         => ['https://www.googleapis.com/auth/webmasters.readonly'],
-        'status'              => 'active',
+        'organization_id' => $org->id,
+        'provider' => 'google',
+        'external_account_id' => 'sub-'.md5($email),
+        'email' => $email,
+        'display_name' => $email,
+        'access_token' => 'at-org',
+        'refresh_token' => 'rt-org',
+        'token_expires_at' => now()->addHour(),
+        'scopes_json' => ['https://www.googleapis.com/auth/webmasters.readonly'],
+        'status' => 'active',
     ], $attrs));
 }
 
@@ -83,7 +83,7 @@ it('attaches gsc to a site from the org grant without a new consent', function (
         ->and($credential->access_token)->toBe('at-org');
 
     // connection row reflects the oauth method
-    $connection = \App\Models\DataSourceConnection::withoutGlobalScope('organization')
+    $connection = DataSourceConnection::withoutGlobalScope('organization')
         ->where('site_id', $site->id)->where('source', 'gsc')->first();
     expect($connection->connection_method)->toBe('oauth')
         ->and($connection->state)->toBe('degraded');
@@ -106,28 +106,28 @@ it('refreshes a linked credential through the shared account, not its own token'
         'organization_id' => $org->id, 'name' => 'A', 'domain' => 'a.example.com', 'platform' => 'generic',
     ]);
     $account = makeOrgGoogleAccount($org, 'r@gmail.com', [
-        'access_token'     => 'stale',
+        'access_token' => 'stale',
         'token_expires_at' => now()->subMinute(),
     ]);
 
     DataSourceCredential::withoutGlobalScope('organization')->create([
-        'organization_id'     => $org->id,
+        'organization_id' => $org->id,
         'provider_account_id' => $account->id,
-        'site_id'             => $site->id,
-        'source'              => 'gsc',
-        'provider'            => 'google',
-        'access_token'        => 'stale',
-        'refresh_token'       => null,
-        'token_expires_at'    => now()->subMinute(),
-        'resource_json'       => ['id' => 'https://a.example.com', 'name' => 'https://a.example.com'],
+        'site_id' => $site->id,
+        'source' => 'gsc',
+        'provider' => 'google',
+        'access_token' => 'stale',
+        'refresh_token' => null,
+        'token_expires_at' => now()->subMinute(),
+        'resource_json' => ['id' => 'https://a.example.com', 'name' => 'https://a.example.com'],
     ]);
 
     config()->set('insightistic.integrations.google.client_id', 'cid');
     config()->set('insightistic.integrations.google.client_secret', 'csecret');
 
     Http::fake(['*/token' => Http::response([
-        'access_token'  => 'fresh-account-token',
-        'expires_in'    => 3600,
+        'access_token' => 'fresh-account-token',
+        'expires_in' => 3600,
     ])]);
 
     $credential = DataSourceCredential::withoutGlobalScope('organization')
@@ -155,7 +155,7 @@ it('disconnecting the org google account revokes, detaches and resets connection
     expect(ProviderAccount::withoutGlobalScope('organization')->count())->toBe(0)
         ->and(DataSourceCredential::withoutGlobalScope('organization')->count())->toBe(0);
 
-    $connection = \App\Models\DataSourceConnection::withoutGlobalScope('organization')
+    $connection = DataSourceConnection::withoutGlobalScope('organization')
         ->where('site_id', $site->id)->where('source', 'gsc')->first();
     expect($connection->state)->toBe('not_configured');
 
@@ -173,27 +173,27 @@ it('org callback exchange creates exactly one account per google identity', func
     parse_str(parse_url($url, PHP_URL_QUERY), $query);
     $state = $query['state'];
     // peek at the verifier without consuming the state (the callback pulls it)
-    $payload = Cache::get('integration_oauth_state:' . hash('sha256', $state));
+    $payload = Cache::get('integration_oauth_state:'.hash('sha256', $state));
 
     Http::fake([
-        '*/token'      => Http::response([
-            'access_token'  => 'at-1',
+        '*/token' => Http::response([
+            'access_token' => 'at-1',
             'refresh_token' => 'rt-1',
-            'expires_in'    => 3600,
-            'scope'         => 'webmasters.readonly analytics.readonly',
+            'expires_in' => 3600,
+            'scope' => 'webmasters.readonly analytics.readonly',
         ]),
-        '*userinfo*'   => Http::response(['email' => 'ag@gmail.com', 'sub' => 'sub-999']),
+        '*userinfo*' => Http::response(['email' => 'ag@gmail.com', 'sub' => 'sub-999']),
     ]);
 
-    $this->get('/api/integrations/google/callback?state=' . $state . '&code=xyz')
+    $this->get('/api/integrations/google/callback?state='.$state.'&code=xyz')
         ->assertRedirect();
 
     expect(ProviderAccount::withoutGlobalScope('organization')->count())->toBe(1)
         ->and(ProviderAccount::withoutGlobalScope('organization')->first()->external_account_id)->toBe('sub-999');
 
     // second consent for the same identity → still one account
-    Cache::put('integration_oauth_state:' . hash('sha256', $state), $payload, 600);
-    $this->get('/api/integrations/google/callback?state=' . $state . '&code=xyz2')
+    Cache::put('integration_oauth_state:'.hash('sha256', $state), $payload, 600);
+    $this->get('/api/integrations/google/callback?state='.$state.'&code=xyz2')
         ->assertRedirect();
 
     expect(ProviderAccount::withoutGlobalScope('organization')->count())->toBe(1);
@@ -213,16 +213,16 @@ it('site-level consent now also seeds the org account and links the credential',
     $state = $query['state'];
 
     Http::fake([
-        '*/token'    => Http::response([
-            'access_token'  => 'at-site',
+        '*/token' => Http::response([
+            'access_token' => 'at-site',
             'refresh_token' => 'rt-site',
-            'expires_in'    => 3600,
-            'scope'         => 'webmasters.readonly',
+            'expires_in' => 3600,
+            'scope' => 'webmasters.readonly',
         ]),
         '*userinfo*' => Http::response(['email' => 'site@gmail.com', 'sub' => 'sub-site']),
     ]);
 
-    $this->get('/api/integrations/google/callback?state=' . $state . '&code=xyz')
+    $this->get('/api/integrations/google/callback?state='.$state.'&code=xyz')
         ->assertRedirect();
 
     $account = ProviderAccount::withoutGlobalScope('organization')->first();

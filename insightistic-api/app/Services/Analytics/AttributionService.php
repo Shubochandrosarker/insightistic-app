@@ -58,7 +58,7 @@ class AttributionService
     public function applyToOrganization(Organization $org, ?array $firstTouch, ?array $lastTouch): void
     {
         $first = $this->sanitize($firstTouch);
-        $last  = $this->sanitize($lastTouch) ?? $first;
+        $last = $this->sanitize($lastTouch) ?? $first;
 
         if ($first && ! $org->first_touch_json) {
             $org->first_touch_json = $first;
@@ -91,10 +91,10 @@ class AttributionService
 
         return ProductEvent::withoutGlobalScope('organization')->create([
             'organization_id' => $org?->id,
-            'user_id'         => $user?->id,
-            'event'           => $event,
-            'props_json'      => $cleanProps === [] ? null : $cleanProps,
-            'occurred_at'     => $occurredAt ?? now(),
+            'user_id' => $user?->id,
+            'event' => $event,
+            'props_json' => $cleanProps === [] ? null : $cleanProps,
+            'occurred_at' => $occurredAt ?? now(),
         ]);
     }
 }

@@ -92,8 +92,8 @@ export default function IndexNowPage() {
     return (
       <EmptyState
         icon={<Zap size={20} />}
-        title="No site connected yet"
-        hint="Connect a WordPress site with the Insightistic plugin to submit URLs to search engines."
+        title="No website yet"
+        hint="Add a website to submit URLs to search engines via IndexNow."
       />
     );
 

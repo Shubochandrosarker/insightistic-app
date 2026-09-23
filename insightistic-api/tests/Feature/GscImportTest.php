@@ -4,6 +4,7 @@ use App\Jobs\BackfillGscHistory;
 use App\Jobs\CrawlSiteJob;
 use App\Jobs\SyncDataSource;
 use App\Models\DataSourceConnection;
+use App\Models\DataSourceCredential;
 use App\Models\ProviderAccount;
 use App\Models\Site;
 use App\Models\UptimeMonitor;
@@ -31,15 +32,15 @@ function makeOrgWithGoogle($email): array
 {
     [$user, $org] = makeOrgUser($email);
     ProviderAccount::withoutGlobalScope('organization')->create([
-        'organization_id'     => $org->id,
-        'provider'            => 'google',
+        'organization_id' => $org->id,
+        'provider' => 'google',
         'external_account_id' => 'sub-import',
-        'email'               => 'owner@gmail.com',
-        'access_token'        => 'at-ok',
-        'refresh_token'       => 'rt-ok',
-        'token_expires_at'    => now()->addHour(),
-        'scopes_json'         => ['webmasters.readonly'],
-        'status'              => 'active',
+        'email' => 'owner@gmail.com',
+        'access_token' => 'at-ok',
+        'refresh_token' => 'rt-ok',
+        'token_expires_at' => now()->addHour(),
+        'scopes_json' => ['webmasters.readonly'],
+        'status' => 'active',
     ]);
 
     return [$user, $org];
@@ -83,7 +84,7 @@ it('imports selected properties: creates sites, attaches gsc, queues the full pi
         ->and($site->canonical_url)->toBe('https://example.com')
         ->and($site->status)->toBe('active');
 
-    $credential = \App\Models\DataSourceCredential::withoutGlobalScope('organization')
+    $credential = DataSourceCredential::withoutGlobalScope('organization')
         ->where('site_id', $site->id)->where('source', 'gsc')->first();
     expect($credential->resource_json['id'])->toBe('sc-domain:example.com');
 
@@ -115,7 +116,7 @@ it('attaches GSC to an existing matched site instead of duplicating it', functio
     expect(Site::withoutGlobalScope('organization')->where('organization_id', $org->id)->count())->toBe(1)
         ->and($response ?? null)->toBeNull();
 
-    $credential = \App\Models\DataSourceCredential::withoutGlobalScope('organization')
+    $credential = DataSourceCredential::withoutGlobalScope('organization')
         ->where('site_id', $existing->id)->where('source', 'gsc')->first();
     expect($credential)->not->toBeNull();
 });
@@ -162,7 +163,7 @@ it('ga4 org-level property listing works from the shared grant', function () {
 
     Http::fake(['*accountSummaries*' => Http::response([
         'accountSummaries' => [[
-            'displayName'       => 'Main Account',
+            'displayName' => 'Main Account',
             'propertySummaries' => [
                 ['property' => 'properties/123', 'displayName' => 'My Site'],
             ],

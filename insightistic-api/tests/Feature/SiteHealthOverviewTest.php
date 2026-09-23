@@ -19,12 +19,12 @@ function makeAuditedSite($org, array $issues = []): Site
     ]);
     $run = CrawlRun::create(['site_id' => $site->id, 'status' => 'completed', 'max_pages' => 10]);
     foreach ($issues as $i => [$category, $severity]) {
-        $code = 'test_' . $severity . '_' . $i;
+        $code = 'test_'.$severity.'_'.$i;
         CrawlIssue::create([
             'site_id' => $site->id, 'run_id' => $run->id,
             'category' => $category, 'severity' => $severity,
-            'issue_code' => $code, 'target_url' => 'https://h.example.com/x' . $i,
-            'fingerprint' => md5($code . '|https://h.example.com/x' . $i),
+            'issue_code' => $code, 'target_url' => 'https://h.example.com/x'.$i,
+            'fingerprint' => md5($code.'|https://h.example.com/x'.$i),
             'status' => 'open', 'first_seen_at' => now(), 'last_seen_at' => now(),
         ]);
     }
@@ -63,13 +63,16 @@ it('penalizes expiring SSL and low availability on top of crawl issues', functio
     $monitor = UptimeMonitor::where('site_id', $site->id)->first();
     $mk = fn (string $status) => UptimeCheck::create([
         'monitor_id' => $monitor->id,
-        'site_id'    => $site->id,
-        'status'     => $status,
+        'site_id' => $site->id,
+        'status' => $status,
         'checked_at' => now(),
     ]);
     // force availability to 75% (6 up / 2 down)
-    $mk('down'); $mk('down');
-    for ($i = 0; $i < 6; $i++) { $mk('up'); }
+    $mk('down');
+    $mk('down');
+    for ($i = 0; $i < 6; $i++) {
+        $mk('up');
+    }
 
     $health = $this->actingAs($user)->getJson("/api/sites/{$site->id}/health")->assertOk()->json('health');
 

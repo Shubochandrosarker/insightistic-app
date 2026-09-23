@@ -1,6 +1,7 @@
 <?php
 
 use App\Domain\Billing\CreditLedger;
+use App\Jobs\RunAiVisibilityJob;
 use App\Models\AiVisibilityPrompt;
 use App\Models\AiVisibilityRun;
 use App\Models\CreditLedgerEntry;
@@ -10,14 +11,14 @@ use App\Services\AiVisibility\PromptRunner;
 function makeRun($site, $prompt): AiVisibilityRun
 {
     return AiVisibilityRun::create([
-        'site_id'         => $site->id,
-        'prompt_id'       => $prompt->id,
-        'provider'        => 'openai',
-        'model'           => 'gpt-test',
-        'status'          => AiVisibilityRun::STATUS_SUCCESS,
+        'site_id' => $site->id,
+        'prompt_id' => $prompt->id,
+        'provider' => 'openai',
+        'model' => 'gpt-test',
+        'status' => AiVisibilityRun::STATUS_SUCCESS,
         'brand_mentioned' => false,
-        'checked_at'      => now()->subDay(),
-        'created_at'      => now()->subDay(),
+        'checked_at' => now()->subDay(),
+        'created_at' => now()->subDay(),
     ]);
 }
 
@@ -56,7 +57,7 @@ it('runs AI visibility over quota by consuming one credit per run', function () 
     });
     app()->instance(PromptRunner::class, $runner);
 
-    (new \App\Jobs\RunAiVisibilityJob($site->id))->handle($runner);
+    (new RunAiVisibilityJob($site->id))->handle($runner);
 
     expect(CreditLedgerEntry::where('reason', 'ai_prompt_run_over_quota')->count())->toBe(1)
         ->and(app(CreditLedger::class)->balance($org))->toBe(4);
@@ -78,7 +79,7 @@ it('stops over-quota AI runs when credits run out', function () {
     $runner->shouldReceive('run')->never();
     app()->instance(PromptRunner::class, $runner);
 
-    (new \App\Jobs\RunAiVisibilityJob($site->id))->handle($runner);
+    (new RunAiVisibilityJob($site->id))->handle($runner);
 
     expect(AiVisibilityRun::where('site_id', $site->id)->count())->toBe(1); // only the pre-existing run
 });

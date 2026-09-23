@@ -98,8 +98,8 @@ export default function CloudflarePage() {
     return (
       <EmptyState
         icon={<Globe size={20} />}
-        title="No site connected yet"
-        hint="Connect a WordPress site with the Insightistic plugin to see its Cloudflare edge intelligence here."
+        title="No website yet"
+        hint="Add a website and connect Cloudflare to see its edge intelligence here."
       />
     );
 

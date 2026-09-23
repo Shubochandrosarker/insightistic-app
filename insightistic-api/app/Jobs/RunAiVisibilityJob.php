@@ -88,15 +88,10 @@ class RunAiVisibilityJob implements ShouldQueue
         foreach ($this->duePrompts($site, $this->promptId) as $prompt) {
             if ($used >= $limit) {
                 // Plan quota exhausted → metered credit fallback (terms:
-                // "credits power AI visibility runs"). One credit per run,
-                // idempotent per run id; stop when the balance runs dry.
-                try {
-                    $run = $runner->run($prompt, $site);
-                    $credits->consume(
-                        $org, 1, 'ai_prompt_run_over_quota',
-                        'ai_visibility_run', (string) $run->id,
-                    );
-                } catch (\App\Domain\Billing\Exceptions\InsufficientCreditsException) {
+                // "credits power AI visibility runs"). One credit per run;
+                // stop when the balance runs dry. A failed run still costs
+                // the credit, matching the quota rule that failures count.
+                if ($credits->balance($org) < 1) {
                     Log::info('AI visibility stopped mid-batch: out of credits.', [
                         'site_id'   => $site->id,
                         'prompt_id' => $prompt->id,
@@ -104,6 +99,12 @@ class RunAiVisibilityJob implements ShouldQueue
 
                     break;
                 }
+
+                $run = $runner->run($prompt, $site);
+                $credits->consume(
+                    $org, 1, 'ai_prompt_run_over_quota',
+                    'ai_visibility_run', (string) $run->id,
+                );
 
                 continue;
             }

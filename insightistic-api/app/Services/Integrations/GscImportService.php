@@ -4,9 +4,11 @@ namespace App\Services\Integrations;
 
 use App\Jobs\BackfillGscHistory;
 use App\Jobs\SyncDataSource;
+use App\Models\DataSourceConnection;
 use App\Models\Organization;
 use App\Models\ProviderAccount;
 use App\Models\Site;
+use App\Services\Analytics\AttributionService;
 use App\Services\Sites\SiteKickoff;
 use App\Support\DomainNormalizer;
 use Illuminate\Support\Facades\Queue;
@@ -28,8 +30,7 @@ class GscImportService
         private readonly GscClient $gsc,
         private readonly ProviderAccountManager $accounts,
         private readonly SiteKickoff $kickoff,
-    ) {
-    }
+    ) {}
 
     /**
      * Every readable GSC property with the matching Insightistic project
@@ -48,15 +49,15 @@ class GscImportService
             ->get()
             ->mapWithKeys(fn (Site $s) => [$s->normalized_domain => $s]);
 
-        return array_map(function (array $property) use ($sitesByDomain, $org) {
+        return array_map(function (array $property) use ($sitesByDomain) {
             $domain = self::propertyDomain($property['id']);
 
             return [
-                'property'        => $property['id'],
-                'property_type'   => str_starts_with($property['id'], 'sc-domain:') ? 'domain' : 'url_prefix',
+                'property' => $property['id'],
+                'property_type' => str_starts_with($property['id'], 'sc-domain:') ? 'domain' : 'url_prefix',
                 'permission_level' => $property['permission_level'] ?? $property['account'] ?? '',
-                'domain'          => $domain,
-                'matched_site'    => ($match = $sitesByDomain->get(DomainNormalizer::hostKey($domain)))
+                'domain' => $domain,
+                'matched_site' => ($match = $sitesByDomain->get(DomainNormalizer::hostKey($domain)))
                     ? ['id' => $match->id, 'name' => $match->name]
                     : null,
             ];
@@ -68,7 +69,7 @@ class GscImportService
      * limit), attach GSC, queue the initial sync + historical backfill +
      * crawl/uptime/PageSpeed kickoff.
      *
-     * @param string[] $properties raw GSC siteUrl values ("sc-domain:…" or "https://…")
+     * @param  string[]  $properties  raw GSC siteUrl values ("sc-domain:…" or "https://…")
      * @return array{created:array<int,array<string,mixed>>,attached:array<int,array<string,mixed>>,skipped:array<int,array<string,mixed>>}
      */
     public function import(Organization $org, array $properties, int $userId): array
@@ -87,15 +88,16 @@ class GscImportService
             ->keyBy(fn (Site $s) => $s->normalized_domain);
 
         $limit = $org->plan?->site_limit ?? 1;
-        $used  = Site::withoutGlobalScope('organization')->where('organization_id', $org->id)->count();
+        $used = Site::withoutGlobalScope('organization')->where('organization_id', $org->id)->count();
 
         $created = $attached = $skipped = [];
-        $analytics = app(\App\Services\Analytics\AttributionService::class);
+        $analytics = app(AttributionService::class);
         $analytics?->event('gsc_import_started', $org, null, ['property_count' => count($properties)]);
 
         foreach (array_values(array_unique($properties)) as $property) {
             if (! $readable->has($property)) {
                 $skipped[] = ['property' => $property, 'reason' => 'not_readable'];
+
                 continue;
             }
 
@@ -105,19 +107,20 @@ class GscImportService
             if (! $site) {
                 if ($used >= $limit) {
                     $skipped[] = ['property' => $property, 'reason' => 'site_limit_reached'];
+
                     continue;
                 }
 
                 $site = Site::withoutGlobalScope('organization')->create([
-                    'organization_id'     => $org->id,
-                    'name'                => self::propertyDomain($property),
-                    'domain'              => self::propertyDomain($property),
-                    'normalized_domain'   => $domainKey,
-                    'canonical_url'       => self::propertyUrl($property),
-                    'platform'            => 'generic',
-                    'status'              => 'active',
-                    'connection_status'   => 'pending',
-                    'timezone'            => 'UTC',
+                    'organization_id' => $org->id,
+                    'name' => self::propertyDomain($property),
+                    'domain' => self::propertyDomain($property),
+                    'normalized_domain' => $domainKey,
+                    'canonical_url' => self::propertyUrl($property),
+                    'platform' => 'generic',
+                    'status' => 'active',
+                    'connection_status' => 'pending',
+                    'timezone' => 'UTC',
                 ]);
                 $existing->put($domainKey, $site);
                 $used++;
@@ -134,7 +137,7 @@ class GscImportService
         }
         $analytics->event('gsc_import_completed', $org, null, [
             'property_count' => count($properties),
-            'site_count'     => count($created) + count($attached),
+            'site_count' => count($created) + count($attached),
         ]);
 
         return ['created' => $created, 'attached' => $attached, 'skipped' => $skipped];
@@ -149,17 +152,17 @@ class GscImportService
 
         // The selected property is what makes the source usable — record it
         // connected, with access metadata (spec §7: access ≠ ownership).
-        \App\Models\DataSourceConnection::recordAttempt($site->organization_id, $site->id, 'gsc', [
-            'state'             => 'connected',
+        DataSourceConnection::recordAttempt($site->organization_id, $site->id, 'gsc', [
+            'state' => 'connected',
             'connection_method' => 'oauth',
-            'label'             => $account->email,
-            'metadata_json'     => [
-                'access_verified'   => true,
-                'access_method'     => 'gsc',
+            'label' => $account->email,
+            'metadata_json' => [
+                'access_verified' => true,
+                'access_method' => 'gsc',
                 'provider_permission' => 'siteOwner',
-                'gsc_property'      => $property,
+                'gsc_property' => $property,
             ],
-            'last_error_code'    => null,
+            'last_error_code' => null,
             'last_error_message' => null,
         ]);
 
@@ -173,11 +176,11 @@ class GscImportService
         }
 
         return [
-            'site_id'  => $site->id,
-            'name'     => $site->name,
-            'domain'   => $site->normalized_domain,
+            'site_id' => $site->id,
+            'name' => $site->name,
+            'domain' => $site->normalized_domain,
             'property' => $property,
-            'is_new'   => $isNew,
+            'is_new' => $isNew,
         ];
     }
 
@@ -197,14 +200,14 @@ class GscImportService
     public static function propertyUrl(string $property): string
     {
         if (str_starts_with($property, 'sc-domain:')) {
-            return 'https://' . self::propertyDomain($property);
+            return 'https://'.self::propertyDomain($property);
         }
 
         $parts = parse_url($property);
         if (empty($parts['scheme']) || empty($parts['host'])) {
-            return 'https://' . self::propertyDomain($property);
+            return 'https://'.self::propertyDomain($property);
         }
 
-        return strtolower($parts['scheme']) . '://' . strtolower($parts['host']);
+        return strtolower($parts['scheme']).'://'.strtolower($parts['host']);
     }
 }

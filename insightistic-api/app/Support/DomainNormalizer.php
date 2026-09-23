@@ -30,11 +30,11 @@ class DomainNormalizer
         }
 
         if (! preg_match('#^[a-z][a-z0-9+.\-]*://#i', $input)) {
-            $input = 'https://' . $input;
+            $input = 'https://'.$input;
         }
 
         $parts = parse_url($input);
-        $host  = strtolower(idn_to_ascii($parts['host'] ?? '', IDNA_NONTRANSITIONAL_TO_ASCII, INTL_IDNA_VARIANT_UTS46) ?: ($parts['host'] ?? ''));
+        $host = strtolower(idn_to_ascii($parts['host'] ?? '', IDNA_NONTRANSITIONAL_TO_ASCII, INTL_IDNA_VARIANT_UTS46) ?: ($parts['host'] ?? ''));
         if ($host === '' || ! str_contains($host, '.') || str_contains($host, ' ')) {
             throw new InvalidArgumentException("\"{$input}\" is not a valid website URL.");
         }
@@ -45,16 +45,16 @@ class DomainNormalizer
         }
 
         $nonDefaultPort = isset($parts['port']) && ! in_array($parts['port'], [80, 443], true)
-            ? ':' . $parts['port'] : '';
+            ? ':'.$parts['port'] : '';
         $path = trim($parts['path'] ?? '', '/');
 
         return [
-            'scheme'      => $scheme,
-            'host'        => $host,
-            'host_key'    => self::hostKey($host),
-            'port'        => $nonDefaultPort,
-            'path'        => $path,
-            'canonical'   => $scheme . '://' . $host . $nonDefaultPort . ($path !== '' ? '/' . $path : ''),
+            'scheme' => $scheme,
+            'host' => $host,
+            'host_key' => self::hostKey($host),
+            'port' => $nonDefaultPort,
+            'path' => $path,
+            'canonical' => $scheme.'://'.$host.$nonDefaultPort.($path !== '' ? '/'.$path : ''),
         ];
     }
 
@@ -69,14 +69,14 @@ class DomainNormalizer
             return '';
         }
         if (! preg_match('#^[a-z][a-z0-9+.\-]*://#i', $input)) {
-            $input = 'https://' . $input;
+            $input = 'https://'.$input;
         }
         $host = strtolower(parse_url($input, PHP_URL_HOST) ?? '');
         $host = preg_replace('/^www\./', '', $host) ?? $host;
         // A non-default port is part of the site identity (rare but real).
         $port = parse_url($input, PHP_URL_PORT);
         if ($port && ! in_array($port, [80, 443], true)) {
-            $host .= ':' . $port;
+            $host .= ':'.$port;
         }
 
         return $host;

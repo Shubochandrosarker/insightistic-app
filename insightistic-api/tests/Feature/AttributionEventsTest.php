@@ -1,6 +1,10 @@
 <?php
 
+use App\Domain\Billing\PaddleTransactionProjector;
+use App\Models\Organization;
+use App\Models\PlanPrice;
 use App\Models\ProductEvent;
+use App\Services\Analytics\AttributionService;
 use Illuminate\Support\Facades\Http;
 
 /**
@@ -10,30 +14,30 @@ use Illuminate\Support\Facades\Http;
  */
 it('stores sanitized first/last touch and fires signup_completed on register', function () {
     $response = $this->postJson('/api/auth/register', [
-        'name'              => 'Ad Buyer',
-        'email'             => 'attr-signup@example.com',
-        'password'          => 'super-secret-1',
+        'name' => 'Ad Buyer',
+        'email' => 'attr-signup@example.com',
+        'password' => 'super-secret-1',
         'password_confirmation' => 'super-secret-1',
         'organization_name' => 'Ad Org',
-        'attribution'       => [
+        'attribution' => [
             'first_touch' => [
-                'landing_url'  => 'https://insightistic.com/pricing?utm_source=google&utm_medium=cpc&utm_campaign=ltd_launch&gclid=EAIaIQ',
-                'referrer'     => 'https://www.google.com/',
-                'utm_source'   => 'google',
-                'utm_medium'   => 'cpc',
+                'landing_url' => 'https://insightistic.com/pricing?utm_source=google&utm_medium=cpc&utm_campaign=ltd_launch&gclid=EAIaIQ',
+                'referrer' => 'https://www.google.com/',
+                'utm_source' => 'google',
+                'utm_medium' => 'cpc',
                 'utm_campaign' => 'ltd_launch',
-                'gclid'        => 'EAIaIQ',
+                'gclid' => 'EAIaIQ',
             ],
             'last_touch' => [
                 'utm_source' => 'newsletter',
-                'evil_key'   => 'DROP ME',
+                'evil_key' => 'DROP ME',
             ],
         ],
     ])->assertCreated();
 
     $orgId = $response->json('organization.id');
 
-    $org = \App\Models\Organization::withoutGlobalScope('organization')->find($orgId);
+    $org = Organization::withoutGlobalScope('organization')->find($orgId);
     expect($org->first_touch_json['utm_source'])->toBe('google')
         ->and($org->first_touch_json['gclid'])->toBe('EAIaIQ')
         ->and($org->last_touch_json['utm_source'])->toBe('newsletter')
@@ -47,12 +51,12 @@ it('stores sanitized first/last touch and fires signup_completed on register', f
 });
 
 it('drops non-http landing urls and junk values from attribution', function () {
-    $analytics = app(\App\Services\Analytics\AttributionService::class);
+    $analytics = app(AttributionService::class);
     $clean = $analytics->sanitize([
         'landing_url' => 'javascript:alert(1)',
-        'referrer'    => 'ftp://x',
-        'utm_source'  => '  meta  ',
-        'gclid'       => str_repeat('x', 500),
+        'referrer' => 'ftp://x',
+        'utm_source' => '  meta  ',
+        'gclid' => str_repeat('x', 500),
     ]);
 
     expect($clean)->not->toHaveKey('landing_url')
@@ -83,16 +87,16 @@ it('records purchase_completed server-side exactly once per Paddle transaction',
     [$user, $org] = makeOrgUser('ev-paddle@example.com');
 
     $payload = [
-        'id'       => 'txn_dedupe_1',
-        'status'   => 'completed',
-        'items'    => [['price' => ['id' => 'pri_test_ltd']]],
+        'id' => 'txn_dedupe_1',
+        'status' => 'completed',
+        'items' => [['price' => ['id' => 'pri_test_ltd']]],
         'custom_data' => ['organization_id' => $org->id],
-        'details'  => ['totals' => ['subtotal' => 9900, 'tax' => 0, 'total' => 9900, 'currency_code' => 'USD']],
+        'details' => ['totals' => ['subtotal' => 9900, 'tax' => 0, 'total' => 9900, 'currency_code' => 'USD']],
         'billed_at' => now()->toIso8601String(),
     ];
 
     // seed a lifetime plan price so the txn maps to a kind
-    \App\Models\PlanPrice::create([
+    PlanPrice::create([
         'provider' => 'paddle', 'provider_price_id' => 'pri_test_ltd',
         'plan_id' => $org->plan_id, 'kind' => 'lifetime',
         'currency' => 'USD', 'amount_minor' => 9900, 'interval' => null,
@@ -101,8 +105,8 @@ it('records purchase_completed server-side exactly once per Paddle transaction',
     config()->set('billing.provider', 'paddle');
 
     // project TWICE (webhook replay / reconciler)
-    app(\App\Domain\Billing\PaddleTransactionProjector::class)->project($payload);
-    app(\App\Domain\Billing\PaddleTransactionProjector::class)->project($payload);
+    app(PaddleTransactionProjector::class)->project($payload);
+    app(PaddleTransactionProjector::class)->project($payload);
 
     expect(ProductEvent::where('event', 'purchase_completed')->count())->toBe(1)
         ->and(ProductEvent::where('event', 'ltd_purchased')->count())->toBe(1);
@@ -124,7 +128,7 @@ it('fires checkout_started when a paddle checkout config is requested', function
         $this->actingAs($user)->postJson('/api/billing/checkout-config', [
             'plan' => $org->plan->slug, 'kind' => 'lifetime',
         ]);
-    } catch (\Throwable) {
+    } catch (Throwable) {
         // config errors are fine — the event fires before provider calls
     }
 

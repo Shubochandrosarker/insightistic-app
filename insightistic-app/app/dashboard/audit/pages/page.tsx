@@ -98,8 +98,8 @@ export default function AuditPagesPage() {
     return (
       <EmptyState
         icon={<FileSearch size={20} />}
-        title="No site connected yet"
-        hint="Connect a WordPress site with the Insightistic plugin to audit its pages here."
+        title="No website yet"
+        hint="Add a website to audit its pages here — any platform works."
       />
     );
 

@@ -81,8 +81,8 @@ export default function SeoPage() {
     return (
       <EmptyState
         icon={<Search size={20} />}
-        title="No site connected yet"
-        hint="Connect a WordPress site with the Insightistic plugin to start seeing search visibility here."
+        title="No website yet"
+        hint="Add a website and connect Search Console to start seeing search visibility here."
       />
     );
 
@@ -130,8 +130,8 @@ export default function SeoPage() {
             title="No search data yet"
             hint={
               source === "combined"
-                ? "SEO analytics appear here once your site's Search Console or Bing data has synced through the Insightistic plugin."
-                : "SEO analytics appear here once your site's Search Console data has synced through the Insightistic plugin."
+                ? "Search analytics appear here once Search Console or Bing Webmaster is connected and synced for this site."
+                : "Search analytics appear here once Search Console is connected and synced for this site."
             }
           />
         )

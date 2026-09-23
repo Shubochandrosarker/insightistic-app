@@ -113,8 +113,8 @@ export default function SearchQueriesPage() {
     return (
       <EmptyState
         icon={<Search size={20} />}
-        title="No site connected yet"
-        hint="Connect a WordPress site with the Insightistic plugin to explore its Search Console queries here."
+        title="No website yet"
+        hint="Add a website and connect Search Console to explore its queries here."
       />
     );
 

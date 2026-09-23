@@ -11,7 +11,6 @@ use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Arr;
 
 /**
  * Sniff which platform a freshly-added website runs on (2026-09-23
@@ -28,9 +27,7 @@ class DetectPlatformJob implements ShouldQueue
 
     public int $timeout = 30;
 
-    public function __construct(public int $siteId)
-    {
-    }
+    public function __construct(public int $siteId) {}
 
     public function handle(): void
     {
@@ -39,7 +36,7 @@ class DetectPlatformJob implements ShouldQueue
             return; // deleted meanwhile, or already detected
         }
 
-        $url = $site->canonical_url ?: ('https://' . $site->normalized_domain);
+        $url = $site->canonical_url ?: ('https://'.$site->normalized_domain);
         if (! $url) {
             return;
         }
@@ -72,19 +69,19 @@ class DetectPlatformJob implements ShouldQueue
     private function sniff(string $html, array $headers): string
     {
         $headerText = collect($headers)->flatten()->implode(' ');
-        $hay = strtolower($html . ' ' . $headerText);
+        $hay = strtolower($html.' '.$headerText);
 
         return match (true) {
             str_contains($hay, 'wp-content') || str_contains($hay, 'wp-json')
-                || str_contains($hay, 'wp-includes')                    => str_contains($hay, 'woocommerce') ? 'woocommerce' : 'wordpress',
+                || str_contains($hay, 'wp-includes') => str_contains($hay, 'woocommerce') ? 'woocommerce' : 'wordpress',
             str_contains($hay, 'cdn.shopify.com') || str_contains($hay, 'shopify.theme')
-                || str_contains($hay, 'myshopify.com')                  => 'shopify',
-            str_contains($hay, 'data-wf-page') || str_contains($hay, 'webflow')  => 'webflow',
+                || str_contains($hay, 'myshopify.com') => 'shopify',
+            str_contains($hay, 'data-wf-page') || str_contains($hay, 'webflow') => 'webflow',
             str_contains($hay, 'x-wix-request-id') || str_contains($hay, 'wix.com') => 'wix',
-            str_contains($hay, 'squarespace')                           => 'squarespace',
+            str_contains($hay, 'squarespace') => 'squarespace',
             str_contains($hay, 'laravel_session') || str_contains($hay, 'xsrf-token') => 'laravel',
-            str_contains($hay, 'x-nextjs') || str_contains($hay, '_next/static')     => 'headless',
-            default                                                     => 'generic',
+            str_contains($hay, 'x-nextjs') || str_contains($hay, '_next/static') => 'headless',
+            default => 'generic',
         };
     }
 }

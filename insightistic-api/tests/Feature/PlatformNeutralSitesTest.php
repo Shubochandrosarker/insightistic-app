@@ -5,6 +5,7 @@ use App\Jobs\DetectPlatformJob;
 use App\Jobs\RunPageSpeedTest;
 use App\Models\Site;
 use App\Models\UptimeMonitor;
+use App\Services\LicenseService;
 use Illuminate\Support\Facades\Queue;
 
 /**
@@ -96,13 +97,13 @@ it('plugin activation links to an existing URL-created site instead of duplicati
 
     // A license activation arriving later for the same domain (www variant)
     // must reuse that site rather than create a second one.
-    $licenseKey = app(App\Services\LicenseService::class)->issue($org);
+    $licenseKey = app(LicenseService::class)->issue($org);
 
     $this->postJson('/api/plugin/activate', [
-        'license_key'       => $licenseKey,
-        'site_url'          => 'https://www.myshop.io',
-        'site_name'         => 'My Shop',
-        'wp_version'        => '6.5',
+        'license_key' => $licenseKey,
+        'site_url' => 'https://www.myshop.io',
+        'site_name' => 'My Shop',
+        'wp_version' => '6.5',
         'woocommerce_active' => false,
     ])->assertOk();
 

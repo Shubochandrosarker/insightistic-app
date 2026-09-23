@@ -32,11 +32,11 @@ class ProviderAccount extends Model
     protected function casts(): array
     {
         return [
-            'access_token'    => 'encrypted',
-            'refresh_token'   => 'encrypted',
+            'access_token' => 'encrypted',
+            'refresh_token' => 'encrypted',
             'token_expires_at' => 'datetime',
-            'scopes_json'     => 'array',
-            'metadata_json'   => 'array',
+            'scopes_json' => 'array',
+            'metadata_json' => 'array',
         ];
     }
 
@@ -60,12 +60,12 @@ class ProviderAccount extends Model
     public function publicSummary(): array
     {
         return [
-            'provider'      => $this->provider,
+            'provider' => $this->provider,
             'account_email' => $this->email,
-            'account_id'    => $this->external_account_id,
-            'scopes'        => $this->scopes_json ?? [],
-            'status'        => $this->status,
-            'connected_at'  => $this->created_at?->toIso8601String(),
+            'account_id' => $this->external_account_id,
+            'scopes' => $this->scopes_json ?? [],
+            'status' => $this->status,
+            'connected_at' => $this->created_at?->toIso8601String(),
         ];
     }
 }

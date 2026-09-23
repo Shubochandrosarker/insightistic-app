@@ -21,9 +21,7 @@ use App\Services\Crawler\CrawlHealthScore;
  */
 class SiteHealthService
 {
-    public function __construct(private readonly CrawlHealthScore $crawlScore)
-    {
-    }
+    public function __construct(private readonly CrawlHealthScore $crawlScore) {}
 
     /** @return array{state:string,score:?int,components:array<string,mixed>,sources:array<string,string>} */
     public function composite(Site $site): array
@@ -53,11 +51,11 @@ class SiteHealthService
 
         if ($baseScore === null || ! $lastAudit) {
             return [
-                'state'  => 'no_audit',
-                'score'  => null,
+                'state' => 'no_audit',
+                'score' => null,
                 'components' => [
-                    'crawl'  => ['available' => false, 'note' => 'Run a site audit to compute health.'],
-                    'ssl'    => $this->sslComponent($sslDays),
+                    'crawl' => ['available' => false, 'note' => 'Run a site audit to compute health.'],
+                    'ssl' => $this->sslComponent($sslDays),
                     'uptime' => $this->uptimeComponent($availability, $monitor),
                 ],
                 'sources' => $this->sources($site, $monitor, $lastAudit),
@@ -67,19 +65,19 @@ class SiteHealthService
         $score = max(0, min(100, (int) round($baseScore - $sslPenalty - $uptimePenalty)));
 
         return [
-            'state'  => $score >= 80 ? 'ok' : ($score >= 60 ? 'warning' : 'critical'),
-            'score'  => $score,
+            'state' => $score >= 80 ? 'ok' : ($score >= 60 ? 'warning' : 'critical'),
+            'score' => $score,
             'components' => [
-                'crawl'  => [
-                    'available'      => true,
-                    'score'          => $baseScore,
-                    'open_issues'    => array_sum(array_column($crawl['breakdown'] ?? [], 'open_issues')),
-                    'breakdown'      => $crawl['breakdown'] ?? [],
-                    'mode'           => $crawl['mode'] ?? 'uniform',
-                    'top_issues'     => $crawl['top_issues'] ?? [],
-                    'last_audit_at'  => $lastAudit->completed_at?->toIso8601String() ?? $lastAudit->created_at?->toIso8601String(),
+                'crawl' => [
+                    'available' => true,
+                    'score' => $baseScore,
+                    'open_issues' => array_sum(array_column($crawl['breakdown'] ?? [], 'open_issues')),
+                    'breakdown' => $crawl['breakdown'] ?? [],
+                    'mode' => $crawl['mode'] ?? 'uniform',
+                    'top_issues' => $crawl['top_issues'] ?? [],
+                    'last_audit_at' => $lastAudit->completed_at?->toIso8601String() ?? $lastAudit->created_at?->toIso8601String(),
                 ],
-                'ssl'    => $this->sslComponent($sslDays),
+                'ssl' => $this->sslComponent($sslDays),
                 'uptime' => $this->uptimeComponent($availability, $monitor),
             ],
             'sources' => $this->sources($site, $monitor, $lastAudit),
@@ -93,8 +91,8 @@ class SiteHealthService
         }
 
         return [
-            'available'    => true,
-            'state'        => $days < 0 ? 'expired' : ($days < 30 ? 'expiring' : 'ok'),
+            'available' => true,
+            'state' => $days < 0 ? 'expired' : ($days < 30 ? 'expiring' : 'ok'),
             'expires_in_days' => (int) max(0, $days),
         ];
     }
@@ -102,9 +100,9 @@ class SiteHealthService
     private function uptimeComponent(null|float|int $availability, ?UptimeMonitor $monitor): array
     {
         return [
-            'available'      => $monitor !== null,
-            'active'         => (bool) $monitor?->active,
-            'availability'   => $availability !== null ? round((float) $availability, 3) : null,
+            'available' => $monitor !== null,
+            'active' => (bool) $monitor?->active,
+            'availability' => $availability !== null ? round((float) $availability, 3) : null,
             'interval_minutes' => $monitor?->interval_minutes,
         ];
     }
@@ -113,9 +111,9 @@ class SiteHealthService
     private function sources(Site $site, ?UptimeMonitor $monitor, ?CrawlRun $lastAudit): array
     {
         return [
-            'health'  => $lastAudit ? 'site_audit' : 'none',
-            'ssl'     => $monitor?->ssl_checked_at ? 'uptime_monitor' : 'none',
-            'uptime'  => $monitor?->last_checked_at ? 'uptime_monitor' : 'none',
+            'health' => $lastAudit ? 'site_audit' : 'none',
+            'ssl' => $monitor?->ssl_checked_at ? 'uptime_monitor' : 'none',
+            'uptime' => $monitor?->last_checked_at ? 'uptime_monitor' : 'none',
         ];
     }
 }

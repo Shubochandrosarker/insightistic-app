@@ -35,15 +35,15 @@ class SiteKickoff
         // One default monitor per site: GET the canonical URL. The plan's
         // interval floor is applied by UptimeController on user edits; the
         // default here starts conservative.
-        $url = $site->canonical_url ?: ('https://' . $site->normalized_domain);
+        $url = $site->canonical_url ?: ('https://'.$site->normalized_domain);
         $monitor = UptimeMonitor::query()->firstOrCreate(
             ['site_id' => $site->id],
             [
-                'url'              => $url,
-                'method'           => 'GET',
-                'expected_status'  => 200,
+                'url' => $url,
+                'method' => 'GET',
+                'expected_status' => 200,
                 'interval_minutes' => 5,
-                'active'           => true,
+                'active' => true,
             ],
         );
         $started[] = 'uptime';

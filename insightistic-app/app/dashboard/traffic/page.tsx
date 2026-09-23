@@ -33,8 +33,8 @@ export default function TrafficPage() {
     return (
       <EmptyState
         icon={<Globe size={20} />}
-        title="No site connected yet"
-        hint="Connect a WordPress site with the Insightistic plugin to start seeing traffic analytics here."
+        title="No website yet"
+        hint="Add a website and connect Google Analytics to start seeing traffic analytics here."
       />
     );
 
@@ -62,7 +62,7 @@ export default function TrafficPage() {
         <EmptyState
           icon={<TrendingUp size={20} />}
           title="No traffic data yet"
-          hint="Traffic analytics appear here once your site's GA4 data has synced through the Insightistic plugin. This can take up to a day after connecting."
+          hint="Traffic analytics appear here once Google Analytics 4 is connected and synced for this site. This can take up to a day after connecting."
         />
       ) : (
         <>

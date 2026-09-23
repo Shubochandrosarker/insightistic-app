@@ -13,7 +13,8 @@ class Site extends Model
     use BelongsToOrganization; // auto tenant-scoped + auto-fills organization_id
 
     protected $fillable = [
-        'organization_id', 'name', 'domain', 'platform',
+        'organization_id', 'name', 'domain', 'normalized_domain', 'canonical_url',
+        'platform', 'detected_platform', 'platform_override', 'country', 'language', 'status',
         'connector_key_id', 'connector_secret', 'connection_status', 'last_sync_at',
         'timezone', 'currency', 'wp_version', 'wc_version', 'plugin_version',
         'cloudflare_zone_id', 'cloudflare_account_id', 'cloudflare_api_token',
@@ -89,5 +90,24 @@ class Site extends Model
     public function hasCloudflareLinked(): bool
     {
         return ! empty($this->cloudflare_zone_id) && ! empty($this->cloudflare_api_token);
+    }
+
+    /**
+     * The platform this site runs on, as far as we know: an explicit user
+     * override beats detection beats the legacy column. Platform is
+     * METADATA (copy, connector suggestions) — never a feature gate.
+     */
+    public function resolvedPlatform(): string
+    {
+        return $this->platform_override
+            ?? $this->detected_platform
+            ?? $this->platform
+            ?? 'generic';
+    }
+
+    /** True when this site is (or plausibly runs) WordPress/WooCommerce. */
+    public function isWordPressFamily(): bool
+    {
+        return in_array($this->resolvedPlatform(), ['wordpress', 'woocommerce'], true);
     }
 }

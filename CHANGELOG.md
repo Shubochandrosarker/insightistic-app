@@ -2,6 +2,89 @@
 
 All notable changes to the Insightistic platform (app + API + plugin).
 
+## [Unreleased] — Connection Architecture launch milestone (2026-09-23)
+
+Advisor review fix: a customer could see working analytics inside WordPress
+while the SaaS showed Google as *not connected*. Full audit at
+`docs/AUDIT-2026-09-23.md`.
+
+### Added — platform-neutral foundation (spec §3/§14)
+- `sites`: `normalized_domain`, `canonical_url`, `detected_platform`,
+  `platform_override`, `country`, `language`, `status` (+backfill);
+  `Site::resolvedPlatform()`; platform is metadata, never a feature gate.
+- `App\Support\DomainNormalizer` — canonical domain rules
+  (example.com ≡ www ≡ https, subdomains distinct).
+- `POST /sites` accepts a bare URL, refuses duplicates (409), creates as
+  generic, and immediately queues platform detection + initial crawl +
+  uptime monitor (+first probe) + PageSpeed (`SiteKickoff`).
+- Plugin activation links to an existing URL-created site and records
+  definitive platform detection — duplicates impossible.
+- `DetectPlatformJob` (SSRF-guarded via `App\Support\PublicHttpGuard`).
+
+### Added — org-level provider accounts (spec §5/§6)
+- `provider_accounts` table (encrypted tokens, Google sub identity);
+  ONE org Google consent with combined GSC+GA4 read-only scopes.
+- `attach` gsc/ga4 to any site from the org grant — no second consent.
+  Site-level consents now also seed the org account; backfill seeds from
+  existing grants. Disconnect revokes upstream + detaches cleanly.
+
+### Added — Search Console import (spec §7)
+- `GET /integrations/google/gsc/properties` + `POST .../gsc/import`:
+  multi-select properties (sc-domain + url-prefix), matched-project
+  detection, plan-limit aware, queues initial sync + 16-month backfill +
+  crawl/uptime/PageSpeed. `GET /integrations/google/ga4/properties`.
+
+### Added — connection-method clarity (spec §12)
+- `data_source_connections.connection_method`
+  (oauth|api_key|api_token|wordpress_plugin|…).
+- Plugin pushes to gsc/ga4 record `plugin_fed_at` metadata, never
+  masquerade as direct OAuth; plugin failures never degrade a healthy
+  direct source. Integrations API exposes `plugin_fed`,
+  `attachable_from_org`, org `google_account`.
+- Fixed the connector v2 seo/daily upsert to the real
+  (site, source, date) unique key.
+
+### Added — real Site Health (spec §19)
+- `SiteHealthService`: crawl score + documented SSL/uptime penalties,
+  per-component sources, honest `no_audit` (score null) state. Served from
+  `GET /sites/{site}/health`. Overview tile now shows it instead of the
+  WordPress connector status.
+
+### Added — attribution + funnel events (spec §32/§33)
+- `organizations.first_touch_json/last_touch_json`,
+  `users.attribution_json`, `product_events` (fixed taxonomy, strict props
+  whitelist — no PII/tokens possible).
+- Client capture (`lib/attribution.ts`) rides the register call; server
+  sanitizes (key whitelist, http/https guard, length caps).
+- Events wired: signup_completed, site_added/site_imported,
+  gsc_import_started/completed, gsc/ga4/bing/cloudflare_connected,
+  checkout_started, purchase_completed + ltd_purchased/credit_pack_purchased
+  (from VERIFIED Paddle webhook state, deduped per transaction),
+  subscription_started, crawler_completed. `POST /api/events` for the SPA.
+
+### Added — Insight Credits metering (spec §27)
+- AI-visibility runs beyond `ai_prompt_runs_monthly` consume 1 credit per
+  run and stop when the balance is dry — the published terms claim is now
+  true; never unlimited.
+
+### Changed — frontend
+- New **Add Website** page (`/dashboard/add-website`): GSC import
+  (recommended) + bare URL (plugin-free), honest not-configured states.
+- Integrations page: org Google account card, "Connected via the WordPress
+  plugin / Connect directly" dual state on gsc+ga4, attach-from-org flow.
+- Overview Site-health KPI = real composite with source label.
+- All 20 dashboard empty states rewritten platform-neutral; SEO/traffic
+  stale copy fixed; app metadata platform-neutral.
+- Terms: platform-neutral scope, Paddle Merchant-of-Record, refund/
+  cancellation section, no-guarantees clause. Privacy: Paddle
+  sub-processor, token handling, platform-neutral data inventory. Both
+  dated; template banners removed.
+
+### Tests
+- Backend 797 passed (54 new), frontend 166 passed (4 new).
+  `PaddleCheckoutConfigTest` made hermetic (was env-dependent).
+
+
 ## [Unreleased] — Advanced SaaS + AI Knowledge Base upgrade (2026-07)
 
 ### Added — Semantic Metric Registry (Insightistic VNext P0)

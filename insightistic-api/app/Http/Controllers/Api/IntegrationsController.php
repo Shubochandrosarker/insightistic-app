@@ -167,13 +167,26 @@ class IntegrationsController extends Controller
 
         $existing = DataSourceConnection::where('site_id', $site->id)->get()->keyBy('source');
 
-        $sources = collect(DataSourceConnection::SOURCES)->map(function (string $source) use ($existing, $site) {
+        // Dual-path sources (spec §12): the SAME data can arrive via the
+        // WordPress plugin AND via a direct OAuth connection — the UI must
+        // be able to show both states at once.
+        $orgGoogle = $this->providerAccounts->googleAccount($site->organization);
+
+        $sources = collect(DataSourceConnection::SOURCES)->map(function (string $source) use ($existing, $site, $orgGoogle) {
             $row = $existing->get($source);
             $direct = in_array($source, DataSourceCredential::DIRECT_SOURCES, true);
+            $dualPath = in_array($source, ['gsc', 'ga4'], true);
+
+            $pluginFedAt = $row?->metadata_json['plugin_fed_at'] ?? null;
+            $pluginActive = $row && (
+                $row->connection_method === 'wordpress_plugin'
+                || ($pluginFedAt !== null && \Illuminate\Support\Carbon::parse($pluginFedAt)->diffInHours(now()) < 48)
+            );
 
             return [
                 'source'             => $source,
                 'state'              => $row->state ?? 'not_configured',
+                'connection_method'  => $row->connection_method ?? null,
                 'label'              => $row->label ?? null,
                 'last_attempted_at'  => $row?->last_attempted_at?->toIso8601String(),
                 'last_successful_at' => $row?->last_successful_at?->toIso8601String(),
@@ -192,10 +205,27 @@ class IntegrationsController extends Controller
                 'configured'         => $direct ? $this->serverConfigured($source) : true,
                 'connected'          => $direct && $this->manager->isConnected($site, $source),
                 'detail'             => $direct ? $this->manager->publicDetail($site, $source) : null,
+
+                // Dual-path state (spec §12): "Connected via WordPress plugin"
+                // vs "Direct Google connection: Not connected" — both at once.
+                'plugin_fed'         => $dualPath ? [
+                    'active'       => (bool) $pluginActive,
+                    'last_data_at' => $pluginFedAt,
+                ] : ($source === 'wordpress' || $source === 'woocommerce' || $source === 'pagespeed' || $source === 'engagement' || $source === 'email' ? [
+                    'active'       => $pluginActive && in_array($row->state ?? '', ['connected', 'syncing'], true),
+                    'last_data_at' => $row?->latest_data_at?->toIso8601String(),
+                ] : null),
+
+                // When the org has a shared Google grant, gsc/ga4 can be
+                // attached to this site with no consent dance.
+                'attachable_from_org' => $dualPath && $orgGoogle !== null && ! $this->manager->isConnected($site, $source),
             ];
         });
 
-        return response()->json(['sources' => $sources->values()]);
+        return response()->json([
+            'sources' => $sources->values(),
+            'google_account' => $orgGoogle?->publicSummary(),
+        ]);
     }
 
     /**

@@ -68,6 +68,7 @@ class EmailSyncController extends Controller
         // providers — there is no API key to verify, so arrival is the proof.
         DataSourceConnection::recordAttempt($site->organization_id, $site->id, 'email', [
             'state'              => 'connected',
+            'connection_method'  => 'wordpress_plugin',
             'label'              => ucfirst($data['provider']),
             'last_attempted_at'  => now(),
             'last_successful_at' => now(),

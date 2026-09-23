@@ -5,9 +5,9 @@ import { render, screen } from "@testing-library/react";
  * Universal Overview (app/dashboard/page.tsx) contract tests.
  *
  * The overview is search-first: SEO/GSC and performance KPIs lead, commerce is
- * demoted and gated behind a WooCommerce signal, and roadmap features (AI
- * visibility, uptime) render explicit coming-soon placeholders — never
- * fabricated numbers. Mirrors the fetch-mocking idiom of emails-page.test.tsx:
+ * demoted and gated behind a WooCommerce signal, while AI answer visibility,
+ * performance, and uptime render from their real API payloads. Mirrors the
+ * fetch-mocking idiom of emails-page.test.tsx:
  * the API layer is stubbed per path, the dashboard context is stubbed inline.
  */
 
@@ -88,9 +88,13 @@ const COMMERCE_OK = {
   deltas: { revenue: 5.1, orders: null, average_order_value: null, refunds: null },
 };
 
+const VISIBILITY_OK = { metrics: { mention_rate: 42.5, runs_total: 8 } };
+const UPTIME_OK = { has_monitor: true, availability_pct: 99.9, incidents: [] };
+
 function mockApi(opts: {
   seo?: any; seoError?: string;
   health?: any; perf?: any;
+  visibility?: any; uptime?: any;
   alerts?: any[]; insights?: any[];
   commerce?: any; revenueSeries?: any[];
 } = {}) {
@@ -100,6 +104,8 @@ function mockApi(opts: {
       return opts.seoError ? Promise.reject({ message: opts.seoError }) : Promise.resolve(opts.seo ?? SEO_OK);
     }
     if (path.includes("/analytics/performance/latest")) return Promise.resolve(opts.perf ?? PERF_OK);
+    if (path.includes("/ai-visibility")) return Promise.resolve(opts.visibility ?? VISIBILITY_OK);
+    if (path.includes("/uptime")) return Promise.resolve(opts.uptime ?? UPTIME_OK);
     if (path.includes("/health")) return Promise.resolve(opts.health ?? HEALTH_OK);
     if (path.includes("/alerts")) return Promise.resolve({ alerts: opts.alerts ?? [] });
     if (path.includes("/insights")) return Promise.resolve({ insights: opts.insights ?? [] });
@@ -149,14 +155,16 @@ describe("Overview page (Universal Overview)", () => {
     expect(screen.queryByText(/^1[,.\s]?200$/)).not.toBeInTheDocument();
   });
 
-  it("renders AI visibility and uptime as coming-soon placeholders, never numbers", async () => {
+  it("renders AI answer visibility and uptime from real metrics", async () => {
     dash.state = { siteId: 1, period: "last_30_days", rangeQuery: "", sites: [WOO_SITE] };
     mockApi({});
     render(<OverviewPage />);
 
     await screen.findByText("Organic clicks");
-    expect(screen.getAllByText("Coming soon")).toHaveLength(2);
-    expect(screen.getByText(/AI visibility tracking is on the roadmap/i)).toBeInTheDocument();
-    expect(screen.getByText(/uptime monitoring is on the roadmap/i)).toBeInTheDocument();
+    expect(await screen.findByText("AI answer visibility")).toBeInTheDocument();
+    expect(screen.getByText("42.5%")).toBeInTheDocument();
+    expect(screen.getByText("99.9%")).toBeInTheDocument();
+    expect(screen.getByText("Performance score")).toBeInTheDocument();
+    expect(screen.queryByText("Coming soon")).not.toBeInTheDocument();
   });
 });

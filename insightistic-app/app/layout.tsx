@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 import { AuthProvider } from "@/lib/auth";
 import AttributionCapture from "@/components/AttributionCapture";
+import ConsentBanner from "@/components/marketing/ConsentBanner";
 
 export const metadata: Metadata = {
   title: "Insightistic — Search, AI Visibility & Website Intelligence",
@@ -27,6 +28,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body>
         <AuthProvider>
           <AttributionCapture />
+          <ConsentBanner />
           {children}
         </AuthProvider>
       </body>

@@ -3,9 +3,10 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\AiVisibilityPrompt;
+use App\Models\CrawlRun;
 use App\Models\DataSourceConnection;
-use App\Models\KnowledgeSource;
-use App\Models\License;
+use App\Models\RankKeyword;
 use App\Models\Site;
 use App\Support\Tenancy;
 use Illuminate\Http\Request;
@@ -33,36 +34,28 @@ class OnboardingController extends Controller
         $siteIds = Site::where('organization_id', $org->id)->pluck('id');
         $hasSite = $siteIds->isNotEmpty();
 
-        $license = License::where('organization_id', $org->id)->first();
-
-        $connectedSite = $hasSite && Site::whereIn('id', $siteIds)
-            ->where('connection_status', 'connected')
-            ->exists();
-
-        $analyticsConnected = $hasSite && DataSourceConnection::whereIn('site_id', $siteIds)
-            ->whereIn('source', ['ga4', 'gsc', 'cloudflare'])
+        $gscConnected = $hasSite && DataSourceConnection::whereIn('site_id', $siteIds)
+            ->where('source', 'gsc')
             ->where('state', 'connected')
             ->exists();
 
-        $hasSyncedData = $hasSite && DB::table('sync_logs')
-            ->whereIn('site_id', $siteIds)
-            ->where('status', 'success')
+        $hasAudit = $hasSite && CrawlRun::whereIn('site_id', $siteIds)
+            ->where('status', 'completed')
             ->exists();
 
-        $hasKnowledge = KnowledgeSource::where('organization_id', $org->id)
-            ->where('status', 'indexed')
-            ->exists();
+        $hasTrackedSignal = $hasSite && (
+            RankKeyword::whereIn('site_id', $siteIds)->where('active', true)->exists()
+            || AiVisibilityPrompt::whereIn('site_id', $siteIds)->where('active', true)->exists()
+        );
 
         $hasInsight = DB::table('ai_insights')->where('organization_id', $org->id)->exists();
 
         $steps = [
             $this->step('organization', 'Create your organization', true, null),
-            $this->step('site', 'Add your website', $hasSite, '/dashboard/settings'),
-            $this->step('license', 'Get your license key', $license !== null, '/dashboard/licenses'),
-            $this->step('plugin', 'Install and activate the plugin', $connectedSite, '/dashboard/licenses'),
-            $this->step('sync', 'Run your first sync', $hasSyncedData, '/dashboard/licenses'),
-            $this->step('integrations', 'Connect GA4, Search Console or Cloudflare', $analyticsConnected, '/dashboard/integrations'),
-            $this->step('knowledge', 'Upload knowledge for the AI', $hasKnowledge, '/dashboard/knowledge'),
+            $this->step('site', 'Add your website', $hasSite, '/dashboard/add-website'),
+            $this->step('audit', 'Run your first site audit', $hasAudit, '/dashboard/audit'),
+            $this->step('gsc', 'Connect Google Search Console', $gscConnected, '/dashboard/integrations'),
+            $this->step('track', 'Track your first keyword or AI prompt', $hasTrackedSignal, '/dashboard/visibility'),
             $this->step('insight', 'Generate your first insight', $hasInsight, '/dashboard/insights'),
         ];
 

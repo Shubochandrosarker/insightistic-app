@@ -31,12 +31,13 @@ export default function AdminSystemHealth() {
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         <Health title="API" ok={data.api?.status === "ok"} detail={data.api?.url || "—"} />
         <Health title="App" ok={data.app?.status === "ok"} detail={`${data.app?.env} · ${data.app?.url}`} />
+        <Health title="Release" ok={data.release?.sha && data.release.sha !== "unknown"} warn={!data.release?.sha || data.release.sha === "unknown"} detail={`${data.release?.sha || "unknown"}${data.release?.built_at ? ` · built ${data.release.built_at}` : ""}`} />
         <Health title="Database" ok={data.database?.status === "ok"} detail={`Driver: ${data.database?.driver}`} />
         <Health title="Queue" ok={(data.queue?.failed ?? 0) === 0} warn={(data.queue?.failed ?? 0) > 0} detail={`${data.queue?.pending ?? 0} pending · ${data.queue?.failed ?? 0} failed · ${data.queue?.connection}`} />
         <Health title="Scheduler" ok detail={data.scheduler?.detail || "configured"} />
         <Health title="Storage" ok={!!data.storage?.writable} detail={`${data.storage?.writable ? "writable" : "not writable"} · disk: ${data.storage?.reports_disk}`} />
         <Health title="Mail" ok={!!data.mail?.configured} warn={!data.mail?.configured} detail={`Mailer: ${data.mail?.mailer}`} />
-        <Health title="Stripe" ok={!!data.stripe?.configured} warn={!data.stripe?.configured} detail={`${data.stripe?.configured ? "configured" : "not configured"} · ${data.stripe?.mode} mode`} />
+        <Health title="Paddle" ok={data.paddle?.configured ?? false} warn={!(data.paddle?.configured ?? false)} detail={`${data.paddle?.configured ? "configured" : "not configured"} · ${data.paddle?.environment || "—"}`} />
         <Health title="AI provider" ok={!!data.ai?.configured} warn={!data.ai?.configured} detail={`Provider: ${data.ai?.provider}`} />
       </div>
 

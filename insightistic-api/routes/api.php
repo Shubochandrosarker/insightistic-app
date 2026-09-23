@@ -60,6 +60,7 @@ use App\Http\Controllers\Api\SearchController;
 use App\Http\Controllers\Api\SeoController;
 use App\Http\Controllers\Api\SiteController;
 use App\Http\Controllers\Api\TeamController;
+use App\Http\Controllers\Api\VersionController;
 use App\Http\Controllers\Api\TrafficController;
 use Illuminate\Support\Facades\Route;
 
@@ -76,6 +77,7 @@ use Illuminate\Support\Facades\Route;
 // source the marketing site's pricing page and any other public surface
 // should read from, instead of hardcoding plan copy. ------------------------
 Route::get('public/plans', [PublicPlanController::class, 'index'])->middleware('throttle:public');
+Route::get('version', VersionController::class)->middleware('throttle:public');
 
 // ---- Public auth (throttle:auth = brute-force protection) -----------------
 Route::prefix('auth')->group(function () {
@@ -265,7 +267,8 @@ Route::middleware(['auth:sanctum', 'tenant', 'restrict.impersonation'])->group(f
         Route::get('sites/{site}', [SiteController::class, 'show']);
         Route::get('sites/{site}/health', [SiteController::class, 'health']);
         Route::get('sites/{site}/orders', [AnalyticsController::class, 'ordersList']);
-        Route::post('sites/{site}/regenerate-api-key', [SiteController::class, 'regenerateApiKey']);
+        Route::post('sites/{site}/regenerate-api-key', [SiteController::class, 'regenerateApiKey'])
+            ->middleware('role:owner,admin');
 
         // Analytics (Week 3) — read from precomputed snapshots + live tables.
         Route::get('sites/{site}/analytics/overview', [AnalyticsController::class, 'overview']);

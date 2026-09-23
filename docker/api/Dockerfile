@@ -29,6 +29,11 @@ RUN composer dump-autoload --optimize --no-dev --no-scripts
 # dependency set was never tested against.
 FROM php:8.4-fpm-alpine
 
+ARG INSIGHTISTIC_RELEASE=unknown
+ARG INSIGHTISTIC_BUILD_TIME=
+ENV INSIGHTISTIC_RELEASE=${INSIGHTISTIC_RELEASE}
+ENV INSIGHTISTIC_BUILD_TIME=${INSIGHTISTIC_BUILD_TIME}
+
 RUN apk add --no-cache \
         nginx supervisor curl \
         libpq libpng libjpeg-turbo libwebp freetype libzip icu-libs \
@@ -78,6 +83,11 @@ COPY docker/api/supervisord.conf /etc/supervisord.conf
 WORKDIR /var/www/html
 
 COPY --from=vendor --chown=www-data:www-data /app/ /var/www/html/
+# The development checkout may contain package/service manifests generated with
+# dev-only providers such as Laravel Pail. Never carry those manifests into a
+# production image whose vendor tree was installed with --no-dev; the runtime
+# entrypoint rebuilds the environment-specific caches after env injection.
+RUN rm -f bootstrap/cache/*.php
 RUN mkdir -p storage/app/public storage/framework/cache storage/framework/sessions storage/framework/views storage/logs bootstrap/cache \
     && chown -R www-data:www-data storage bootstrap/cache
 

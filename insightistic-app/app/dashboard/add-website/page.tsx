@@ -22,18 +22,20 @@ interface GscProperty {
   property_type: "domain" | "url_prefix";
   permission_level: string;
   domain: string;
+  domain_key?: string;
   matched_site: { id: number; name: string } | null;
 }
 
 interface ImportResult {
   created: { site_id: number; name: string; domain: string; property: string; is_new: boolean }[];
   attached: { site_id: number; name: string; domain: string; property: string; is_new: boolean }[];
-  skipped: { property: string; reason: string }[];
+  skipped: { property: string; reason: string; primary_property?: string | null }[];
 }
 
 const REASONS: Record<string, string> = {
   not_readable: "This Google account can't read that property.",
   site_limit_reached: "Your plan's site limit is reached — upgrade to import more.",
+  same_site_property: "Another Search Console property for this website was selected.",
 };
 
 export default function AddWebsitePage() {
@@ -56,6 +58,14 @@ export default function AddWebsitePage() {
     () => (props ?? []).filter((p) => p.permission_level !== "siteRestrictedUser"),
     [props],
   );
+  const propertyGroups = useMemo(() => {
+    const groups = new Map<string, GscProperty[]>();
+    for (const property of selectable) {
+      const key = property.domain_key || property.domain.toLowerCase();
+      groups.set(key, [...(groups.get(key) || []), property]);
+    }
+    return [...groups.entries()];
+  }, [selectable]);
 
   async function loadGoogle() {
     setBusy(true);
@@ -86,11 +96,19 @@ export default function AddWebsitePage() {
     }
   }
 
-  function toggle(property: string) {
+  function toggle(property: GscProperty) {
     setSelected((prev) => {
       const next = new Set(prev);
-      if (next.has(property)) next.delete(property);
-      else next.add(property);
+      if (next.has(property.property)) {
+        next.delete(property.property);
+      } else {
+        const key = property.domain_key || property.domain.toLowerCase();
+        for (const candidate of selectable) {
+          const candidateKey = candidate.domain_key || candidate.domain.toLowerCase();
+          if (candidateKey === key) next.delete(candidate.property);
+        }
+        next.add(property.property);
+      }
       return next;
     });
   }
@@ -152,7 +170,7 @@ export default function AddWebsitePage() {
               <p className="text-good">
                 <CheckCircle2 size={14} className="mr-1.5 inline" />
                 {result.created.length} website{result.created.length > 1 ? "s" : ""} created from Search
-                Console — initial search sync, crawl, uptime monitoring and PageSpeed are running now.
+                Console — initial search sync, crawl, uptime monitoring and PageSpeed have been queued.
               </p>
             )}
             {result.attached.length > 0 && (
@@ -179,7 +197,7 @@ export default function AddWebsitePage() {
         {/* Option A — recommended */}
         <Card
           title="Import from Google Search Console"
-          subtitle="Recommended — brings 16 months of search data instantly."
+          subtitle="Recommended — starts importing up to 16 months of Search Console history."
         >
           <div className="space-y-4">
             {google === null && (
@@ -224,8 +242,9 @@ export default function AddWebsitePage() {
             {googleReady && props !== null && (
               <div>
                 <p className="mb-3 text-sm text-muted">
-                  Select the websites to add. Properties with a matched project will attach to it
-                  instead of creating a duplicate.
+                  Select one Search Console property per website. Domain properties are preferred;
+                  URL-prefix properties for the same host cannot create a second project. Matched
+                  projects will receive the selected property instead of a duplicate.
                 </p>
                 {selectable.length === 0 ? (
                   <p className="text-sm text-warn">
@@ -234,28 +253,35 @@ export default function AddWebsitePage() {
                 ) : (
                   <>
                     <div className="max-h-72 space-y-1.5 overflow-y-auto pr-1">
-                      {selectable.map((p) => (
-                        <label
-                          key={p.property}
-                          className="flex cursor-pointer items-center gap-3 rounded-lg border border-line bg-card2 px-3 py-2 hover:border-brand/50"
-                        >
-                          <input
-                            type="checkbox"
-                            checked={selected.has(p.property)}
-                            onChange={() => toggle(p.property)}
-                            className="h-4 w-4 accent-[var(--brand)]"
-                          />
-                          <span className="min-w-0 flex-1">
-                            <span className="block truncate text-sm text-fg">{p.domain}</span>
-                            <span className="block truncate text-xs text-muted">
-                              {p.property_type === "domain" ? "Domain property" : "URL prefix"}
-                              {p.matched_site ? ` · already in workspace (${p.matched_site.name})` : ""}
-                            </span>
-                          </span>
-                          <Badge tone={p.permission_level === "siteOwner" ? "green" : "slate"}>
-                            {p.permission_level === "siteOwner" ? "Owner" : "Full user"}
-                          </Badge>
-                        </label>
+                      {propertyGroups.map(([domain, group]) => (
+                        <div key={domain} className="space-y-1.5">
+                          <p className="px-1 pt-2 text-[11px] font-semibold uppercase tracking-wide text-muted">
+                            {domain}
+                          </p>
+                          {group.map((p) => (
+                            <label
+                              key={p.property}
+                              className="flex cursor-pointer items-center gap-3 rounded-lg border border-line bg-card2 px-3 py-2 hover:border-brand/50"
+                            >
+                              <input
+                                type="checkbox"
+                                checked={selected.has(p.property)}
+                                onChange={() => toggle(p)}
+                                className="h-4 w-4 accent-[var(--brand)]"
+                              />
+                              <span className="min-w-0 flex-1">
+                                <span className="block truncate text-sm text-fg">{p.property}</span>
+                                <span className="block truncate text-xs text-muted">
+                                  {p.property_type === "domain" ? "Domain property" : "URL prefix"}
+                                  {p.matched_site ? ` · already in workspace (${p.matched_site.name})` : ""}
+                                </span>
+                              </span>
+                              <Badge tone={p.permission_level === "siteOwner" ? "green" : "slate"}>
+                                {p.permission_level === "siteOwner" ? "Owner" : "Full user"}
+                              </Badge>
+                            </label>
+                          ))}
+                        </div>
                       ))}
                     </div>
                     <div className="mt-4">
@@ -273,7 +299,7 @@ export default function AddWebsitePage() {
         {/* Option B — URL */}
         <Card
           title="Enter a website URL"
-          subtitle="Works for any platform — audit, uptime and PageSpeed start immediately."
+          subtitle="Works for any platform — audit, uptime and PageSpeed are queued immediately."
         >
           <div className="space-y-4">
             <Field
@@ -283,7 +309,7 @@ export default function AddWebsitePage() {
               placeholder="https://example.com"
             />
             <p className="text-sm text-muted">
-              Insightistic starts a site audit, uptime monitoring, SSL tracking and a PageSpeed run
+              Insightistic queues a site audit, uptime monitoring, SSL tracking and a PageSpeed run
               immediately — no plugin, no code changes. You can connect Search Console, GA4, Bing
               and Cloudflare afterwards for search and traffic data.
             </p>

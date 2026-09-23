@@ -21,6 +21,7 @@ class Plan extends Model
         'monthly_ai_messages' => 50,
         'scheduled_reports'   => 4,
         'data_retention_days' => 365,
+        'crawl_pages_per_run' => 50,
     ];
 
     protected $fillable = [

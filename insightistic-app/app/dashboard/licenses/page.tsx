@@ -323,7 +323,7 @@ export default function LicensesPage() {
                         {a.environment !== "production" && <Badge tone="slate">{a.environment}</Badge>}
                         {a.woocommerce_active && <Badge tone="violet">WooCommerce</Badge>}
                         <Badge tone={a.connection_status === "connected" ? "green" : "amber"} dot>
-                          {a.connection_status ?? "pending"}
+                          {a.connection_status ?? "not_installed"}
                         </Badge>
                       </div>
                       <div className="mt-1 flex flex-wrap gap-x-4 gap-y-0.5 text-xs text-muted">

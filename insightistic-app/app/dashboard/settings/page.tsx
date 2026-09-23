@@ -45,7 +45,7 @@ export default function SettingsPage() {
     setBusy(true); setMsg(null);
     try {
       const r = await apiPost("/sites", newSite);
-      setToken(r.connector_token); setMsg("Site created — copy this token into the plugin (shown once).");
+      setToken(null); setMsg("Site created — audits, uptime and PageSpeed are queued. Generate a connector token only if you later install the optional plugin.");
       setNewSite({ name: "", domain: "" }); setAdding(false);
       await reloadSites();
       if (r.site?.id) setSiteId(r.site.id);
@@ -92,7 +92,7 @@ export default function SettingsPage() {
               <div>
                 <span className="mb-1.5 block text-xs font-semibold text-fg">Connector status</span>
                 <div className="flex items-center gap-3">
-                  <Badge tone={site.connection_status === "connected" ? "green" : "amber"} dot>{site.connection_status}</Badge>
+                  <Badge tone={site.connection_status === "connected" ? "green" : "amber"} dot>{site.connection_status === "not_installed" ? "Connector not installed" : site.connection_status}</Badge>
                   <span className="text-xs text-muted">{site.last_sync_at ? `last sync ${timeAgo(site.last_sync_at)}` : "never synced"}</span>
                 </div>
               </div>

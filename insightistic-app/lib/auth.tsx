@@ -2,6 +2,7 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from "react";
 import { apiGet, apiPost, setToken } from "./api";
 import { getAttributionBundle } from "./attribution";
+import { getMarketingConsent } from "./consent";
 import type { Org, User } from "./types";
 
 interface RegisterInput {
@@ -9,6 +10,7 @@ interface RegisterInput {
   email: string;
   password: string;
   organization_name: string;
+  marketing_consent?: boolean;
 }
 
 export type LoginResult =
@@ -81,6 +83,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       ...p,
       password_confirmation: p.password,
       attribution,
+      marketing_consent: p.marketing_consent ?? getMarketingConsent() === true,
     });
     setToken(res.token);
     setUser(res.user);

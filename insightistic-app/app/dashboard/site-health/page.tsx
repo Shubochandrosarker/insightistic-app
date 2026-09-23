@@ -54,7 +54,7 @@ export default function SiteHealthPage() {
         <HealthCard
           title="Connector"
           status={connected ? "Healthy" : "Watch"}
-          detail={connected ? `Connected · last sync ${timeAgo(synced)}` : `Status: ${s.connection_status || "pending"}`}
+          detail={connected ? `Connected · last sync ${timeAgo(synced)}` : `Status: ${s.connection_status === "not_installed" ? "optional connector not installed" : (s.connection_status || "unknown")}`}
         />
         <HealthCard
           title="WooCommerce sync"

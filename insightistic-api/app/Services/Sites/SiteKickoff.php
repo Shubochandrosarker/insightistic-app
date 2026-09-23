@@ -15,8 +15,9 @@ use App\Models\UptimeMonitor;
  * plugin — an initial crawl, an uptime monitor (with its first probe), a
  * PageSpeed run, and platform detection.
  *
- * Every step is best-effort and queued: a failure in one (e.g. no
- * PageSpeed key configured) must never block site creation itself.
+ * Every step is best-effort and queued: a failure in one (including a
+ * keyless PageSpeed request being rate-limited) must never block site
+ * creation itself.
  */
 class SiteKickoff
 {
@@ -28,7 +29,7 @@ class SiteKickoff
         $started[] = 'platform_detect';
         DetectPlatformJob::dispatch($site->id);
 
-        $maxPages = (int) ($site->organization?->plan?->limit('crawl_max_pages') ?: 50);
+        $maxPages = (int) ($site->organization?->plan?->limit('crawl_pages_per_run') ?: 50);
         $started[] = 'crawler';
         CrawlSiteJob::dispatch($site->id, $maxPages, 'initial');
 
@@ -49,10 +50,11 @@ class SiteKickoff
         $started[] = 'uptime';
         ProbeUptimeJob::dispatch($monitor->id);
 
-        if (config('insightistic.pagespeed.api_key')) {
-            $started[] = 'pagespeed';
-            RunPageSpeedTest::dispatch($site->id, 'mobile', $url);
-        }
+        // PageSpeed supports keyless requests at a lower quota. Queue the
+        // first run for every site; the worker records a useful error when a
+        // provider quota or configuration gate prevents completion.
+        $started[] = 'pagespeed';
+        RunPageSpeedTest::dispatch($site->id, 'mobile', $url);
 
         return $started;
     }

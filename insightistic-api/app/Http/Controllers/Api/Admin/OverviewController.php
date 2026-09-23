@@ -60,12 +60,14 @@ class OverviewController extends AdminController
         return response()->json([
             'app'      => ['status' => 'ok', 'url' => config('insightistic.app_url'), 'env' => app()->environment(), 'debug' => (bool) config('app.debug')],
             'api'      => ['status' => 'ok', 'url' => config('app.url')],
+            'release'  => ['sha' => config('insightistic.release.sha', 'unknown'), 'built_at' => config('insightistic.release.built_at')],
             'database' => ['status' => $db, 'driver' => config('database.default')],
             'queue'    => array_merge($this->queueStatus(), ['connection' => config('queue.default')]),
             'scheduler'=> ['status' => 'configured', 'detail' => 'nightly snapshots 02:00'],
             'storage'  => ['writable' => is_writable(storage_path()), 'reports_disk' => config('insightistic.reports.disk', 'public')],
             'mail'     => ['mailer' => config('mail.default'), 'configured' => ! empty(config('mail.mailers.smtp.host')) || config('mail.default') !== 'smtp'],
             'stripe'   => ['configured' => $stripeSecret !== '', 'mode' => Str::startsWith($stripeSecret, 'sk_live') ? 'live' : 'test'],
+            'paddle'   => ['configured' => ! empty(config('billing.paddle.api_key')) && ! empty(config('billing.paddle.webhook_secret')), 'environment' => config('billing.paddle.sandbox') ? 'sandbox' : 'production'],
             'ai'       => ['provider' => config('insightistic.ai.provider'), 'configured' => ! empty(config('insightistic.ai.api_key')) || config('insightistic.ai.provider') === 'rule'],
             'recent_failed_jobs' => Schema::hasTable('failed_jobs')
                 ? DB::table('failed_jobs')->latest('id')->limit(5)->get(['id', 'queue', 'exception', 'failed_at'])

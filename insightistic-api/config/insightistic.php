@@ -1,6 +1,29 @@
 <?php
 
 return [
+    'release' => [
+        'sha'      => env('INSIGHTISTIC_RELEASE', 'unknown'),
+        'built_at' => env('INSIGHTISTIC_BUILD_TIME'),
+    ],
+
+    'marketing' => [
+        'google_ads' => [
+            'enabled'              => (bool) env('GOOGLE_ADS_CONVERSIONS_ENABLED', false),
+            'endpoint'             => env('GOOGLE_ADS_CONVERSIONS_ENDPOINT', 'https://googleads.googleapis.com'),
+            'developer_token'     => env('GOOGLE_ADS_DEVELOPER_TOKEN'),
+            'access_token'        => env('GOOGLE_ADS_ACCESS_TOKEN'),
+            'customer_id'         => env('GOOGLE_ADS_CUSTOMER_ID'),
+            'conversion_action_id' => env('GOOGLE_ADS_CONVERSION_ACTION_ID'),
+            'login_customer_id'   => env('GOOGLE_ADS_LOGIN_CUSTOMER_ID'),
+        ],
+        'meta' => [
+            'enabled'      => (bool) env('META_CONVERSIONS_ENABLED', false),
+            'endpoint'     => env('META_CONVERSIONS_ENDPOINT', 'https://graph.facebook.com/v20.0'),
+            'pixel_id'     => env('META_PIXEL_ID'),
+            'access_token' => env('META_CONVERSIONS_ACCESS_TOKEN'),
+        ],
+    ],
+
     'ai' => [
         // 'openai' uses the OpenAI-compatible API; 'wpistic_gateway' calls the
         // shared WordPressistic AI Brain gateway instead; 'rule' is a $0

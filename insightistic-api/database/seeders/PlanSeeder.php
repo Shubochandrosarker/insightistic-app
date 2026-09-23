@@ -75,17 +75,17 @@ class PlanSeeder extends Seeder
         // Database configuration, not frontend hardcoding — the admin plan
         // editor can override any of these per plan.
         $limits = [
-            //  slug          kbs  srcs  mb    chunks  embeds   msgs  schedRpts retDays | crawl  kw    prompts  freqDays  checks/mo
-            'free'       => [1,   5,    25,   1000,   2000,    25,   0,    180,      500,    0,     0,       7,        0],
-            'starter'    => [1,   10,   50,   2000,   5000,    50,   4,    365,      10000,  150,   15,      7,        300],
-            'growth'     => [3,   50,   250,  10000,  25000,   300,  20,   730,      50000,  750,   75,      1,        1500],
-            'business'   => [10,  150,  1000, 50000,  100000,  1000, 100,  1095,     100000, 1500,  150,     1,        5000],
-            'agency'     => [30,  500,  5000, 200000, 400000,  3000, 300,  1095,     200000, 3000,  250,     1,        15000],
-            'agency_pro' => [100, 2000, 20000, 800000, 1500000, 10000, 1000, 1825,    1000000, 10000, 1000,    1,        50000],
+        //  slug          kbs  srcs  mb    chunks  embeds   msgs  schedRpts retDays | crawl  perRun kw    prompts  freqDays checks/mo
+            'free'       => [1,   5,    25,   1000,   2000,    25,   0,    180,      500,    50,    0,     0,       7,        0],
+            'starter'    => [1,   10,   50,   2000,   5000,    50,   4,    365,      10000,  200,   150,   15,      7,        300],
+            'growth'     => [3,   50,   250,  10000,  25000,   300,  20,   730,      50000,  500,   750,   75,      1,        1500],
+            'business'   => [10,  150,  1000, 50000,  100000,  1000, 100,  1095,     100000, 1000,  1500,  150,     1,        5000],
+            'agency'     => [30,  500,  5000, 200000, 400000,  3000, 300,  1095,     200000, 2000,  3000,  250,     1,        15000],
+            'agency_pro' => [100, 2000, 20000, 800000, 1500000, 10000, 1000, 1825,    1000000, 5000, 10000, 1000,    1,        50000],
         ];
 
         foreach ($plans as [$slug, $name, $m, $y, $sites, $users, $ai, $reports, $wl, $cd, $active, $featured]) {
-            [$kbs, $srcs, $mb, $chunks, $embeds, $msgs, $schedRpts, $retDays, $crawl, $kw, $prompts, $freqDays, $rankChecks] = $limits[$slug];
+            [$kbs, $srcs, $mb, $chunks, $embeds, $msgs, $schedRpts, $retDays, $crawl, $perRun, $kw, $prompts, $freqDays, $rankChecks] = $limits[$slug];
 
             Plan::updateOrCreate(['slug' => $slug], [
                 'name'                  => $name,
@@ -108,6 +108,7 @@ class PlanSeeder extends Seeder
                     'scheduled_reports'        => $schedRpts,
                     'data_retention_days'      => $retDays,
                     'crawl_pages_monthly'      => $crawl,
+                    'crawl_pages_per_run'      => $perRun,
                     'tracked_keywords'         => $kw,
                     'ai_prompt_runs_monthly'   => $prompts,
                     'crawl_frequency_days'     => $freqDays,

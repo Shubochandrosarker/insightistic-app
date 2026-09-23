@@ -6,7 +6,9 @@ use App\Http\Controllers\Controller;
 use App\Jobs\SyncDataSource;
 use App\Models\DataSourceConnection;
 use App\Models\DataSourceCredential;
+use App\Models\PerformanceRun;
 use App\Models\Site;
+use App\Models\UptimeMonitor;
 use App\Models\User;
 use App\Services\Integrations\GoogleOAuthService;
 use App\Services\Integrations\IntegrationFailure;
@@ -19,9 +21,9 @@ use Illuminate\Http\Request;
  * Data-source health (spec §7.4, §10.6) plus the direct connection workflow
  * for GA4, Search Console and Cloudflare (spec Phase 3.2).
  *
- * Sources the WordPress plugin feeds (wordpress, woocommerce, pagespeed,
- * engagement) stay read-only here — they are connected by installing the
- * plugin, not from this screen.
+ * Platform-native sources (crawler, uptime and PageSpeed) are read-only here;
+ * they are available without a connector. WordPress/WooCommerce remain
+ * optional plugin-fed extensions.
  *
  * SECURITY: no endpoint in this controller ever returns a token. The Google
  * consent redirect is minted server-side and the code exchange happens
@@ -175,7 +177,25 @@ class IntegrationsController extends Controller
         $sources = collect(DataSourceConnection::SOURCES)->map(function (string $source) use ($existing, $site, $orgGoogle) {
             $row = $existing->get($source);
             $direct = in_array($source, DataSourceCredential::DIRECT_SOURCES, true);
+            $builtIn = in_array($source, DataSourceConnection::BUILT_IN_SOURCES, true);
             $dualPath = in_array($source, ['gsc', 'ga4'], true);
+
+            $builtInState = $row?->state ?? 'not_configured';
+            $builtInLastDataAt = $row?->latest_data_at?->toIso8601String();
+            if ($source === 'pagespeed') {
+                $latest = PerformanceRun::where('site_id', $site->id)->latest('run_at')->first();
+                $builtInState = match ($latest?->status) {
+                    'complete' => 'connected',
+                    'queued', 'running' => 'syncing',
+                    'failed' => 'error',
+                    default => 'not_configured',
+                };
+                $builtInLastDataAt = $latest?->run_at?->toIso8601String();
+            } elseif ($source === 'uptime') {
+                $monitor = UptimeMonitor::where('site_id', $site->id)->first();
+                $builtInState = $monitor === null ? 'not_configured' : ($monitor->active ? 'connected' : 'disabled');
+                $builtInLastDataAt = $monitor?->last_checked_at?->toIso8601String();
+            }
 
             $pluginFedAt = $row?->metadata_json['plugin_fed_at'] ?? null;
             $pluginActive = $row && (
@@ -185,40 +205,41 @@ class IntegrationsController extends Controller
 
             return [
                 'source'             => $source,
-                'state'              => $row->state ?? 'not_configured',
-                'connection_method'  => $row->connection_method ?? null,
-                'label'              => $row->label ?? null,
+                'state'              => $builtIn ? $builtInState : ($row?->state ?? 'not_configured'),
+                'connection_method'  => $row?->connection_method,
+                'label'              => $row?->label,
                 'last_attempted_at'  => $row?->last_attempted_at?->toIso8601String(),
                 'last_successful_at' => $row?->last_successful_at?->toIso8601String(),
-                'latest_data_at'     => $row?->latest_data_at?->toIso8601String(),
-                'freshness'          => $row->freshness ?? 'unknown',
-                'last_error_code'    => $row->last_error_code ?? null,
-                'last_error_message' => $row->last_error_message ?? null,
+                'latest_data_at'     => $builtIn ? $builtInLastDataAt : $row?->latest_data_at?->toIso8601String(),
+                'freshness'          => $row?->freshness ?? 'unknown',
+                'last_error_code'    => $row?->last_error_code,
+                'last_error_message' => $row?->last_error_message,
 
                 // Connection workflow metadata for the Integrations page.
+                'managed_by_platform' => $builtIn,
                 'connectable'        => $direct,
-                'auth_type'          => $direct ? match ($source) {
+                'auth_type'          => $builtIn ? 'built_in' : ($direct ? match ($source) {
                     'cloudflare' => 'api_token',
                     'bing'       => 'api_key', // pasted key, no OAuth dance
                     default      => 'oauth',
-                } : 'plugin',
-                'configured'         => $direct ? $this->serverConfigured($source) : true,
-                'connected'          => $direct && $this->manager->isConnected($site, $source),
-                'detail'             => $direct ? $this->manager->publicDetail($site, $source) : null,
+                } : 'plugin'),
+                'configured'         => $builtIn || ($direct ? $this->serverConfigured($source) : true),
+                'connected'          => $builtIn ? $builtInState === 'connected' : ($direct && $this->manager->isConnected($site, $source)),
+                'detail'             => $builtIn ? null : ($direct ? $this->manager->publicDetail($site, $source) : null),
 
                 // Dual-path state (spec §12): "Connected via WordPress plugin"
                 // vs "Direct Google connection: Not connected" — both at once.
-                'plugin_fed'         => $dualPath ? [
+                'plugin_fed'         => $builtIn ? null : ($dualPath ? [
                     'active'       => (bool) $pluginActive,
                     'last_data_at' => $pluginFedAt,
                 ] : ($source === 'wordpress' || $source === 'woocommerce' || $source === 'pagespeed' || $source === 'engagement' || $source === 'email' ? [
-                    'active'       => $pluginActive && in_array($row->state ?? '', ['connected', 'syncing'], true),
+                    'active'       => $pluginActive && in_array($row?->state ?? '', ['connected', 'syncing'], true),
                     'last_data_at' => $row?->latest_data_at?->toIso8601String(),
-                ] : null),
+                ] : null)),
 
                 // When the org has a shared Google grant, gsc/ga4 can be
                 // attached to this site with no consent dance.
-                'attachable_from_org' => $dualPath && $orgGoogle !== null && ! $this->manager->isConnected($site, $source),
+                'attachable_from_org' => ! $builtIn && $dualPath && $orgGoogle !== null && ! $this->manager->isConnected($site, $source),
             ];
         });
 

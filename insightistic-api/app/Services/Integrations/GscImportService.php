@@ -57,6 +57,7 @@ class GscImportService
                 'property_type' => str_starts_with($property['id'], 'sc-domain:') ? 'domain' : 'url_prefix',
                 'permission_level' => $property['permission_level'] ?? $property['account'] ?? '',
                 'domain' => $domain,
+                'domain_key' => DomainNormalizer::hostKey($domain),
                 'matched_site' => ($match = $sitesByDomain->get(DomainNormalizer::hostKey($domain)))
                     ? ['id' => $match->id, 'name' => $match->name]
                     : null,
@@ -94,7 +95,31 @@ class GscImportService
         $analytics = app(AttributionService::class);
         $analytics?->event('gsc_import_started', $org, null, ['property_count' => count($properties)]);
 
-        foreach (array_values(array_unique($properties)) as $property) {
+        $uniqueProperties = array_values(array_unique($properties));
+
+        // A domain property and URL-prefix properties for the same host all
+        // resolve to one Insightistic site. Pick one deterministic primary
+        // property so credentials/resource rows cannot silently overwrite one
+        // another; return the others as explicit skips for the UI.
+        $readableProperties = collect($uniqueProperties)
+            ->filter(fn (string $property) => $readable->has($property))
+            ->groupBy(fn (string $property) => DomainNormalizer::hostKey(self::propertyDomain($property)));
+
+        $primaryProperties = [];
+        foreach ($readableProperties as $domainKey => $group) {
+            $primary = $group->sortBy(function (string $property) {
+                if (str_starts_with($property, 'sc-domain:')) {
+                    return 0;
+                }
+
+                $path = (string) (parse_url($property, PHP_URL_PATH) ?? '/');
+
+                return rtrim($path, '/') === '' ? 1 : 2;
+            })->first();
+            $primaryProperties[$domainKey] = $primary;
+        }
+
+        foreach ($uniqueProperties as $property) {
             if (! $readable->has($property)) {
                 $skipped[] = ['property' => $property, 'reason' => 'not_readable'];
 
@@ -102,6 +127,19 @@ class GscImportService
             }
 
             $domainKey = DomainNormalizer::hostKey(self::propertyDomain($property));
+            if (($primaryProperties[$domainKey] ?? null) !== $property) {
+                $skipped[] = [
+                    'property' => $property,
+                    'reason' => 'same_site_property',
+                    'primary_property' => $primaryProperties[$domainKey] ?? null,
+                ];
+
+                continue;
+            }
+
+            $permissionLevel = $readable->get($property)['permission_level']
+                ?? $readable->get($property)['account']
+                ?? null;
             $site = $existing->get($domainKey);
 
             if (! $site) {
@@ -119,14 +157,14 @@ class GscImportService
                     'canonical_url' => self::propertyUrl($property),
                     'platform' => 'generic',
                     'status' => 'active',
-                    'connection_status' => 'pending',
+                    'connection_status' => 'not_installed',
                     'timezone' => 'UTC',
                 ]);
                 $existing->put($domainKey, $site);
                 $used++;
-                $created[] = $this->attachAndSync($site, $account, $property, $userId, true);
+                $created[] = $this->attachAndSync($site, $account, $property, $permissionLevel, $userId, true);
             } else {
-                $attached[] = $this->attachAndSync($site, $account, $property, $userId, false);
+                $attached[] = $this->attachAndSync($site, $account, $property, $permissionLevel, $userId, false);
             }
         }
 
@@ -144,7 +182,7 @@ class GscImportService
     }
 
     /** Attach GSC (org grant, no consent) + select the property + queue sync. */
-    private function attachAndSync(Site $site, ProviderAccount $account, string $property, int $userId, bool $isNew): array
+    private function attachAndSync(Site $site, ProviderAccount $account, string $property, ?string $permissionLevel, int $userId, bool $isNew): array
     {
         $credential = $this->accounts->attachGoogleSource($site, 'gsc', $account, $userId);
         $credential->resource_json = ['id' => $property, 'name' => $property];
@@ -159,7 +197,7 @@ class GscImportService
             'metadata_json' => [
                 'access_verified' => true,
                 'access_method' => 'gsc',
-                'provider_permission' => 'siteOwner',
+                'provider_permission' => $permissionLevel,
                 'gsc_property' => $property,
             ],
             'last_error_code' => null,

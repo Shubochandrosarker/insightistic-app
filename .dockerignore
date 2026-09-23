@@ -10,6 +10,7 @@ vendor
 **/.next
 **/node_modules
 **/vendor
+**/bootstrap/cache/*.php
 
 docs
 

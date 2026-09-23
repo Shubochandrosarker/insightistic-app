@@ -1,8 +1,6 @@
 <?php
 
-use App\Models\License;
 use App\Models\Site;
-use App\Services\LicenseService;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -18,7 +16,7 @@ it('reports every step incomplete for a brand-new organization', function () {
 
     $body = $this->actingAs($user)->getJson('/api/onboarding')->assertOk()->json();
 
-    expect($body['total'])->toBe(8)
+    expect($body['total'])->toBe(6)
         // Creating the organization is the one step already done by signing up.
         ->and($body['completed'])->toBe(1)
         ->and($body['finished'])->toBeFalse()
@@ -32,13 +30,13 @@ it('derives progress from real state as steps are completed', function () {
         'organization_id' => $org->id, 'name' => 'Shop', 'domain' => 'shop.example.com',
     ]);
 
-    expect($this->actingAs($user)->getJson('/api/onboarding')->json('next'))->toBe('license');
+    expect($this->actingAs($user)->getJson('/api/onboarding')->json('next'))->toBe('audit');
 
-    app(LicenseService::class)->issue($org->fresh());
-    expect($this->actingAs($user)->getJson('/api/onboarding')->json('next'))->toBe('plugin');
-
-    $site->forceFill(['connection_status' => 'connected'])->save();
-    expect($this->actingAs($user)->getJson('/api/onboarding')->json('next'))->toBe('sync');
+    DB::table('crawl_runs')->insert([
+        'site_id' => $site->id, 'status' => 'completed', 'max_pages' => 10,
+        'created_at' => now(), 'updated_at' => now(),
+    ]);
+    expect($this->actingAs($user)->getJson('/api/onboarding')->json('next'))->toBe('gsc');
 });
 
 it('un-completes a step when the underlying state goes away', function () {
@@ -48,7 +46,7 @@ it('un-completes a step when the underlying state goes away', function () {
         'organization_id' => $org->id, 'name' => 'Shop', 'domain' => 'shop.example.com',
     ]);
 
-    expect($this->actingAs($user)->getJson('/api/onboarding')->json('next'))->toBe('license');
+    expect($this->actingAs($user)->getJson('/api/onboarding')->json('next'))->toBe('audit');
 
     // Deleting the site must walk the checklist back — a stored cursor would
     // keep claiming the step was done.

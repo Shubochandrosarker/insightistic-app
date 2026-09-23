@@ -117,6 +117,40 @@ it('records purchase_completed server-side exactly once per Paddle transaction',
         ->and($purchase->props_json['amount'])->toBe(9900);
 });
 
+it('delivers a consented Meta purchase only when a matching ad click exists', function () {
+    [$user, $org] = makeOrgUser('ev-meta@example.com');
+    $org->forceFill([
+        'marketing_consent' => true,
+        'marketing_consent_at' => now(),
+        'last_touch_json' => [
+            'fbclid' => 'fb-click-123',
+            'landing_url' => 'https://app.insightistic.com/register?fbclid=fb-click-123',
+        ],
+    ])->save();
+
+    PlanPrice::create([
+        'provider' => 'paddle', 'provider_price_id' => 'pri_test_meta',
+        'plan_id' => $org->plan_id, 'kind' => 'lifetime',
+        'currency' => 'USD', 'amount_minor' => 9900, 'interval' => null,
+    ]);
+    config()->set('insightistic.marketing.meta.enabled', true);
+    config()->set('insightistic.marketing.meta.pixel_id', 'pixel-test');
+    config()->set('insightistic.marketing.meta.access_token', 'token-test');
+    Http::fake(['*pixel-test/events' => Http::response(['events_received' => 1], 200)]);
+
+    app(PaddleTransactionProjector::class)->project([
+        'id' => 'txn_meta_1', 'status' => 'completed',
+        'items' => [['price' => ['id' => 'pri_test_meta']]],
+        'custom_data' => ['organization_id' => $org->id],
+        'details' => ['totals' => ['total' => 9900, 'currency_code' => 'USD']],
+        'billed_at' => now()->toIso8601String(),
+    ]);
+
+    Http::assertSent(fn ($request) => str_contains($request->url(), 'pixel-test/events')
+        && $request['data'][0]['event_name'] === 'Purchase'
+        && $request['data'][0]['event_id'] === 'paddle:txn_meta_1');
+});
+
 it('fires checkout_started when a paddle checkout config is requested', function () {
     [$user, $org] = makeOrgUser('ev-checkout@example.com');
     config()->set('feature-flags.paddle', true);

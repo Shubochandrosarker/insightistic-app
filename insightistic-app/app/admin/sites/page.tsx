@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/Badge";
 import { timeAgo } from "@/lib/format";
 
 const TONE: Record<string, "green" | "amber" | "red" | "slate"> = {
-  connected: "green", pending: "amber", disconnected: "red", error: "red",
+  connected: "green", not_installed: "slate", pending: "amber", disconnected: "red", error: "red",
 };
 
 export default function AdminSites() {
@@ -18,7 +18,7 @@ export default function AdminSites() {
       searchPlaceholder="Search site name or domain…"
       empty="No sites found."
       filters={[
-        { key: "connection_status", label: "Any status", options: ["connected", "pending", "disconnected"].map((v) => ({ value: v, label: v })) },
+        { key: "connection_status", label: "Any status", options: ["connected", "not_installed", "pending", "disconnected"].map((v) => ({ value: v, label: v })) },
       ]}
       columns={[
         {

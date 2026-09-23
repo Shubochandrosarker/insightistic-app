@@ -43,9 +43,12 @@ class AuthController extends Controller
             'attribution'       => ['nullable', 'array'],
             'attribution.first_touch' => ['nullable', 'array'],
             'attribution.last_touch'  => ['nullable', 'array'],
+            'marketing_consent' => ['sometimes', 'boolean'],
         ]);
         $attribution = $data['attribution'] ?? null;
+        $marketingConsent = (bool) ($data['marketing_consent'] ?? false);
         unset($data['attribution']);
+        unset($data['marketing_consent']);
 
         $rawLicenseKey = null;
 
@@ -70,6 +73,10 @@ class AuthController extends Controller
         // Reload so DB-defaulted columns (is_super_admin=false, …) are present
         // on the model — the response must never report null for them.
         $user->refresh();
+        $org->forceFill([
+            'marketing_consent' => $marketingConsent,
+            'marketing_consent_at' => $marketingConsent ? now() : null,
+        ])->save();
 
         // Attribution (spec §32): first/last touch on the org, sanitized copy
         // on the user, then the signup_completed funnel event (spec §33).

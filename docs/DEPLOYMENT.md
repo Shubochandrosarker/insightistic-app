@@ -52,7 +52,8 @@ curl -fsS https://app.insightistic.com/ -o /dev/null -w '%{http_code}\n'
 
 # 6. Smoke tests
 #    login → dashboard overview loads → licenses page → knowledge page →
-#    copilot answers (rule mode ok) → Stripe webhook test event
+#    copilot answers (rule mode ok) → Paddle webhook test event →
+#    /api/version release fingerprint
 ```
 
 ## Rollback
@@ -75,7 +76,13 @@ docker compose exec api php artisan insightistic:make-super-admin owner@example.
 ## External services checklist
 
 PostgreSQL+pgvector · Redis · S3-compatible bucket (optional; knowledge +
-reports) · Stripe (keys, webhook, price ids on plans) · Google OAuth
-(consent screen + redirect URIs) · Mail provider · AI provider key
-(optional — rule mode works without) · Embeddings key (optional — FTS-only
-without) · Sentry DSN (optional).
+reports) · Paddle (production API key, client token, webhook secret, catalog
+price IDs, `BILLING_PROVIDER=paddle`, `FEATURE_PADDLE=true`) · Google OAuth
+(consent screen + redirect URIs) · Search Console property access · Mail
+provider · AI provider key (optional — rule mode is disclosed and works
+without) · Embeddings key (optional — FTS-only without) · Sentry DSN
+(optional) · optional consent-gated Google Ads/Meta conversion credentials.
+
+The production compose file requires explicit billing settings; do not rely
+on a Stripe default. Check the returned release SHA before and after a rollout
+so a healthy container cannot be mistaken for the intended image.

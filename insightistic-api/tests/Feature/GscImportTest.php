@@ -2,6 +2,7 @@
 
 use App\Jobs\BackfillGscHistory;
 use App\Jobs\CrawlSiteJob;
+use App\Jobs\RunPageSpeedTest;
 use App\Jobs\SyncDataSource;
 use App\Models\DataSourceConnection;
 use App\Models\DataSourceCredential;
@@ -92,12 +93,41 @@ it('imports selected properties: creates sites, attaches gsc, queues the full pi
         ->where('site_id', $site->id)->where('source', 'gsc')->first();
     expect($connection->state)->toBe('connected')
         ->and($connection->connection_method)->toBe('oauth')
-        ->and($connection->metadata_json['access_verified'])->toBeTrue();
+        ->and($connection->metadata_json['access_verified'])->toBeTrue()
+        ->and($connection->metadata_json['provider_permission'])->toBe('siteOwner');
 
     Queue::assertPushed(SyncDataSource::class, fn ($job) => $job->siteId === $site->id && $job->source === 'gsc');
     Queue::assertPushed(BackfillGscHistory::class, 4); // query + page per site
     Queue::assertPushed(CrawlSiteJob::class, 2);
+    Queue::assertPushed(RunPageSpeedTest::class, 2);
     expect(UptimeMonitor::count())->toBe(2);
+});
+
+it('imports only one primary property when several GSC properties map to one host', function () {
+    Queue::fake();
+    Http::fake(['*/webmasters/v3/sites' => Http::response([
+        'siteEntry' => [
+            ['siteUrl' => 'https://same.example.com/blog/', 'permissionLevel' => 'siteFullUser'],
+            ['siteUrl' => 'https://same.example.com/', 'permissionLevel' => 'siteOwner'],
+            ['siteUrl' => 'sc-domain:same.example.com', 'permissionLevel' => 'siteFullUser'],
+        ],
+    ])]);
+    [$user, $org] = makeOrgWithGoogle('gi-collision@example.com');
+
+    $response = $this->actingAs($user)->postJson('/api/integrations/google/gsc/import', [
+        'properties' => [
+            'https://same.example.com/blog/',
+            'https://same.example.com/',
+            'sc-domain:same.example.com',
+        ],
+    ])->assertCreated();
+
+    expect($response->json('created'))->toHaveCount(1)
+        ->and(collect($response->json('skipped'))->pluck('reason')->filter(fn ($r) => $r === 'same_site_property')->count())->toBe(2);
+
+    $site = Site::withoutGlobalScope('organization')->where('normalized_domain', 'same.example.com')->first();
+    $credential = DataSourceCredential::withoutGlobalScope('organization')->where('site_id', $site->id)->where('source', 'gsc')->first();
+    expect($credential->resource_json['id'])->toBe('sc-domain:same.example.com');
 });
 
 it('attaches GSC to an existing matched site instead of duplicating it', function () {

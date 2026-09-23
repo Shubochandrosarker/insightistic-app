@@ -13,6 +13,7 @@ class Organization extends Model
     protected $fillable = [
         'name', 'slug', 'owner_user_id', 'plan_id', 'status', 'trial_ends_at',
         'archived_at', 'internal_notes', 'first_touch_json', 'last_touch_json',
+        'marketing_consent', 'marketing_consent_at',
     ];
 
     protected function casts(): array
@@ -25,6 +26,8 @@ class Organization extends Model
             'onboarding_dismissed_at' => 'datetime',
             'first_touch_json'       => 'array',
             'last_touch_json'        => 'array',
+            'marketing_consent'      => 'boolean',
+            'marketing_consent_at'   => 'datetime',
         ];
     }
 

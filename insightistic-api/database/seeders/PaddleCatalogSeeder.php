@@ -57,19 +57,19 @@ class PaddleCatalogSeeder extends Seeder
     private const HIDDEN_PLANS = [
         'founder_tier_1' => [
             'name' => 'Founder Tier 1', 'price' => 7900, 'sites' => 3, 'users' => 1,
-            'crawl' => 10000, 'kw' => 150, 'prompts' => 10, 'reports' => 4,
+            'crawl' => 10000, 'per_run' => 500, 'kw' => 150, 'prompts' => 10, 'reports' => 4,
         ],
         'founder_tier_2' => [
             'name' => 'Founder Tier 2', 'price' => 14900, 'sites' => 10, 'users' => 3,
-            'crawl' => 40000, 'kw' => 500, 'prompts' => 40, 'reports' => 20,
+            'crawl' => 40000, 'per_run' => 1000, 'kw' => 500, 'prompts' => 40, 'reports' => 20,
         ],
         'founder_tier_3' => [
             'name' => 'Founder Tier 3', 'price' => 24900, 'sites' => 30, 'users' => 5,
-            'crawl' => 100000, 'kw' => 1500, 'prompts' => 100, 'reports' => 100,
+            'crawl' => 100000, 'per_run' => 2000, 'kw' => 1500, 'prompts' => 100, 'reports' => 100,
         ],
         'insight_credits' => [
             'name' => 'Insight Credits', 'price' => 0, 'sites' => 0, 'users' => 0,
-            'crawl' => 0, 'kw' => 0, 'prompts' => 0, 'reports' => 0,
+            'crawl' => 0, 'per_run' => 50, 'kw' => 0, 'prompts' => 0, 'reports' => 0,
         ],
     ];
 
@@ -89,6 +89,7 @@ class PaddleCatalogSeeder extends Seeder
                 'features_json'     => [],
                 'limits_json'       => [
                     'crawl_pages_monthly'    => $p['crawl'],
+                    'crawl_pages_per_run'    => $p['per_run'],
                     'tracked_keywords'       => $p['kw'],
                     'ai_prompt_runs_monthly' => $p['prompts'],
                 ],

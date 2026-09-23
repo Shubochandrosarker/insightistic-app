@@ -20,6 +20,7 @@ const SOURCE_LABEL: Record<string, string> = {
   ga4: "Google Analytics 4",
   gsc: "Google Search Console",
   pagespeed: "PageSpeed Insights",
+  uptime: "Uptime monitoring",
   cloudflare: "Cloudflare",
   bing: "Bing Webmaster",
   engagement: "Engagement tracking",
@@ -62,7 +63,8 @@ type Source = {
   last_error_code: string | null;
   last_error_message: string | null;
   connectable: boolean;
-  auth_type: "oauth" | "api_token" | "api_key" | "plugin";
+  managed_by_platform?: boolean;
+  auth_type: "oauth" | "api_token" | "api_key" | "plugin" | "built_in";
   configured: boolean;
   connected: boolean;
   detail: { connected_account: string | null; resource: { id: string } | null } | null;
@@ -136,8 +138,9 @@ export default function IntegrationsPage() {
     );
 
   const sources = data?.sources || [];
+  const builtIn = sources.filter((s) => s.managed_by_platform);
   const direct = sources.filter((s) => s.connectable);
-  const viaPlugin = sources.filter((s) => !s.connectable);
+  const viaPlugin = sources.filter((s) => !s.connectable && !s.managed_by_platform);
 
   return (
     <div>
@@ -160,14 +163,22 @@ export default function IntegrationsPage() {
 
       <GoogleAccountCard account={data?.google_account ?? null} onChanged={reload} />
 
-      <h2 className="mb-3 text-sm font-semibold text-fg">Connected directly</h2>
+      <h2 className="mb-3 mt-8 text-sm font-semibold text-fg">Built into Insightistic</h2>
+      <p className="mb-3 text-xs text-muted">
+        These checks run from the platform and do not require a WordPress plugin or external account.
+      </p>
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        {builtIn.map((s) => <BuiltInSourceCard key={s.source} source={s} />)}
+      </div>
+
+      <h2 className="mb-3 mt-8 text-sm font-semibold text-fg">Connect accounts</h2>
       <div className="grid gap-4 lg:grid-cols-2">
         {direct.map((s) => (
           <DirectSourceCard key={s.source} source={s} siteId={siteId} onChanged={reload} />
         ))}
       </div>
 
-      <h2 className="mb-3 mt-8 text-sm font-semibold text-fg">Provided by the WordPress plugin</h2>
+      <h2 className="mb-3 mt-8 text-sm font-semibold text-fg">Platform connectors</h2>
       <p className="mb-3 text-xs text-muted">
         Optional connector — WordPress/WooCommerce data syncs through the plugin. A website never
         needs it for search, audits, uptime or PageSpeed.
@@ -198,6 +209,26 @@ export default function IntegrationsPage() {
         ))}
       </div>
     </div>
+  );
+}
+
+function BuiltInSourceCard({ source }: { source: Source }) {
+  return (
+    <Card>
+      <div className="flex items-center justify-between gap-3">
+        <span className="font-semibold text-fg">{SOURCE_LABEL[source.source] ?? source.source}</span>
+        <Badge tone={STATE_TONE[source.state] ?? "slate"} dot>{STATE_LABEL[source.state] ?? source.state}</Badge>
+      </div>
+      <p className="mt-1 text-xs text-muted">
+        {source.source === "uptime" ? "HTTP availability and SSL checks." : "Mobile Lighthouse performance runs."}
+      </p>
+      <p className="mt-3 text-xs text-muted">
+        Last check {source.latest_data_at ? timeAgo(source.latest_data_at) : "queued"}
+      </p>
+      {source.state === "error" && source.last_error_message && (
+        <p className="mt-3 rounded-lg border border-bad/25 bg-bad/10 px-3 py-2 text-xs text-bad">{source.last_error_message}</p>
+      )}
+    </Card>
   );
 }
 

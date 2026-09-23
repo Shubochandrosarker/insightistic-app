@@ -24,7 +24,9 @@ it('creates a generic site from a bare URL and kicks off the first audit pipelin
     expect($response->json('site.platform'))->toBe('generic')
         ->and($response->json('site.normalized_domain'))->toBe('anysite.com')
         ->and($response->json('site.status'))->toBe('active')
-        ->and($response->json('kickoff'))->toContain('crawler', 'uptime', 'platform_detect');
+        ->and($response->json('site.connection_status'))->toBe('not_installed')
+        ->and($response->json('kickoff'))->toContain('crawler', 'uptime', 'platform_detect', 'pagespeed')
+        ->and($response->json('connector_token'))->toBeNull();
 
     $site = Site::withoutGlobalScope('organization')->find($response->json('site.id'));
     expect($site->canonical_url)->toBe('https://www.anysite.com')
@@ -36,7 +38,7 @@ it('creates a generic site from a bare URL and kicks off the first audit pipelin
     expect(UptimeMonitor::where('site_id', $site->id)->where('active', true)->exists())->toBeTrue();
 });
 
-it('starts a PageSpeed run only when an API key is configured', function () {
+it('starts a PageSpeed run even when the optional API key is absent', function () {
     Queue::fake();
     config()->set('insightistic.pagespeed.api_key', null);
     [$user, $org] = makeOrgUser('pns-nops@example.com');
@@ -44,7 +46,7 @@ it('starts a PageSpeed run only when an API key is configured', function () {
     $this->actingAs($user)->postJson('/api/sites', ['domain' => 'nopagespeed.com'])
         ->assertCreated();
 
-    Queue::assertNotPushed(RunPageSpeedTest::class);
+    Queue::assertPushed(RunPageSpeedTest::class);
 
     config()->set('insightistic.pagespeed.api_key', 'k-test');
     $this->actingAs($user)->postJson('/api/sites', ['domain' => 'withpagespeed.com'])

@@ -186,7 +186,7 @@ export default function VisibilityPage() {
       <div>
         <PageHeader
           title="AI Visibility"
-          subtitle={`${site?.name || ""} · How often AI assistants mention and cite your brand.`}
+            subtitle={`${site?.name || ""} · Answer visibility from your configured AI provider and model.`}
         />
         <ErrorState message={ov.error} onRetry={ov.reload} />
       </div>
@@ -269,7 +269,7 @@ export default function VisibilityPage() {
     <div>
       <PageHeader
         title="AI Visibility"
-        subtitle={`${site?.name || ""} · How often AI assistants mention and cite your brand.`}
+        subtitle={`${site?.name || ""} · Answer visibility from your configured AI provider and model.`}
       />
 
       {msg && (
@@ -283,7 +283,7 @@ export default function VisibilityPage() {
           <EmptyState
             icon={<Sparkles size={20} />}
             title="Track your first AI visibility prompt"
-            hint="We ask AI assistants your customer's questions and check whether they mention YOUR brand — and your competitors'."
+            hint="We send your customer's questions to the configured provider and check whether they mention YOUR brand or competitors. Provider and model are stored per run; this is not a blended live measurement across ChatGPT, Gemini, Perplexity or Claude."
             action={
               <AddPromptForm siteId={siteId} onAdded={reload} onMessage={flash} defaultOpen />
             }
@@ -326,7 +326,7 @@ export default function VisibilityPage() {
               )}
             </Card>
 
-            <Card title="Providers" subtitle="Per-provider results — never blended across surfaces">
+              <Card title="Providers" subtitle="Results by configured provider/model — never presented as blended external-surface coverage">
               {providers.length === 0 ? (
                 <p className="py-6 text-center text-sm text-muted">No provider runs yet.</p>
               ) : (
@@ -344,7 +344,7 @@ export default function VisibilityPage() {
           <Card
             className="mt-4"
             title="Prompts"
-            subtitle="The questions we ask AI assistants — each run records who got mentioned and cited."
+            subtitle="Tracked questions — each run records the configured provider, model, mentions and citations."
             right={<AddPromptForm siteId={siteId} onAdded={reload} onMessage={flash} />}
           >
             <ResponsiveTable
@@ -417,7 +417,7 @@ function AddPromptForm({
       </Button>
       {open && (
         <div className="mt-3 rounded-2xl border border-line bg-card p-4">
-          <span className="mb-1.5 block text-xs font-semibold text-fg">Prompt — the question AI assistants will be asked</span>
+          <span className="mb-1.5 block text-xs font-semibold text-fg">Prompt — the question sent to your configured AI provider</span>
           <textarea
             aria-label="Prompt to track"
             value={prompt}

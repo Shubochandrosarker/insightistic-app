@@ -77,14 +77,13 @@ class SiteController extends Controller
             'country'           => strtoupper($data['country'] ?? '') ?: null,
             'language'          => $data['language'] ?? null,
             'status'            => 'active',
-            'connection_status' => 'pending',
+            'connection_status' => 'not_installed',
         ]);
 
         // Immediately useful, plugin-free: crawl + uptime + PageSpeed + platform
-        // detection all start now. The connector token below is only needed if
-        // the user LATER installs the WordPress plugin.
+        // detection all start now. A connector token is issued only on demand
+        // if the user later installs the optional WordPress plugin.
         $kickoff = app(SiteKickoff::class)->start($site);
-        $token = $site->issueConnectorToken();
 
         try {
             app(\App\Services\Analytics\AttributionService::class)
@@ -99,8 +98,7 @@ class SiteController extends Controller
         return response()->json([
             'site'            => $site->only(['id', 'name', 'domain', 'platform', 'normalized_domain', 'canonical_url', 'status', 'connection_status']),
             'kickoff'         => $kickoff,
-            'connector_token' => $token,
-            'notice'          => 'Initial audit, uptime monitoring and PageSpeed are running. The connector token is only needed if you later install the WordPress plugin.',
+            'notice'          => 'Initial audit, uptime monitoring and PageSpeed are queued. The optional connector token can be generated later if you install the WordPress plugin.',
         ], 201);
     }
 
@@ -140,7 +138,7 @@ class SiteController extends Controller
     {
         $site = $request->attributes->get('site');
         $token = $site->issueConnectorToken();
-        $site->update(['connection_status' => 'pending']);
+        $site->update(['connection_status' => 'not_installed']);
 
         return response()->json([
             'connector_token' => $token,

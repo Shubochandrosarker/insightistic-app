@@ -15,9 +15,7 @@ import { EmptyState } from "@/components/dashboard/EmptyState";
 import { Spinner } from "@/components/ui/Spinner";
 import { ErrorState, StaleBadge, SourceFreshness } from "@/components/dashboard/states";
 import { money0, money, num, timeAgo } from "@/lib/format";
-import {
-  Sparkles, Package, AlertTriangle, Lightbulb, Activity, ShieldQuestion,
-} from "lucide-react";
+import { Sparkles, Package, AlertTriangle, Lightbulb } from "lucide-react";
 
 const PERIOD_LABEL: Record<string, string> = {
   today: "Today", yesterday: "Yesterday", last_7_days: "Last 7 days",
@@ -56,23 +54,6 @@ function Tile({
   );
 }
 
-/**
- * Roadmap features without a data source yet. These render an explicit muted
- * placeholder — never a number, never a fabricated zero.
- */
-function ComingSoonTile({ label, note, icon }: { label: string; note: string; icon: React.ReactNode }) {
-  return (
-    <div className="rounded-2xl border border-dashed border-line bg-card/50 p-4">
-      <div className="flex items-start justify-between">
-        <span className="text-xs font-medium text-muted">{label}</span>
-        <span className="text-muted/50">{icon}</span>
-      </div>
-      <div className="mt-1.5 text-sm font-semibold text-muted">Coming soon</div>
-      <p className="mt-1 text-[11px] leading-snug text-muted/80">{note}</p>
-    </div>
-  );
-}
-
 function capitalize(s?: string | null): string {
   if (!s) return "—";
   return s.charAt(0).toUpperCase() + s.slice(1);
@@ -92,6 +73,8 @@ export default function Overview() {
   const seo = useApi<any>(siteId ? periodQ(`/sites/${siteId}/analytics/seo/overview`) : null, periodDeps);
   const health = useApi<any>(siteId ? periodQ(`/sites/${siteId}/health`) : null, periodDeps);
   const perf = useApi<any>(siteId ? periodQ(`/sites/${siteId}/analytics/performance/latest?strategy=mobile`) : null, periodDeps);
+  const visibility = useApi<any>(siteId ? periodQ(`/sites/${siteId}/ai-visibility`) : null, periodDeps);
+  const uptime = useApi<any>(siteId ? periodQ(`/sites/${siteId}/uptime`) : null, periodDeps);
   const alertsApi = useApi<any>(siteId ? periodQ(`/sites/${siteId}/alerts?status=open`) : null, periodDeps);
   const ins = useApi<any>(siteId ? periodQ(`/sites/${siteId}/insights`) : null, periodDeps);
 
@@ -240,21 +223,25 @@ export default function Overview() {
           source="GSC"
           periodLabel={periodLabel}
         />
-        <ComingSoonTile
-          label="AI visibility"
-          note="Coming soon — AI visibility tracking is on the roadmap."
-          icon={<ShieldQuestion size={14} />}
+        <Tile
+          label="AI answer visibility"
+          value={visibility.loading ? "…" : visibility.error || !visibility.data?.metrics ? "—" : `${visibility.data.metrics.mention_rate}%`}
+          source="configured AI provider"
+          periodLabel={periodLabel}
+          hint={visibility.data?.metrics?.runs_total != null ? `${visibility.data.metrics.runs_total} runs` : undefined}
         />
         <Tile
-          label="CWV pass"
+          label="Performance score"
           value={perf.loading ? "…" : perf.error || !run ? "—" : run.performance_score != null ? String(run.performance_score) : "—"}
-          source="Lighthouse · lab"
+          source="Lighthouse · mobile"
           periodLabel={periodLabel}
         />
-        <ComingSoonTile
+        <Tile
           label="Uptime"
-          note="Coming soon — uptime monitoring is on the roadmap."
-          icon={<Activity size={14} />}
+          value={uptime.loading ? "…" : uptime.error || !uptime.data?.has_monitor ? "—" : uptime.data.availability_pct != null ? `${uptime.data.availability_pct}%` : "—"}
+          source="HTTP monitor"
+          periodLabel="last 30 days"
+          hint={uptime.data?.incidents?.filter((i: any) => !i.recovered_at).length ? "open incident" : undefined}
         />
       </div>
 
@@ -379,7 +366,7 @@ export default function Overview() {
               <>
                 <div className="flex items-center gap-2">
                   <h3 className="text-xs font-semibold uppercase tracking-wide text-muted">Connector</h3>
-                  <Badge tone={connected ? "green" : "amber"} dot>{connected ? "Healthy" : capitalize(hSite?.connection_status)}</Badge>
+                  <Badge tone={connected ? "green" : "amber"} dot>{connected ? "Connected" : hSite?.connection_status === "not_installed" ? "Connector not installed" : capitalize(hSite?.connection_status)}</Badge>
                 </div>
                 <p className="mt-2 text-sm text-muted">
                   Last sync {hSite?.last_sync_at ? timeAgo(hSite.last_sync_at) : "—"}

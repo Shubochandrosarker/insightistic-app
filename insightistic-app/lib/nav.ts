@@ -28,8 +28,6 @@ export const NAV_GROUPS: NavGroup[] = [
       { label: "Opportunities", href: "/dashboard/seo/opportunities" },
       { label: "Index Now", href: "/dashboard/indexnow" },
       { label: "Rank Tracker", href: "/dashboard/rank" },
-      { label: "Index Coverage", soon: true, hint: "Index coverage reporting is coming soon" },
-      { label: "Bing Webmaster", soon: true, hint: "Bing Webmaster integration is coming soon" },
     ],
   },
   {
@@ -39,10 +37,6 @@ export const NAV_GROUPS: NavGroup[] = [
       // Prompts/Mentions/Citations/Competitors live INSIDE the overview page
       // as cards, so only Overview is a real route for now.
       { label: "Overview", href: "/dashboard/visibility" },
-      { label: "Prompts", soon: true, hint: "Prompt tracking is coming soon" },
-      { label: "Mentions", soon: true, hint: "Brand mention tracking is coming soon" },
-      { label: "Citations", soon: true, hint: "Citation tracking is coming soon" },
-      { label: "Competitors", soon: true, hint: "Competitor visibility comparison is coming soon" },
     ],
   },
   {
@@ -57,7 +51,6 @@ export const NAV_GROUPS: NavGroup[] = [
       // it reports plugin/sync reachability rather than crawl results, so it
       // reads better renamed inside the audit group.
       { label: "Connector health", href: "/dashboard/site-health" },
-      { label: "Images", soon: true, hint: "Image audit is coming soon" },
       { label: "Changes", href: "/dashboard/audit/changes" },
     ],
   },
@@ -75,8 +68,6 @@ export const NAV_GROUPS: NavGroup[] = [
     icon: "BarChart3",
     items: [
       { label: "Analytics", href: "/dashboard/traffic" },
-      { label: "Landing Pages", soon: true, hint: "Landing page report is coming soon" },
-      { label: "AI Referrals", soon: true, hint: "AI referral traffic is coming soon" },
     ],
   },
   {

@@ -152,7 +152,7 @@ export default function PerformancePage() {
         <EmptyState
           icon={<Gauge size={20} />}
           title="No performance data yet"
-          hint="Performance history appears here once the Insightistic plugin has run a PageSpeed test for this site."
+          hint="Performance history appears here once the first PageSpeed run completes."
         />
       ) : (
         <>

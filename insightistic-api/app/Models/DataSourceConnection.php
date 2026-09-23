@@ -10,7 +10,10 @@ class DataSourceConnection extends Model
 {
     use BelongsToOrganization; // tenant-scoped + auto organization_id
 
-    public const SOURCES = ['wordpress', 'woocommerce', 'ga4', 'gsc', 'pagespeed', 'cloudflare', 'engagement', 'email', 'bing'];
+    public const SOURCES = ['wordpress', 'woocommerce', 'ga4', 'gsc', 'pagespeed', 'uptime', 'cloudflare', 'engagement', 'email', 'bing'];
+
+    /** Sources delivered by Insightistic itself; no plugin or credential is required. */
+    public const BUILT_IN_SOURCES = ['pagespeed', 'uptime'];
 
     public const STATES = ['connected', 'not_configured', 'syncing', 'degraded', 'error', 'disabled'];
 

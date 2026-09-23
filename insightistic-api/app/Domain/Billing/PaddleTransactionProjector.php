@@ -8,6 +8,7 @@ use App\Models\Organization;
 use App\Models\PlanPrice;
 use App\Models\ProductEvent;
 use App\Models\Subscription;
+use App\Jobs\DeliverPurchaseConversions;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Log;
 
@@ -124,6 +125,8 @@ final class PaddleTransactionProjector
                 'currency'        => $txn->currency,
                 'amount'          => $txn->total_minor,
             ]);
+
+            DeliverPurchaseConversions::dispatch($txn->id, $org->id);
 
             match ($txn->kind) {
                 'lifetime'    => $analytics->event('ltd_purchased', $org, null, ['transaction_id' => $txn->provider_transaction_id, 'price_id' => $txn->provider_price_id]),

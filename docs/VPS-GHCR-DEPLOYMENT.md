@@ -100,6 +100,8 @@ PADDLE_CLIENT_TOKEN=
 PADDLE_WEBHOOK_SECRET=
 FEATURE_PADDLE=true
 SEED_BILLING_CATALOG=true
+INSIGHTISTIC_RELEASE=<commit-sha>
+INSIGHTISTIC_BUILD_TIME=<utc-build-time>
 ```
 
 Register the Paddle notification destination as
@@ -127,6 +129,15 @@ docker compose --env-file .env.production -f docker-compose.prod.yml up -d
 docker compose --env-file .env.production -f docker-compose.prod.yml ps
 ```
 
+Verify both health and the release fingerprint:
+
+```bash
+curl -fsS https://api.insightistic.com/up
+curl -fsS https://api.insightistic.com/api/version
+```
+
+The reported `release` must match the image tag or commit being rolled out.
+
 Check logs:
 
 ```bash
@@ -143,6 +154,12 @@ docker compose --env-file .env.production -f docker-compose.prod.yml pull
 docker compose --env-file .env.production -f docker-compose.prod.yml up -d
 docker image prune -f
 ```
+
+After a migration, verify the public app, sign-in, a platform-neutral site
+creation, the first queued crawl/uptime/PageSpeed jobs, Google OAuth/Search
+Console import, and a Paddle webhook replay. A missing Google test account or
+Paddle sandbox/live credential is an external verification gate, not a reason
+to mark the release fully tested.
 
 ## 6. Watchtower Auto-Update
 

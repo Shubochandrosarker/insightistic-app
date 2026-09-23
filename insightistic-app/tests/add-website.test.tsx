@@ -96,7 +96,7 @@ describe("Add website page", () => {
       }),
     );
     expect(await screen.findByText(/Import complete/i)).toBeTruthy();
-    expect(screen.getByText(/initial search sync, crawl, uptime monitoring and PageSpeed are running/i)).toBeTruthy();
+    expect(screen.getByText(/initial search sync, crawl, uptime monitoring and PageSpeed have been queued/i)).toBeTruthy();
   });
 
   it("creates a site from a bare URL without any plugin steps", async () => {

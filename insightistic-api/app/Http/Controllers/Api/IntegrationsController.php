@@ -33,6 +33,8 @@ class IntegrationsController extends Controller
         private readonly IntegrationManager $manager,
         private readonly GoogleOAuthService $google,
         private readonly ProviderAccountManager $providerAccounts,
+        private readonly \App\Services\Integrations\GscImportService $gscImport,
+        private readonly \App\Services\Integrations\Ga4Client $ga4,
     ) {
     }
 
@@ -73,6 +75,59 @@ class IntegrationsController extends Controller
         $this->providerAccounts->disconnectGoogle($account);
 
         return response()->json(['status' => 'disconnected']);
+    }
+
+    // ---- GSC property import (spec §7) — org-level, plugin-free ----------
+
+    /** GET /integrations/google/gsc/properties */
+    public function gscProperties(Request $request, Tenancy $tenancy)
+    {
+        try {
+            return response()->json([
+                'properties' => $this->gscImport->availableProperties($tenancy->organization()),
+            ]);
+        } catch (IntegrationFailure $e) {
+            return $this->failure($e);
+        }
+    }
+
+    /** POST /integrations/google/gsc/import  { properties: string[] } */
+    public function gscImport(Request $request, Tenancy $tenancy)
+    {
+        $data = $request->validate([
+            'properties'   => ['required', 'array', 'min:1', 'max:100'],
+            'properties.*' => ['string', 'max:500'],
+        ]);
+
+        try {
+            $result = $this->gscImport->import(
+                $tenancy->organization(),
+                $data['properties'],
+                (int) $request->user()->id,
+            );
+        } catch (IntegrationFailure $e) {
+            return $this->failure($e);
+        }
+
+        return response()->json($result, 201);
+    }
+
+    /** GET /integrations/google/ga4/properties — org-level GA4 picker. */
+    public function ga4Properties(Request $request, Tenancy $tenancy)
+    {
+        $account = $this->providerAccounts->googleAccount($tenancy->organization());
+
+        if (! $account) {
+            return response()->json(['message' => 'Connect Google for your organization first.', 'code' => 'org_google_not_connected'], 409);
+        }
+
+        try {
+            return response()->json([
+                'properties' => $this->ga4->listResourcesForAccount($account),
+            ]);
+        } catch (IntegrationFailure $e) {
+            return $this->failure($e);
+        }
     }
 
     /**
@@ -373,7 +428,7 @@ class IntegrationsController extends Controller
     {
         // 409 for "you must do something first", 502 for provider problems —
         // the frontend renders the message verbatim either way.
-        $status = in_array($e->errorCode, ['not_connected', 'no_property_selected', 'not_configured', 'reauth_required'], true)
+        $status = in_array($e->errorCode, ['not_connected', 'no_property_selected', 'not_configured', 'reauth_required', 'org_google_not_connected'], true)
             ? 409
             : 502;
 

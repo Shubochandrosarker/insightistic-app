@@ -235,9 +235,12 @@ Route::middleware(['auth:sanctum', 'tenant', 'restrict.impersonation'])->group(f
     // every site in the organization. Not under site.access — these are
     // organization-scoped, not site-scoped.
     Route::get('integrations/google/account', [IntegrationsController::class, 'googleAccountStatus']);
+    Route::get('integrations/google/ga4/properties', [IntegrationsController::class, 'ga4Properties']);
     Route::middleware('role:owner,admin')->group(function () {
         Route::post('integrations/google/account/authorize-url', [IntegrationsController::class, 'googleAccountAuthorizeUrl']);
         Route::delete('integrations/google/account', [IntegrationsController::class, 'googleAccountDisconnect']);
+        Route::get('integrations/google/gsc/properties', [IntegrationsController::class, 'gscProperties']);
+        Route::post('integrations/google/gsc/import', [IntegrationsController::class, 'gscImport']);
     });
 
     Route::middleware('site.access')->group(function () {

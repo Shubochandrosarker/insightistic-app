@@ -102,7 +102,7 @@ class SiteController extends Controller
         return response()->json(['site' => $site]);
     }
 
-    /** Connection / sync health + recent sync log for the Site Health page. */
+    /** Connection / sync health + REAL composite site health for Overview. */
     public function health(Request $request)
     {
         $site = $request->attributes->get('site');
@@ -114,9 +114,13 @@ class SiteController extends Controller
 
         return response()->json([
             'site' => $site->only([
-                'id', 'name', 'domain', 'connection_status', 'last_sync_at',
+                'id', 'name', 'domain', 'platform', 'detected_platform', 'platform_override',
+                'normalized_domain', 'status', 'connection_status', 'last_sync_at',
                 'wp_version', 'wc_version', 'plugin_version', 'timezone', 'currency',
             ]),
+            // The REAL health (spec §19): crawl + SSL + uptime composite —
+            // never the WordPress connector status.
+            'health' => app(\App\Services\Sites\SiteHealthService::class)->composite($site),
             'orders_total' => WcOrder::where('site_id', $site->id)->count(),
             'sync_logs'    => $logs,
         ]);

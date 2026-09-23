@@ -46,6 +46,19 @@ body {
 }
 
 /* ---- Brand mark ---------------------------------------------------------- */
+.ins-brand-logo {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+.ins-brand-logo img {
+  display: block;
+  max-width: 100%;
+  object-fit: contain;
+}
+
 .ins-logo-dot {
   display: inline-block;
   width: 7px;

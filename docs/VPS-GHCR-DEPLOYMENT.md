@@ -93,7 +93,19 @@ MAIL_USERNAME=
 MAIL_PASSWORD=
 STRIPE_SECRET=
 STRIPE_WEBHOOK_SECRET=
+BILLING_PROVIDER=paddle
+PADDLE_ENV=production
+PADDLE_API_KEY=
+PADDLE_CLIENT_TOKEN=
+PADDLE_WEBHOOK_SECRET=
+FEATURE_PADDLE=true
+SEED_BILLING_CATALOG=true
 ```
+
+Register the Paddle notification destination as
+`https://api.insightistic.com/api/billing/webhook/paddle`. Use separate
+sandbox values for staging; never mix sandbox price IDs or webhook secrets
+with the live environment.
 
 Generate the Laravel key after the API image exists:
 

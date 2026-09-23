@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/lib/auth";
+import { BrandLogo } from "@/components/BrandLogo";
 
 const ERRORS: Record<string, string> = {
   provider_unavailable: "That sign-in provider isn't available right now.",
@@ -41,8 +42,7 @@ export default function OAuthCallback() {
     <main className="flex min-h-screen items-center justify-center bg-bg px-6">
       <div className="w-full max-w-sm rounded-2xl border border-line bg-card p-8 text-center shadow-card">
         <div className="mx-auto mb-4 flex items-center justify-center gap-2">
-          <span className="ins-logo-dot" />
-          <span className="text-lg font-bold text-fg">Insightistic</span>
+          <BrandLogo className="rounded-md bg-white px-2" imageClassName="h-8 w-auto" />
         </div>
 
         {error ? (

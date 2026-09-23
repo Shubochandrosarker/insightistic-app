@@ -1,8 +1,11 @@
 import Link from "next/link";
+import { BrandLogo } from "@/components/BrandLogo";
 export function Nav() {
   return (
     <header className="mx-auto flex max-w-6xl items-center justify-between px-6 py-5">
-      <Link href="/" className="text-lg font-bold text-slate-900">Insightistic</Link>
+      <Link href="/" aria-label="Insightistic home">
+        <BrandLogo className="rounded-lg bg-white px-2" imageClassName="h-9 w-auto" />
+      </Link>
       <nav className="flex items-center gap-5 text-sm text-slate-600">
         <Link href="/pricing" className="hover:text-slate-900">Pricing</Link>
         <Link href="/login" className="hover:text-slate-900">Sign in</Link>

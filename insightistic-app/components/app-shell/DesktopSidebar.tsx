@@ -3,6 +3,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { LucideIcon } from "lucide-react";
 import type { ReactNode } from "react";
+import { BrandLogo } from "@/components/BrandLogo";
 
 export type NavItem = { href: string; label: string; icon: LucideIcon };
 
@@ -25,8 +26,7 @@ export function DesktopSidebar({
   return (
     <aside className="ins-scroll hidden w-60 shrink-0 flex-col overflow-y-auto border-r border-line bg-card lg:flex">
       <div className="flex items-center gap-2 px-5 py-5">
-        <span className="ins-logo-dot" />
-        <span className="text-lg font-bold tracking-tight text-fg">{brand}</span>
+        <BrandLogo className="rounded-md bg-white px-1.5" imageClassName="h-8 w-auto" aria-label={brand} />
       </div>
 
       <nav className="flex-1 px-3">

@@ -59,12 +59,20 @@ final class PaddleBillingService
             throw new BillingConfigurationException('price_not_configured', 'This plan/kind has no Paddle price configured yet.');
         }
 
+        $clientToken = config('billing.paddle.client_token');
+        if (! is_string($clientToken) || trim($clientToken) === '') {
+            throw new BillingConfigurationException(
+                'paddle_not_configured',
+                'Paddle checkout is not configured yet. Please try again later.'
+            );
+        }
+
         return [
             'provider'     => 'paddle',
             'price_id'     => $price->provider_price_id,
             'currency'     => $price->currency,
             'amount_minor' => $price->amount_minor,
-            'client_token' => config('billing.paddle.client_token'),
+            'client_token' => $clientToken,
             'environment'  => config('billing.paddle.sandbox') ? 'sandbox' : 'production',
             'customer'     => ['email' => $org->owner?->email],
             'custom_data'  => [

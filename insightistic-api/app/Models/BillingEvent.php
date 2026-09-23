@@ -15,7 +15,8 @@ class BillingEvent extends Model
 {
     protected $fillable = [
         'provider', 'provider_event_id', 'provider_notification_id',
-        'event_type', 'occurred_at', 'payload_hash',
+        'event_type', 'occurred_at', 'payload_hash', 'processing_status',
+        'processed_at', 'last_error', 'attempts',
     ];
 
     protected function casts(): array

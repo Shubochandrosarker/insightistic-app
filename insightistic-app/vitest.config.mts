@@ -14,6 +14,11 @@ export default defineConfig({
     globals: true,
     setupFiles: ["./tests/setup.ts"],
     include: ["tests/**/*.test.{ts,tsx}"],
+    // React/jsdom suites are intentionally run in parallel in CI. Ten seconds
+    // keeps legitimate userEvent flows from timing out under a busy Windows
+    // worker while still catching genuinely stuck tests promptly.
+    testTimeout: 10_000,
+    hookTimeout: 10_000,
     // The production build is verified separately; tests must not depend on it.
     restoreMocks: true,
   },

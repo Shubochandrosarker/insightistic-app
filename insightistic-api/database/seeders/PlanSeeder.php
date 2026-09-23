@@ -62,7 +62,7 @@ class PlanSeeder extends Seeder
             ['growth',     'Growth',     6900,  69000,  10,  3,   100,  20,   false, false, true,  true],
             ['business',   'Business',   7900,  79000,  10,  10,  300,  100,  false, false, false, false],
             ['agency',     'Agency',     14900, 149000, 30,  10,  1000, 100,  true,  false, true,  false],
-            ['agency_pro', 'Agency Pro', 29900, 299000, 100, 30,  3000, 300,  true,  true,  false, false],
+            ['agency_pro', 'Agency Pro', 29900, 299000, 100, 30,  3000, 300,  true,  true,  true,  false],
         ];
 
         // Knowledge base + Copilot entitlements (spec Phase 8), plus the

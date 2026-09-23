@@ -32,6 +32,15 @@ class PublicPlanController extends Controller
                 'ai_insight_limit' => $p->ai_insight_limit,
                 'report_limit'     => $p->report_limit,
                 'features'         => $p->features_json ?? [],
+                // Publish the non-sensitive usage limits used by pricing UI.
+                // Keeping these in the API prevents the marketing site and
+                // dashboard from promising allowances the plan registry does
+                // not actually grant.
+                'limits'           => [
+                    'crawl_pages_monthly'    => $p->limit('crawl_pages_monthly'),
+                    'tracked_keywords'       => $p->limit('tracked_keywords'),
+                    'ai_prompt_runs_monthly' => $p->limit('ai_prompt_runs_monthly'),
+                ],
                 'is_featured'      => (bool) $p->is_featured,
             ]);
 

@@ -1,6 +1,7 @@
 "use client";
 import Link from "next/link";
 import type { ReactNode } from "react";
+import { BrandLogo } from "@/components/BrandLogo";
 
 const stats = [
   { big: "3 min", small: "to connect" },
@@ -37,10 +38,7 @@ export function AuthShell({
         <div className="relative z-10 flex items-center gap-2">
           {/* Wordmark PNG ships on a white field — a white chip keeps the
               dark brand panel behind it clean in both themes. */}
-          <span className="flex h-10 items-center rounded-lg bg-white px-3">
-            {/* eslint-disable-next-line @next/next/no-img-element -- static brand asset */}
-            <img src="/logos/insightistic-eye.png" alt="Insightistic" className="h-7 w-auto" />
-          </span>
+          <BrandLogo className="h-10 rounded-lg bg-white px-3" imageClassName="h-8 w-auto" />
         </div>
 
         <div className="relative z-10 max-w-md">
@@ -73,8 +71,7 @@ export function AuthShell({
       <section className="flex w-full flex-1 items-center justify-center px-6 py-12">
         <div className="w-full max-w-md">
           <Link href="/" className="mb-8 flex items-center gap-2 lg:hidden">
-            <span className="ins-logo-dot" />
-            <span className="text-lg font-bold text-ink">Insightistic</span>
+            <BrandLogo className="rounded-md bg-white px-2" imageClassName="h-7 w-auto" />
           </Link>
 
           <h1 className="text-2xl font-bold tracking-tight text-ink">{title}</h1>

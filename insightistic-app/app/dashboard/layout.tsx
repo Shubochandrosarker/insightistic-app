@@ -21,6 +21,7 @@ import { CommandPalette } from "@/components/app-shell/CommandPalette";
 import { NAV_GROUPS, type NavItem } from "@/lib/nav";
 import { DashboardProvider } from "@/lib/dashboard";
 import { useAuth } from "@/lib/auth";
+import { BrandLogo } from "@/components/BrandLogo";
 
 /** Icon ids are data in lib/nav.ts; the lucide mapping lives here. */
 const GROUP_ICONS: Record<string, LucideIcon> = {
@@ -56,8 +57,7 @@ function DesktopSidebar() {
   return (
     <aside className="ins-scroll hidden w-60 shrink-0 flex-col overflow-y-auto border-r border-line bg-card lg:flex">
       <div className="flex items-center gap-2 px-5 py-5">
-        <span className="ins-logo-dot" />
-        <span className="text-lg font-bold tracking-tight text-fg">Insightistic</span>
+        <BrandLogo className="rounded-md bg-white px-1.5" imageClassName="h-8 w-auto" />
       </div>
 
       <nav className="flex-1 px-3 pb-4" aria-label="Dashboard sections">

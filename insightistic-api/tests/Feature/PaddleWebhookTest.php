@@ -170,6 +170,23 @@ it('accepts a signed subscription event, records it pending and dispatches the j
         ->and($org->fresh()->status)->toBe('active');
 });
 
+it('marks an accepted Paddle event processed after the queued projector succeeds', function () {
+    config()->set('billing.paddle.webhook_secret', 'pdlwh_test');
+
+    [, $org] = makeOrgUser('paddle-process@example.com');
+    $data = paddleSubscriptionData(['custom_data' => ['organization_id' => $org->id]]);
+    [$body, $sig] = signedPaddleDelivery(paddleEvent('subscription.updated', $data, 'evt_process_ok'), 'pdlwh_test');
+
+    postPaddleWebhook($body, $sig)->assertOk();
+
+    $event = BillingEvent::firstOrFail();
+    (new ProcessPaddleEvent($event, $data))->handle(app(PaddleEventProcessor::class));
+
+    expect($event->fresh()->processing_status)->toBe('processed')
+        ->and($event->fresh()->processed_at)->not->toBeNull()
+        ->and($event->fresh()->attempts)->toBe(0);
+});
+
 it('processes a redelivered event only once', function () {
     config()->set('billing.paddle.webhook_secret', 'pdlwh_test');
     Queue::fake();

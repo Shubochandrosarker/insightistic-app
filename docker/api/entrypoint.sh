@@ -43,6 +43,13 @@ fi
 
 if [ "${SEED_PLANS:-false}" = "true" ]; then
   php artisan db:seed --class=Database\\Seeders\\PlanSeeder --force --no-interaction || true
+  # The checkout and webhook projector resolve Paddle price IDs from these
+  # local rows. Keep the catalog seeding opt-in, but make it part of the same
+  # production deploy switch as plans so a fresh stack cannot advertise
+  # checkout without a server-side price mapping.
+  if [ "${SEED_BILLING_CATALOG:-false}" = "true" ]; then
+    php artisan db:seed --class=Database\\Seeders\\PaddleCatalogSeeder --force --no-interaction || true
+  fi
 fi
 
 # SECURITY: the SUPER_ADMIN_EMAIL auto-promotion seeder was removed. Create

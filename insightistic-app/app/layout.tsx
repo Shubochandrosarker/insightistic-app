@@ -7,6 +7,7 @@ export const metadata: Metadata = {
   title: "Insightistic — Search, AI Visibility & Website Intelligence",
   description:
     "Connect any website — WordPress, Shopify, Laravel or custom — and get search intelligence, AI visibility, site audits, uptime and traffic insights in one clean dashboard.",
+  icons: { icon: "/logos/insightistic-logo.png", apple: "/logos/insightistic-logo.png" },
 };
 
 // Apply the saved theme before first paint to avoid a flash of the wrong theme.

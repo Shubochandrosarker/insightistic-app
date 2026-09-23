@@ -3,6 +3,7 @@
 namespace App\Services\Integrations;
 
 use App\Models\DataSourceCredential;
+use App\Models\ProviderAccount;
 use App\Models\SeoDaily;
 use App\Models\SeoPageDaily;
 use App\Models\SeoPageSnapshot;
@@ -61,6 +62,41 @@ class GscClient
                 continue;
             }
             $out[] = ['id' => $url, 'name' => $url, 'account' => (string) ($entry['permissionLevel'] ?? '')];
+        }
+
+        return $out;
+    }
+
+    /**
+     * Verified Search Console properties for the ORG's shared Google grant
+     * (spec §7) — the multi-select importer source. Includes permission
+     * level so the UI can separate siteOwner/fullUser from restricted.
+     *
+     * @return array<int,array{id:string,name:string,account:string,permission_level:string}>
+     */
+    public function listResourcesForAccount(ProviderAccount $account): array
+    {
+        $token = $this->oauth->freshAccountToken($account);
+
+        $response = Http::withToken($token)
+            ->timeout(config('insightistic.integrations.timeout'))
+            ->get(self::SITES_URL);
+
+        $this->assertOk($response, 'gsc_sites_failed');
+
+        $out = [];
+        foreach ($response->json()['siteEntry'] ?? [] as $entry) {
+            $url = (string) ($entry['siteUrl'] ?? '');
+            $permission = (string) ($entry['permissionLevel'] ?? '');
+            if ($url === '' || $permission === 'siteUnverifiedUser') {
+                continue;
+            }
+            $out[] = [
+                'id'               => $url,
+                'name'             => $url,
+                'account'          => $permission,
+                'permission_level' => $permission,
+            ];
         }
 
         return $out;

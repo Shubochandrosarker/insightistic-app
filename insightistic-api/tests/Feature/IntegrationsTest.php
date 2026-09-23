@@ -132,12 +132,18 @@ it('exchanges the code server-side and never puts a token in the redirect', func
         ->and($location)->not->toContain('ya29-access');
 
     $credential = DataSourceCredential::withoutGlobalScope('organization')->firstOrFail();
+    $account = \App\Models\ProviderAccount::withoutGlobalScope('organization')->firstOrFail();
+
     expect($credential->source)->toBe('gsc')
-        ->and($credential->refresh_token)->toBe('1//refresh-secret')
-        ->and($credential->external_account_id)->toBe('owner@example.com');
+        // Refresh tokens now live on the shared org provider account (spec §5)
+        ->and($credential->provider_account_id)->toBe($account->id)
+        ->and($credential->refresh_token)->toBeNull()
+        ->and($credential->external_account_id)->toBe('owner@example.com')
+        ->and($account->refresh_token)->toBe('1//refresh-secret')
+        ->and($account->email)->toBe('owner@example.com');
 
     // Stored encrypted: the raw column must not be readable plaintext.
-    $raw = \Illuminate\Support\Facades\DB::table('data_source_credentials')->value('refresh_token');
+    $raw = \Illuminate\Support\Facades\DB::table('provider_accounts')->value('refresh_token');
     expect($raw)->not->toContain('1//refresh-secret');
 
     // Connected but unusable until a property is chosen.

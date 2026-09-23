@@ -15,9 +15,14 @@ class DataSourceConnection extends Model
     public const STATES = ['connected', 'not_configured', 'syncing', 'degraded', 'error', 'disabled'];
 
     protected $fillable = [
-        'organization_id', 'site_id', 'source', 'state', 'label',
+        'organization_id', 'site_id', 'source', 'state', 'connection_method', 'label',
         'last_attempted_at', 'last_successful_at', 'latest_data_at', 'freshness',
         'last_error_code', 'last_error_message', 'metadata_json',
+    ];
+
+    public const CONNECTION_METHODS = [
+        'oauth', 'api_key', 'api_token', 'wordpress_plugin', 'shopify_app',
+        'php_sdk', 'node_sdk', 'generic_api', 'manual',
     ];
 
     protected function casts(): array

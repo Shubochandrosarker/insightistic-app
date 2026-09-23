@@ -3,6 +3,7 @@
 namespace App\Services\Integrations;
 
 use App\Models\DataSourceCredential;
+use App\Models\ProviderAccount;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
@@ -26,6 +27,52 @@ class GoogleOAuthService
     private const TOKEN_URL = 'https://oauth2.googleapis.com/token';
     private const USERINFO_URL = 'https://www.googleapis.com/oauth2/v3/userinfo';
     private const STATE_TTL_SECONDS = 600;
+
+    /**
+     * ORG-level consent URL (spec §5/§6): one authorization carrying every
+     * read-only Google scope we need — Search Console + Analytics + the
+     * userinfo identity scopes — so a second consent is never required when
+     * the org adds more sites or sources later.
+     */
+    public function orgAuthorizeUrl(int $organizationId, int $userId): string
+    {
+        $this->assertConfigured();
+
+        $state    = Str::random(40);
+        $verifier = Str::random(96);
+
+        Cache::put($this->stateKey($state), [
+            'flow'     => 'org',
+            'org_id'   => $organizationId,
+            'user_id'  => $userId,
+            'verifier' => $verifier,
+        ], self::STATE_TTL_SECONDS);
+
+        return self::AUTH_URL . '?' . http_build_query([
+            'client_id'             => config('insightistic.integrations.google.client_id'),
+            'redirect_uri'          => config('insightistic.integrations.google.redirect'),
+            'response_type'         => 'code',
+            'scope'                 => implode(' ', $this->orgScopes()),
+            'state'                 => $state,
+            'access_type'           => 'offline',
+            'prompt'                => 'consent',
+            'include_granted_scopes' => 'true',
+            'code_challenge'        => $this->challenge($verifier),
+            'code_challenge_method' => 'S256',
+        ]);
+    }
+
+    /** Every read-only scope the product uses, for the org-level consent. */
+    public function orgScopes(): array
+    {
+        $configured = config('insightistic.integrations.google.scopes', []);
+
+        return array_values(array_unique(array_merge(
+            $configured['gsc'] ?? [],
+            $configured['ga4'] ?? [],
+            ['openid', 'https://www.googleapis.com/auth/userinfo.email'],
+        )));
+    }
 
     /**
      * Build the consent URL and stash the state → {site, source, user,
@@ -124,21 +171,83 @@ class GoogleOAuthService
         ];
     }
 
-    /** The Google account email behind an access token, for display only. */
-    public function accountEmail(string $accessToken): ?string
+    /** The Google account {email, sub} behind an access token, for identity. */
+    public function accountInfo(string $accessToken): ?array
     {
         $response = Http::withToken($accessToken)
             ->timeout(config('insightistic.integrations.timeout'))
             ->get(self::USERINFO_URL);
 
-        return $response->successful() ? ($response->json()['email'] ?? null) : null;
+        if (! $response->successful()) {
+            return null;
+        }
+
+        return [
+            'email' => $response->json()['email'] ?? null,
+            'sub'   => $response->json()['sub'] ?? null,
+        ];
+    }
+
+    /** Back-compat shim: display email only. */
+    public function accountEmail(string $accessToken): ?string
+    {
+        return $this->accountInfo($accessToken)['email'] ?? null;
     }
 
     /**
      * Return a valid access token, refreshing in place when it has expired.
      * Persists the refreshed token so concurrent jobs don't each re-refresh.
+     *
+     * Account-aware (spec §5): when the credential links to an org-level
+     * provider account, the ACCOUNT holds the refresh token — refresh it,
+     * mirror the fresh access token onto the credential, and return. The
+     * per-site credential path stays for back-compat with grants created
+     * before provider accounts existed.
      */
     public function freshAccessToken(DataSourceCredential $credential): string
+    {
+        if ($credential->provider_account_id && ($account = $credential->providerAccount)) {
+            $token = $this->freshAccountToken($account);
+
+            // Mirror onto the credential so existing readers (and
+            // publicSummary) keep working unchanged.
+            $credential->access_token = $account->access_token;
+            $credential->token_expires_at = $account->token_expires_at;
+            $credential->save();
+
+            return $token;
+        }
+
+        return $this->freshLegacyCredentialToken($credential);
+    }
+
+    /** Refresh an org-level provider account's token in place. */
+    public function freshAccountToken(ProviderAccount $account): string
+    {
+        if (! $account->needsRefresh()) {
+            return (string) $account->access_token;
+        }
+
+        if (! $account->refresh_token) {
+            throw new IntegrationFailure(
+                'reauth_required',
+                'This Google connection has no refresh token. Reconnect the integration.',
+            );
+        }
+
+        $body = $this->refreshRequest($account->refresh_token);
+
+        $account->access_token = (string) $body['access_token'];
+        $account->token_expires_at = now()->addSeconds((int) ($body['expires_in'] ?? 3600));
+        if (! empty($body['refresh_token'])) {
+            $account->refresh_token = (string) $body['refresh_token'];
+        }
+        $account->save();
+
+        return (string) $account->access_token;
+    }
+
+    private function freshLegacyCredentialToken(DataSourceCredential $credential): string
     {
         if (! $credential->needsRefresh()) {
             return (string) $credential->access_token;
@@ -153,24 +262,7 @@ class GoogleOAuthService
 
         $this->assertConfigured();
 
-        $response = Http::asForm()
-            ->timeout(config('insightistic.integrations.timeout'))
-            ->post(self::TOKEN_URL, [
-                'client_id'     => config('insightistic.integrations.google.client_id'),
-                'client_secret' => config('insightistic.integrations.google.client_secret'),
-                'refresh_token' => $credential->refresh_token,
-                'grant_type'    => 'refresh_token',
-            ]);
-
-        if (! $response->successful()) {
-            // A revoked or expired grant is terminal — the user must reconnect.
-            throw new IntegrationFailure(
-                'reauth_required',
-                'Google refused to refresh this connection: ' . $this->googleError($response->json()),
-            );
-        }
-
-        $body = $response->json();
+        $body = $this->refreshRequest($credential->refresh_token);
 
         $credential->access_token = (string) $body['access_token'];
         $credential->token_expires_at = now()->addSeconds((int) ($body['expires_in'] ?? 3600));
@@ -184,11 +276,45 @@ class GoogleOAuthService
         return (string) $credential->access_token;
     }
 
+    /** @return array{access_token:string,expires_in:int,refresh_token?:string} */
+    private function refreshRequest(string $refreshToken): array
+    {
+        $response = Http::asForm()
+            ->timeout(config('insightistic.integrations.timeout'))
+            ->post(self::TOKEN_URL, [
+                'client_id'     => config('insightistic.integrations.google.client_id'),
+                'client_secret' => config('insightistic.integrations.google.client_secret'),
+                'refresh_token' => $refreshToken,
+                'grant_type'    => 'refresh_token',
+            ]);
+
+        if (! $response->successful()) {
+            // A revoked or expired grant is terminal — the user must reconnect.
+            throw new IntegrationFailure(
+                'reauth_required',
+                'Google refused to refresh this connection: ' . $this->googleError($response->json()),
+            );
+        }
+
+        return $response->json();
+    }
+
     /** Best-effort revoke so disconnecting here also disconnects at Google. */
     public function revoke(DataSourceCredential $credential): void
     {
-        $token = $credential->refresh_token ?: $credential->access_token;
+        // Linked credentials never hold the refresh token — revoke the
+        // account's instead, without deleting the shared account.
+        if ($credential->provider_account_id && ($account = $credential->providerAccount)) {
+            $this->revokeToken($account->refresh_token ?: $account->access_token);
 
+            return;
+        }
+
+        $this->revokeToken($credential->refresh_token ?: $credential->access_token);
+    }
+
+    public function revokeToken(?string $token): void
+    {
         if (! $token) {
             return;
         }

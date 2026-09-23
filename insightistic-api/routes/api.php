@@ -231,6 +231,15 @@ Route::middleware(['auth:sanctum', 'tenant', 'restrict.impersonation'])->group(f
     Route::get('sites', [SiteController::class, 'index']);
     Route::post('sites', [SiteController::class, 'store']);
 
+    // Org-level provider accounts (spec §5/§6): ONE Google consent for
+    // every site in the organization. Not under site.access — these are
+    // organization-scoped, not site-scoped.
+    Route::get('integrations/google/account', [IntegrationsController::class, 'googleAccountStatus']);
+    Route::middleware('role:owner,admin')->group(function () {
+        Route::post('integrations/google/account/authorize-url', [IntegrationsController::class, 'googleAccountAuthorizeUrl']);
+        Route::delete('integrations/google/account', [IntegrationsController::class, 'googleAccountDisconnect']);
+    });
+
     Route::middleware('site.access')->group(function () {
         Route::get('sites/{site}', [SiteController::class, 'show']);
         Route::get('sites/{site}/health', [SiteController::class, 'health']);
@@ -448,6 +457,7 @@ Route::middleware(['auth:sanctum', 'tenant', 'restrict.impersonation'])->group(f
             Route::post('sites/{site}/integrations/cloudflare/connect', [IntegrationsController::class, 'connectCloudflare']);
             Route::post('sites/{site}/integrations/bing/connect', [IntegrationsController::class, 'connectBing']);
             Route::post('sites/{site}/integrations/{source}/authorize-url', [IntegrationsController::class, 'authorizeUrl']);
+            Route::post('sites/{site}/integrations/{source}/attach', [IntegrationsController::class, 'attach']);
             Route::get('sites/{site}/integrations/{source}/resources', [IntegrationsController::class, 'resources']);
             Route::post('sites/{site}/integrations/{source}/select', [IntegrationsController::class, 'select']);
             Route::post('sites/{site}/integrations/{source}/test', [IntegrationsController::class, 'test']);

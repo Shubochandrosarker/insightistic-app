@@ -56,6 +56,7 @@ class BingConnectionService
         // Connected but not usable yet — no Bing site mapped (same degraded
         // semantics Google uses between grant and property selection).
         $this->recordState($site, 'degraded', [
+            'connection_method'  => 'api_key',
             'last_error_code'    => 'no_property_selected',
             'last_error_message' => 'Choose a Bing Webmaster site to finish setting up this integration.',
         ]);

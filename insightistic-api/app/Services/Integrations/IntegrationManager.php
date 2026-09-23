@@ -47,6 +47,7 @@ class IntegrationManager
         // Connected but not usable yet — no property chosen. The UI reads
         // this state to show the property picker rather than a green tick.
         $this->recordState($site, $source, 'degraded', [
+            'connection_method'  => 'oauth',
             'label'              => $email,
             'last_error_code'    => 'no_property_selected',
             'last_error_message' => 'Choose a property to finish setting up this integration.',
@@ -64,6 +65,7 @@ class IntegrationManager
         $site->save();
 
         $this->recordState($site, 'cloudflare', 'degraded', [
+            'connection_method'  => 'api_token',
             'last_error_code'    => 'no_property_selected',
             'last_error_message' => 'Choose a Cloudflare zone to finish setting up this integration.',
         ]);

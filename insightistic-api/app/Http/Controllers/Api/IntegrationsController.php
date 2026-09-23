@@ -11,6 +11,8 @@ use App\Models\User;
 use App\Services\Integrations\GoogleOAuthService;
 use App\Services\Integrations\IntegrationFailure;
 use App\Services\Integrations\IntegrationManager;
+use App\Services\Integrations\ProviderAccountManager;
+use App\Support\Tenancy;
 use Illuminate\Http\Request;
 
 /**
@@ -30,7 +32,77 @@ class IntegrationsController extends Controller
     public function __construct(
         private readonly IntegrationManager $manager,
         private readonly GoogleOAuthService $google,
+        private readonly ProviderAccountManager $providerAccounts,
     ) {
+    }
+
+    // ---- Org-level Google account (spec §5/§6) ------------------------------
+
+    /** GET /integrations/google/account */
+    public function googleAccountStatus(Request $request, Tenancy $tenancy)
+    {
+        return response()->json(
+            $this->providerAccounts->googleStatus($tenancy->organization()),
+        );
+    }
+
+    /** POST /integrations/google/account/authorize-url — ONE org-wide consent. */
+    public function googleAccountAuthorizeUrl(Request $request, Tenancy $tenancy)
+    {
+        try {
+            $url = $this->google->orgAuthorizeUrl(
+                $tenancy->organization()->id,
+                (int) $request->user()->id,
+            );
+        } catch (IntegrationFailure $e) {
+            return $this->failure($e);
+        }
+
+        return response()->json(['authorize_url' => $url]);
+    }
+
+    /** DELETE /integrations/google/account */
+    public function googleAccountDisconnect(Request $request, Tenancy $tenancy)
+    {
+        $account = $this->providerAccounts->googleAccount($tenancy->organization());
+
+        if (! $account) {
+            return response()->json(['message' => 'No Google account connected.', 'code' => 'not_connected'], 409);
+        }
+
+        $this->providerAccounts->disconnectGoogle($account);
+
+        return response()->json(['status' => 'disconnected']);
+    }
+
+    /**
+     * POST /sites/{site}/integrations/{source}/attach
+     *
+     * Attach gsc/ga4 to a site from the org's shared Google grant — no new
+     * consent needed. Frontend calls this when the org Google account exists.
+     */
+    public function attach(Request $request, string $siteId, string $source)
+    {
+        $site = $this->site($request);
+        $this->assertGoogleSource($source);
+
+        $account = $this->providerAccounts->googleAccount($site->organization);
+
+        if (! $account) {
+            return response()->json([
+                'message' => 'Connect Google for your organization first.',
+                'code'    => 'org_google_not_connected',
+            ], 409);
+        }
+
+        $credential = $this->providerAccounts->attachGoogleSource(
+            $site, $source, $account, (int) $request->user()->id,
+        );
+
+        return response()->json([
+            'status'     => 'attached',
+            'needs_resource' => empty($credential->resource_json['id']),
+        ]);
     }
 
     /** GET /sites/{site}/integrations */
@@ -113,6 +185,28 @@ class IntegrationsController extends Controller
             return redirect($back . '?integration=error&reason=invalid_state');
         }
 
+        // Org-level flow (spec §5): one consent for the whole organization.
+        if (($payload['flow'] ?? null) === 'org') {
+            $org  = \App\Models\Organization::find($payload['org_id']);
+            $user = User::find($payload['user_id']);
+
+            if (! $org || ! $user || ! $user->roleIn($org)) {
+                return redirect($back . '?integration=error&reason=forbidden');
+            }
+
+            try {
+                $account = $this->providerAccounts->connectGoogle(
+                    $org, (int) $user->id,
+                    (string) $request->query('code', ''),
+                    $payload['verifier'],
+                );
+
+                return redirect($back . '?integration=connected&google_account=' . urlencode((string) $account->email));
+            } catch (IntegrationFailure $e) {
+                return redirect($back . '?integration=error&reason=' . urlencode($e->errorCode));
+            }
+        }
+
         $site = Site::withoutGlobalScope('organization')->find($payload['site_id']);
         $user = User::find($payload['user_id']);
 
@@ -124,9 +218,21 @@ class IntegrationsController extends Controller
 
         try {
             $tokens = $this->google->exchangeCode((string) $request->query('code', ''), $payload['verifier']);
-            $email = $this->google->accountEmail($tokens['access_token']);
+            $info   = $this->google->accountInfo($tokens['access_token']);
+            $email  = $info['email'] ?? null;
 
-            $this->manager->storeGoogleGrant($site, $payload['source'], $tokens, $email, $user->id);
+            // Site-level consent now ALSO seeds the org provider account, so
+            // the NEXT site skips the consent dance entirely (attach()).
+            $account = ProviderAccountManager::upsertFromTokens(
+                $site->organization, $tokens, $info, (int) $user->id,
+            );
+
+            $credential = $this->manager->storeGoogleGrant($site, $payload['source'], $tokens, $email, $user->id);
+            // Link the credential to the shared account (refresh flows
+            // through it from now on).
+            $credential->provider_account_id = $account->id;
+            $credential->refresh_token = null; // tokens live on the account
+            $credential->save();
         } catch (IntegrationFailure $e) {
             return redirect($back . '?integration=error&reason=' . urlencode($e->errorCode));
         }

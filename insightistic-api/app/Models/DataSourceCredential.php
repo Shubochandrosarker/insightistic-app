@@ -28,7 +28,7 @@ class DataSourceCredential extends Model
     ];
 
     protected $fillable = [
-        'organization_id', 'site_id', 'source', 'provider',
+        'organization_id', 'provider_account_id', 'site_id', 'source', 'provider',
         'access_token', 'refresh_token', 'token_expires_at',
         'scopes_json', 'external_account_id', 'resource_json',
         'connected_by_user_id',
@@ -54,6 +54,12 @@ class DataSourceCredential extends Model
     public function site(): BelongsTo
     {
         return $this->belongsTo(Site::class);
+    }
+
+    /** The shared org-level grant this credential draws tokens from (spec §5). */
+    public function providerAccount(): BelongsTo
+    {
+        return $this->belongsTo(ProviderAccount::class);
     }
 
     /** True when the access token is missing or within 60s of expiring. */

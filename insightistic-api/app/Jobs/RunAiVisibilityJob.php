@@ -63,6 +63,7 @@ class RunAiVisibilityJob implements ShouldQueue
 
         $limit = (int) ($org->plan?->limit('ai_prompt_runs_monthly') ?? 0);
         $used = $this->runsThisMonth($site->id);
+        $credits = app(\App\Domain\Billing\CreditLedger::class);
 
         if ($limit <= 0) {
             Log::info('AI visibility skipped: plan has no ai_prompt_runs_monthly allowance.', [
@@ -72,8 +73,10 @@ class RunAiVisibilityJob implements ShouldQueue
             return;
         }
 
-        if ($used >= $limit) {
-            Log::info('AI visibility skipped: monthly prompt-run quota reached.', [
+        $overQuota = $used >= $limit;
+
+        if ($overQuota && $credits->balance($org) < 1) {
+            Log::info('AI visibility skipped: monthly prompt-run quota reached and no Insight Credits left.', [
                 'site_id' => $site->id,
                 'limit'   => $limit,
                 'used'    => $used,
@@ -84,14 +87,26 @@ class RunAiVisibilityJob implements ShouldQueue
 
         foreach ($this->duePrompts($site, $this->promptId) as $prompt) {
             if ($used >= $limit) {
-                Log::info('AI visibility stopped mid-batch: monthly prompt-run quota reached.', [
-                    'site_id'     => $site->id,
-                    'limit'       => $limit,
-                    'used'        => $used,
-                    'prompt_id'   => $prompt->id,
-                ]);
+                // Plan quota exhausted → metered credit fallback (terms:
+                // "credits power AI visibility runs"). One credit per run;
+                // stop when the balance runs dry. A failed run still costs
+                // the credit, matching the quota rule that failures count.
+                if ($credits->balance($org) < 1) {
+                    Log::info('AI visibility stopped mid-batch: out of credits.', [
+                        'site_id'   => $site->id,
+                        'prompt_id' => $prompt->id,
+                    ]);
 
-                break;
+                    break;
+                }
+
+                $run = $runner->run($prompt, $site);
+                $credits->consume(
+                    $org, 1, 'ai_prompt_run_over_quota',
+                    'ai_visibility_run', (string) $run->id,
+                );
+
+                continue;
             }
 
             // PromptRunner never throws on a provider failure — it records a

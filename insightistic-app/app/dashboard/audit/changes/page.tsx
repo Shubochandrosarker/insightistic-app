@@ -124,8 +124,8 @@ export default function AuditChangesPage() {
     return (
       <EmptyState
         icon={<History size={20} />}
-        title="No site connected yet"
-        hint="Connect a WordPress site with the Insightistic plugin to track content changes here."
+        title="No website yet"
+        hint="Add a website to track content changes here — any platform works."
       />
     );
 

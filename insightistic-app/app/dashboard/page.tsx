@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useDashboard } from "@/lib/dashboard";
 import { useApi } from "@/lib/useApi";
 import { apiPost } from "@/lib/api";
+import { Button } from "@/components/ui/Button";
 import { KpiCard } from "@/components/dashboard/KpiCard";
 import { AreaTrend, LineTrend } from "@/components/dashboard/Charts";
 import { Card } from "@/components/ui/Card";
@@ -35,7 +36,7 @@ const SEV_TONE: Record<string, "red" | "amber" | "slate"> = {
 
 /** KPI tile + the small source/period caption line under it. */
 function Tile({
-  label, value, delta, series, color, source, periodLabel,
+  label, value, delta, series, color, source, periodLabel, hint,
 }: {
   label: string;
   value: string | number;
@@ -44,8 +45,9 @@ function Tile({
   color?: string;
   source?: string;
   periodLabel?: string;
+  hint?: string;
 }) {
-  const caption = [source, periodLabel].filter(Boolean).join(" · ");
+  const caption = [source, periodLabel, hint].filter(Boolean).join(" · ");
   return (
     <div>
       <KpiCard label={label} value={value} delta={delta} series={series} color={color} />
@@ -106,8 +108,9 @@ export default function Overview() {
     return (
       <EmptyState
         icon={<Package size={20} />}
-        title="No site connected yet"
-        hint="Add a site in Settings and install the Insightistic connector to start seeing analytics here."
+        title="Add your first website"
+        hint="Import from Google Search Console or just enter a URL — audits, uptime and PageSpeed start immediately. Any platform works."
+        action={<Button onClick={() => (window.location.href = "/dashboard/add-website")}>Add website</Button>}
       />
     );
 
@@ -129,6 +132,24 @@ export default function Overview() {
   // --- Site health / performance --------------------------------------------
   const hSite = health.data?.site || null;
   const connected = hSite?.connection_status === "connected";
+  // REAL health (spec §19): crawl + SSL + uptime composite from the health
+  // endpoint — never the WordPress connector status.
+  const healthComposite = health.data?.health || null;
+  const healthValue = health.loading
+    ? "…"
+    : healthComposite?.score != null
+      ? String(healthComposite.score)
+      : "—";
+  const healthLabel =
+    healthComposite?.state === "ok"
+      ? "Good"
+      : healthComposite?.state === "warning"
+        ? "Needs work"
+        : healthComposite?.state === "critical"
+          ? "Critical"
+          : healthComposite?.state === "no_audit"
+            ? "No audit yet"
+            : "—";
   const run = perf.data?.run || null;
 
   // --- Priority actions ------------------------------------------------------
@@ -190,8 +211,9 @@ export default function Overview() {
       <div className="grid grid-cols-2 gap-3.5 sm:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-7">
         <Tile
           label="Site health"
-          value={health.loading ? "…" : health.error || !hSite ? "—" : connected ? "Healthy" : capitalize(hSite.connection_status)}
-          source="connector"
+          value={healthValue}
+          hint={healthLabel}
+          source={healthComposite?.sources?.health === "site_audit" ? "site audit" : "none"}
           periodLabel={periodLabel}
         />
         <Tile
@@ -249,7 +271,7 @@ export default function Overview() {
           <Spinner />
         ) : !seo.data?.has_data || seoSeries.length < 2 ? (
           <p className="py-10 text-center text-sm text-muted">
-            No search data yet — Search Console metrics appear here once the connector has synced.
+            No search data yet — connect Search Console (directly or via the Google account above) and metrics appear here after the first sync.
           </p>
         ) : (
           <div className="space-y-4">

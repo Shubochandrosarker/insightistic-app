@@ -6,16 +6,52 @@ export default function Terms() {
       <Nav />
       <article className="mx-auto max-w-3xl px-6 py-12 text-slate-700">
         <h1 className="text-3xl font-bold text-slate-900">Terms of Service</h1>
-        <p className="mt-4 text-sm text-slate-500">Template — replace with counsel-reviewed terms before launch.</p>
-        <h2 className="mt-8 text-lg font-semibold text-slate-900">1. Service</h2>
-        <p className="mt-2">Insightistic provides analytics and reporting for connected WordPress/WooCommerce sites.</p>
+        <p className="mt-4 text-sm text-slate-500">Last updated: 23 September 2026.</p>
+
+        <h2 className="mt-8 text-lg font-semibold text-slate-900">1. The Service</h2>
+        <p className="mt-2">
+          Insightistic provides search intelligence, AI visibility monitoring, website auditing,
+          performance and uptime monitoring, and analytics for websites you connect. Any publicly
+          accessible website is supported — including WordPress, WooCommerce, Shopify, Laravel,
+          Webflow, Wix, Squarespace, static and custom-built sites. Optional connectors (such as
+          the WordPress plugin) add deeper platform data but are never required for the core
+          service.
+        </p>
+
         <h2 className="mt-6 text-lg font-semibold text-slate-900">2. Accounts &amp; Billing</h2>
-        <p className="mt-2">Subscriptions are billed via Stripe or Paddle. Plan limits apply per the selected plan. Founder lifetime deals and Insight Credit packs are covered in section 5 below.</p>
-        <h2 className="mt-6 text-lg font-semibold text-slate-900">3. Data</h2>
-        <p className="mt-2">We process business data you connect. We do not store raw payment card data. See our Privacy Policy.</p>
+        <p className="mt-2">
+          Payments are processed by Paddle.com as Merchant of Record. Paddle is the seller of
+          record for your purchase — taxes are collected and remitted by Paddle, and your payment
+          details are handled by Paddle, never by Insightistic. Plan limits apply per the selected
+          plan and are enforced server-side. Founder lifetime deals and Insight Credit packs are
+          covered in section 5.
+        </p>
+
+        <h2 className="mt-6 text-lg font-semibold text-slate-900">3. Your Data</h2>
+        <p className="mt-2">
+          We process the data you or your connected integrations provide (search performance,
+          traffic, site content, and optional commerce data). We do not store raw payment card
+          data. Connecting a third-party source (Google, Microsoft/Bing, Cloudflare, Shopify)
+          uses that provider&rsquo;s own authorization flow with read-only scopes wherever
+          available. See our Privacy Policy.
+        </p>
+
         <h2 className="mt-6 text-lg font-semibold text-slate-900">4. Acceptable Use</h2>
-        <p className="mt-2">You agree to use the service lawfully and to connect only sites you own or are authorized to manage.</p>
-        <h2 className="mt-8 text-lg font-semibold text-slate-900">5. Insightistic Founder Lifetime Deal terms</h2>
+        <p className="mt-2">
+          You agree to use the service lawfully and to connect only websites you own or are
+          authorized to manage. Automated or abusive consumption of metered features (crawling,
+          rank checks, AI visibility runs) may be throttled.
+        </p>
+
+        <h2 className="mt-6 text-lg font-semibold text-slate-900">5. Refunds &amp; Cancellation</h2>
+        <p className="mt-2">
+          Subscriptions can be cancelled at any time from your billing page; access continues to
+          the end of the paid period. Refunds are available within 14 days of purchase via the
+          Paddle checkout or by contacting support. One-time purchases (lifetime deals, credit
+          packs) are refundable within the same 14-day window if unused beyond trial allowances.
+        </p>
+
+        <h2 className="mt-8 text-lg font-semibold text-slate-900">6. Insightistic Founder Lifetime Deal terms</h2>
         <p className="mt-2">
           A Founder lifetime deal is a one-time purchase. &ldquo;Lifetime&rdquo; means the purchased tier&rsquo;s
           features and its published monthly allowances, for as long as Insightistic operates the service — it is
@@ -32,13 +68,19 @@ export default function Terms() {
           <li>Allowances reset each month and do not roll over.</li>
           <li>
             Insight Credit packs (5,000 / 20,000 / 50,000 credits) are one-time purchases that do not expire while
-            the service operates. Credits power AI visibility runs, AI inference and SERP checks; core data syncs
-            never consume credits.
+            the service operates. Credits power AI visibility runs beyond your plan&rsquo;s monthly allowance and
+            other metered variable-cost features; core data syncs never consume credits.
           </li>
           <li>Fair use applies to metered features — automated or abusive consumption may be throttled.</li>
-          <li>Refunds are available within 14 days of purchase via the Paddle checkout.</li>
           <li>Insightistic may discontinue service to accounts engaged in abusive usage, per section 4.</li>
         </ul>
+
+        <h2 className="mt-6 text-lg font-semibold text-slate-900">7. No Ranking Guarantees</h2>
+        <p className="mt-2">
+          Insightistic reports data and surfaces opportunities. We do not guarantee search
+          rankings, traffic, conversions, or mentions in AI-generated answers, and no such
+          guarantee is offered anywhere in our marketing.
+        </p>
       </article>
       <Footer />
     </main>

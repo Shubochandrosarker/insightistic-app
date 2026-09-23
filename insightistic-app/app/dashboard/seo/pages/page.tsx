@@ -112,8 +112,8 @@ export default function SearchPagesPage() {
     return (
       <EmptyState
         icon={<FileStack size={20} />}
-        title="No site connected yet"
-        hint="Connect a WordPress site with the Insightistic plugin to explore its Search Console landing pages here."
+        title="No website yet"
+        hint="Add a website and connect Search Console to explore its landing pages here."
       />
     );
 

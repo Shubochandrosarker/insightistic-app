@@ -21,7 +21,7 @@ class User extends Authenticatable
     protected $fillable = [
         'name', 'email', 'password', 'status',
         'provider', 'provider_id', 'avatar_url', 'email_verified_at', 'last_login_at',
-        'archived_at',
+        'archived_at', 'attribution_json',
     ];
 
     /**
@@ -41,6 +41,7 @@ class User extends Authenticatable
             'mfa_secret'         => 'encrypted',
             'mfa_recovery_codes' => 'encrypted:array',
             'mfa_confirmed_at'   => 'datetime',
+            'attribution_json'   => 'array',
         ];
     }
 

@@ -189,6 +189,7 @@ class SyncV2Controller extends Controller
         $now = now();
         $rows = array_map(fn ($d) => [
             'site_id'      => $site->id,
+            'source'       => 'gsc',
             'date'         => $d['date'],
             'clicks'       => $d['clicks'] ?? 0,
             'impressions'  => $d['impressions'] ?? 0,
@@ -198,7 +199,7 @@ class SyncV2Controller extends Controller
             'updated_at'   => $now,
         ], $data['days']);
 
-        SeoDaily::upsert($rows, ['site_id', 'date'], ['clicks', 'impressions', 'ctr', 'avg_position', 'updated_at']);
+        SeoDaily::upsert($rows, ['site_id', 'source', 'date'], ['clicks', 'impressions', 'ctr', 'avg_position', 'updated_at']);
 
         $this->recordSource($site, 'gsc', true);
         $this->log($site, $this->batchId($request), 'seo_daily', 'success', count($rows));
@@ -519,6 +520,14 @@ class SyncV2Controller extends Controller
      * whatever was already there untouched (an Eloquent update only writes
      * the attributes it's given — there's no "set to current DB value" raw
      * expression needed).
+     *
+     * DUAL-PATH sources (gsc, ga4 — spec §12): the plugin path must never
+     * masquerade as a direct OAuth connection. Plugin presence is recorded
+     * in metadata_json.plugin_fed_at so the Integrations page can show BOTH
+     * "connected via WordPress plugin" AND "direct Google: not connected /
+     * [Connect directly]" at the same time. When a direct credential
+     * exists, the row's connection_method stays 'oauth' and a plugin
+     * failure cannot degrade the healthy direct source's state.
      */
     private function recordSource(Site $site, string $source, bool $success): void
     {
@@ -530,6 +539,37 @@ class SyncV2Controller extends Controller
             $attrs['last_successful_at'] = now();
             $attrs['latest_data_at'] = now();
             $attrs['freshness'] = 'fresh';
+        }
+
+        $existing = DataSourceConnection::withoutGlobalScope('organization')
+            ->where('site_id', $site->id)
+            ->where('source', $source)
+            ->first();
+
+        if (in_array($source, ['gsc', 'ga4'], true)) {
+            $hasDirect = \App\Models\DataSourceCredential::where('site_id', $site->id)
+                ->where('source', $source)->exists();
+
+            $meta = $existing?->metadata_json ?? [];
+            if ($success) {
+                $meta['plugin_fed_at'] = now()->toIso8601String();
+            }
+            $attrs['metadata_json'] = $meta;
+
+            if (! $hasDirect) {
+                $attrs['connection_method'] = 'wordpress_plugin';
+                if ($success) {
+                    $attrs['label'] = 'WordPress plugin';
+                }
+            } elseif (! $success) {
+                // Plugin failure must not flip a healthy direct source.
+                unset($attrs['state']);
+            }
+        } else {
+            $attrs['connection_method'] = 'wordpress_plugin';
+            if ($success) {
+                $attrs['label'] = $existing->label ?? 'WordPress plugin';
+            }
         }
 
         DataSourceConnection::recordAttempt($site->organization_id, $site->id, $source, $attrs);

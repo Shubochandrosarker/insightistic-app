@@ -13,7 +13,10 @@ export const NAV_GROUPS: NavGroup[] = [
   {
     label: "Overview",
     icon: "LayoutDashboard",
-    items: [{ label: "Overview", href: "/dashboard" }],
+    items: [
+      { label: "Overview", href: "/dashboard" },
+      { label: "Add Website", href: "/dashboard/add-website" },
+    ],
   },
   {
     label: "Search Intelligence",

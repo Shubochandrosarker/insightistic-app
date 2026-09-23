@@ -3,6 +3,7 @@
 namespace App\Services\Integrations;
 
 use App\Models\DataSourceCredential;
+use App\Models\ProviderAccount;
 use App\Models\Site;
 use App\Models\TrafficDaily;
 use App\Models\TrafficDimensionSnapshot;
@@ -53,6 +54,35 @@ class Ga4Client
                     'id'      => $id,
                     'name'    => (string) ($property['displayName'] ?? $id),
                     'account' => (string) ($account['displayName'] ?? ''),
+                ];
+            }
+        }
+
+        return $out;
+    }
+
+    /** GA4 properties visible to the ORG's shared Google grant (spec §5). */
+    public function listResourcesForAccount(ProviderAccount $account): array
+    {
+        $token = $this->oauth->freshAccountToken($account);
+
+        $response = Http::withToken($token)
+            ->timeout(config('insightistic.integrations.timeout'))
+            ->get(self::ADMIN_URL, ['pageSize' => 200]);
+
+        $this->assertOk($response, 'ga4_properties_failed');
+
+        $out = [];
+        foreach ($response->json()['accountSummaries'] ?? [] as $acct) {
+            foreach ($acct['propertySummaries'] ?? [] as $property) {
+                $id = str_replace('properties/', '', (string) ($property['property'] ?? ''));
+                if ($id === '') {
+                    continue;
+                }
+                $out[] = [
+                    'id'      => $id,
+                    'name'    => (string) ($property['displayName'] ?? $id),
+                    'account' => (string) ($acct['displayName'] ?? ''),
                 ];
             }
         }

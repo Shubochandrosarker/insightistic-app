@@ -1,11 +1,12 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import { AuthProvider } from "@/lib/auth";
+import AttributionCapture from "@/components/AttributionCapture";
 
 export const metadata: Metadata = {
-  title: "Insightistic — AI Business Analytics for WordPress & WooCommerce",
+  title: "Insightistic — Search, AI Visibility & Website Intelligence",
   description:
-    "Connect your WordPress/WooCommerce site and get revenue, customer, product and AI business insights in one clean dashboard.",
+    "Connect any website — WordPress, Shopify, Laravel or custom — and get search intelligence, AI visibility, site audits, uptime and traffic insights in one clean dashboard.",
 };
 
 // Apply the saved theme before first paint to avoid a flash of the wrong theme.
@@ -23,7 +24,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
       </head>
       <body>
-        <AuthProvider>{children}</AuthProvider>
+        <AuthProvider>
+          <AttributionCapture />
+          {children}
+        </AuthProvider>
       </body>
     </html>
   );

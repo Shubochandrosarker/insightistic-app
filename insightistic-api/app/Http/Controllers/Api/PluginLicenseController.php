@@ -11,6 +11,7 @@ use App\Models\PluginEvent;
 use App\Models\Site;
 use App\Services\LicenseService;
 use App\Services\LifecycleMailer;
+use App\Support\DomainNormalizer;
 use Illuminate\Http\Request;
 
 /**
@@ -96,14 +97,22 @@ class PluginLicenseController extends Controller
         $site = $activation?->site_id ? Site::withoutGlobalScope('organization')->find($activation->site_id) : null;
         $site ??= Site::withoutGlobalScope('organization')
             ->where('organization_id', $org->id)
+            ->where('normalized_domain', DomainNormalizer::hostKey($normalized))
+            ->whereNull('archived_at')
+            ->first();
+        $site ??= Site::withoutGlobalScope('organization')
+            ->where('organization_id', $org->id)
             ->where('domain', $normalized)
             ->first();
 
         if (! $site) {
             $site = new Site([
-                'name'     => $data['site_name'] ?: $normalized,
-                'domain'   => $normalized,
-                'platform' => ($data['woocommerce_active'] ?? false) ? 'woocommerce' : 'wordpress',
+                'name'              => $data['site_name'] ?: $normalized,
+                'domain'            => $normalized,
+                'normalized_domain' => DomainNormalizer::hostKey($normalized),
+                'platform'          => ($data['woocommerce_active'] ?? false) ? 'woocommerce' : 'wordpress',
+                'detected_platform' => ($data['woocommerce_active'] ?? false) ? 'woocommerce' : 'wordpress',
+                'status'            => 'active',
             ]);
             $site->organization_id = $org->id;
         }
@@ -111,6 +120,12 @@ class PluginLicenseController extends Controller
         $site->connection_status = 'connected';
         $site->wp_version        = $data['wp_version'] ?? $site->wp_version;
         $site->plugin_version    = $data['plugin_version'] ?? $site->plugin_version;
+        // An activating plugin is definitive platform proof — record it as
+        // detection (never override an explicit user choice).
+        if (! $site->platform_override) {
+            $site->detected_platform = ($data['woocommerce_active'] ?? false) ? 'woocommerce' : 'wordpress';
+            $site->platform = $site->detected_platform;
+        }
         $site->save();
 
         $connectorToken = $site->issueConnectorToken(); // "<key_id>.<secret>"

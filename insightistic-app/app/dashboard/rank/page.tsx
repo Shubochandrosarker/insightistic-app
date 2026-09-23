@@ -230,8 +230,8 @@ export default function RankTrackerPage() {
     return (
       <EmptyState
         icon={<Target size={20} />}
-        title="No site connected yet"
-        hint="Connect a WordPress site with the Insightistic plugin to track its keyword positions here."
+        title="No website yet"
+        hint="Add a website to track its keyword positions here."
       />
     );
 

@@ -456,7 +456,7 @@ function EmptyAgencyHint() {
         <Building2 size={20} />
       </div>
       <h3 className="text-sm font-semibold text-fg">No sites in your organization yet</h3>
-      <p className="mt-1 max-w-sm text-sm text-muted">Connect a WordPress site with the Insightistic plugin and it will appear in the portfolio.</p>
+      <p className="mt-1 max-w-sm text-sm text-muted">Add a website (any platform) and it will appear in the portfolio.</p>
     </div>
   );
 }

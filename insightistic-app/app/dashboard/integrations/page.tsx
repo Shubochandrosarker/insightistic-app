@@ -54,6 +54,7 @@ const STATE_LABEL: Record<string, string> = {
 type Source = {
   source: string;
   state: string;
+  connection_method: string | null;
   label: string | null;
   last_successful_at: string | null;
   latest_data_at: string | null;
@@ -65,7 +66,17 @@ type Source = {
   configured: boolean;
   connected: boolean;
   detail: { connected_account: string | null; resource: { id: string } | null } | null;
+  plugin_fed: { active: boolean; last_data_at: string | null } | null;
+  attachable_from_org: boolean;
 };
+
+type GoogleAccount = {
+  provider: string;
+  account_email: string | null;
+  account_id: string | null;
+  scopes: string[];
+  connected_at: string | null;
+} | null;
 
 type Resource = { id: string; name: string; account: string };
 
@@ -75,7 +86,7 @@ export default function IntegrationsPage() {
   const params = useSearchParams();
   const router = useRouter();
 
-  const { data, loading, error, reload } = useApi<{ sources: Source[] }>(
+  const { data, loading, error, reload } = useApi<{ sources: Source[]; google_account?: GoogleAccount }>(
     siteId ? `/sites/${siteId}/integrations` : null,
   );
 
@@ -84,13 +95,18 @@ export default function IntegrationsPage() {
 
   useEffect(() => {
     const outcome = params.get("integration");
-    if (!outcome) return;
+    const googleAccount = params.get("google_account");
+    if (!outcome && !googleAccount) return;
 
-    setBanner(
-      outcome === "connected"
-        ? { tone: "ok", text: `Connected. Choose a ${RESOURCE_NOUN[params.get("source") || ""] || "property"} below to finish.` }
-        : { tone: "bad", text: consentError(params.get("reason")) },
-    );
+    if (googleAccount) {
+      setBanner({ tone: "ok", text: `Google account ${googleAccount} connected for your workspace.` });
+    } else {
+      setBanner(
+        outcome === "connected"
+          ? { tone: "ok", text: `Connected. Choose a ${RESOURCE_NOUN[params.get("source") || ""] || "property"} below to finish.` }
+          : { tone: "bad", text: consentError(params.get("reason")) },
+      );
+    }
 
     // Drop the query string so a refresh doesn't replay the banner.
     router.replace("/dashboard/integrations");
@@ -100,8 +116,9 @@ export default function IntegrationsPage() {
     return (
       <EmptyState
         icon={<Plug size={20} />}
-        title="No site connected yet"
-        hint="Connect a WordPress site to see its data-source health here."
+        title="No website yet"
+        hint="Add a website to see its data-source health here."
+        action={<Button onClick={() => router.push("/dashboard/add-website")}>Add website</Button>}
       />
     );
 
@@ -141,6 +158,8 @@ export default function IntegrationsPage() {
         </div>
       )}
 
+      <GoogleAccountCard account={data?.google_account ?? null} onChanged={reload} />
+
       <h2 className="mb-3 text-sm font-semibold text-fg">Connected directly</h2>
       <div className="grid gap-4 lg:grid-cols-2">
         {direct.map((s) => (
@@ -149,6 +168,10 @@ export default function IntegrationsPage() {
       </div>
 
       <h2 className="mb-3 mt-8 text-sm font-semibold text-fg">Provided by the WordPress plugin</h2>
+      <p className="mb-3 text-xs text-muted">
+        Optional connector — WordPress/WooCommerce data syncs through the plugin. A website never
+        needs it for search, audits, uptime or PageSpeed.
+      </p>
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {viaPlugin.map((s) => (
           <Card key={s.source}>
@@ -175,6 +198,83 @@ export default function IntegrationsPage() {
         ))}
       </div>
     </div>
+  );
+}
+
+/**
+ * The ONE Google consent for the whole workspace (spec §5/§6). When this is
+ * connected, GSC and GA4 attach to any site with no second consent — and
+ * the Add Website page can import every Search Console property.
+ */
+function GoogleAccountCard({ account, onChanged }: { account: GoogleAccount; onChanged: () => void }) {
+  const [busy, setBusy] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const [confirmOff, setConfirmOff] = useState(false);
+
+  async function run(key: string, fn: () => Promise<void>) {
+    setBusy(key);
+    setErr(null);
+    try {
+      await fn();
+    } catch (e: any) {
+      setErr(e?.message || "That didn't work. Try again.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  const connect = () =>
+    run("connect", async () => {
+      const { authorize_url } = await apiPost("/integrations/google/account/authorize-url");
+      window.location.href = authorize_url;
+    });
+
+  const disconnect = () =>
+    run("disconnect", async () => {
+      await apiDelete("/integrations/google/account");
+      setConfirmOff(false);
+      onChanged();
+    });
+
+  return (
+    <Card className="mb-6">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <span className="font-semibold text-fg">Google account</span>
+          <p className="mt-0.5 text-xs text-muted">
+            One connection for your whole workspace — Search Console and Google Analytics,
+            read-only, shared by every website.
+          </p>
+        </div>
+        {account ? (
+          <div className="flex items-center gap-3">
+            <Badge tone="green" dot>Connected</Badge>
+            {confirmOff ? (
+              <span className="inline-flex items-center gap-2">
+                <Button variant="danger" disabled={busy === "disconnect"} onClick={disconnect}>
+                  {busy === "disconnect" ? "Disconnecting…" : "Confirm disconnect"}
+                </Button>
+                <Button variant="ghost" onClick={() => setConfirmOff(false)}>Cancel</Button>
+              </span>
+            ) : (
+              <Button variant="danger" onClick={() => setConfirmOff(true)}>Disconnect</Button>
+            )}
+          </div>
+        ) : (
+          <Button disabled={busy === "connect"} onClick={connect}>
+            {busy === "connect" ? "Redirecting…" : "Connect Google"}
+          </Button>
+        )}
+      </div>
+      {account && (
+        <p className="mt-2 text-xs text-muted">
+          Connected as <span className="font-medium text-fg">{account.account_email ?? "Google account"}</span>
+          {account.connected_at ? ` · since ${timeAgo(account.connected_at)}` : ""} · GSC and GA4
+          attach to sites below without another consent.
+        </p>
+      )}
+      {err && <p className="mt-3 rounded-lg border border-bad/25 bg-bad/10 px-3 py-2 text-xs text-bad">{err}</p>}
+    </Card>
   );
 }
 
@@ -210,6 +310,17 @@ function DirectSourceCard({ source: s, siteId, onChanged }: { source: Source; si
       const { authorize_url } = await apiPost(`/sites/${siteId}/integrations/${s.source}/authorize-url`);
       window.location.href = authorize_url;
     });
+
+  // Attach gsc/ga4 from the workspace's shared Google grant — no consent.
+  const attachFromOrg = () =>
+    run(
+      "attach",
+      () => apiPost(`/sites/${siteId}/integrations/${s.source}/attach`),
+      () => {
+        setNote("Attached from your Google account — choose the property below.");
+        onChanged();
+      },
+    );
 
   const connectCloudflare = () =>
     run(
@@ -307,11 +418,29 @@ function DirectSourceCard({ source: s, siteId, onChanged }: { source: Source; si
       {err && <p className="mt-3 rounded-lg border border-bad/25 bg-bad/10 px-3 py-2 text-xs text-bad">{err}</p>}
       {note && <p className="mt-3 rounded-lg border border-good/25 bg-good/10 px-3 py-2 text-xs text-good">{note}</p>}
 
+      {/* Plugin-fed line (spec §12): data arriving via the plugin is shown
+          as such, next to a direct connect path — never a flat "Not
+          connected" while data is flowing. */}
+      {s.plugin_fed?.active && !s.connected && (
+        <p className="mt-3 rounded-lg border border-brand/25 bg-brand/10 px-3 py-2 text-xs text-fg">
+          Connected via the WordPress plugin
+          {s.plugin_fed.last_data_at ? ` — last data ${timeAgo(s.plugin_fed.last_data_at)}` : ""}.
+          Connect directly with Google for SaaS-side syncs.
+        </p>
+      )}
+
       {/* Step 1 — no credential yet. */}
       {s.state === "not_configured" && s.auth_type === "oauth" && (
-        <Button className="mt-4" disabled={!s.configured || busy === "connect"} onClick={connect}>
-          {busy === "connect" ? "Redirecting…" : "Connect with Google"}
-        </Button>
+        <div className="mt-4 flex flex-wrap gap-2">
+          {s.attachable_from_org && (
+            <Button disabled={busy === "attach"} onClick={attachFromOrg}>
+              {busy === "attach" ? "Attaching…" : "Attach from Google account"}
+            </Button>
+          )}
+          <Button variant={s.attachable_from_org ? "ghost" : "primary"} disabled={!s.configured || busy === "connect"} onClick={connect}>
+            {busy === "connect" ? "Redirecting…" : s.attachable_from_org ? "Connect a different Google account" : "Connect with Google"}
+          </Button>
+        </div>
       )}
 
       {s.state === "not_configured" && s.auth_type === "api_token" && (

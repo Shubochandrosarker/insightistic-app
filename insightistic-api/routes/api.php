@@ -231,6 +231,36 @@ Route::middleware(['auth:sanctum', 'tenant', 'restrict.impersonation'])->group(f
     Route::get('sites', [SiteController::class, 'index']);
     Route::post('sites', [SiteController::class, 'store']);
 
+    // Product funnel events from the SPA (spec §33). Strict taxonomy +
+    // props whitelist enforced server-side (AttributionService::event).
+    Route::post('events', function (\Illuminate\Http\Request $request) {
+        $data = $request->validate([
+            'event' => ['required', 'string', 'max:64'],
+            'props' => ['nullable', 'array'],
+        ]);
+
+        $recorded = app(\App\Services\Analytics\AttributionService::class)->event(
+            $data['event'],
+            app(\App\Support\Tenancy::class)->organization(),
+            $request->user(),
+            $data['props'] ?? [],
+        );
+
+        return response()->json(['recorded' => $recorded !== null]);
+    })->middleware('throttle:auth');
+
+    // Org-level provider accounts (spec §5/§6): ONE Google consent for
+    // every site in the organization. Not under site.access — these are
+    // organization-scoped, not site-scoped.
+    Route::get('integrations/google/account', [IntegrationsController::class, 'googleAccountStatus']);
+    Route::get('integrations/google/ga4/properties', [IntegrationsController::class, 'ga4Properties']);
+    Route::middleware('role:owner,admin')->group(function () {
+        Route::post('integrations/google/account/authorize-url', [IntegrationsController::class, 'googleAccountAuthorizeUrl']);
+        Route::delete('integrations/google/account', [IntegrationsController::class, 'googleAccountDisconnect']);
+        Route::get('integrations/google/gsc/properties', [IntegrationsController::class, 'gscProperties']);
+        Route::post('integrations/google/gsc/import', [IntegrationsController::class, 'gscImport']);
+    });
+
     Route::middleware('site.access')->group(function () {
         Route::get('sites/{site}', [SiteController::class, 'show']);
         Route::get('sites/{site}/health', [SiteController::class, 'health']);
@@ -448,6 +478,7 @@ Route::middleware(['auth:sanctum', 'tenant', 'restrict.impersonation'])->group(f
             Route::post('sites/{site}/integrations/cloudflare/connect', [IntegrationsController::class, 'connectCloudflare']);
             Route::post('sites/{site}/integrations/bing/connect', [IntegrationsController::class, 'connectBing']);
             Route::post('sites/{site}/integrations/{source}/authorize-url', [IntegrationsController::class, 'authorizeUrl']);
+            Route::post('sites/{site}/integrations/{source}/attach', [IntegrationsController::class, 'attach']);
             Route::get('sites/{site}/integrations/{source}/resources', [IntegrationsController::class, 'resources']);
             Route::post('sites/{site}/integrations/{source}/select', [IntegrationsController::class, 'select']);
             Route::post('sites/{site}/integrations/{source}/test', [IntegrationsController::class, 'test']);

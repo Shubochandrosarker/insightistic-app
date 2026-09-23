@@ -116,8 +116,8 @@ export default function AuditIssuesPage() {
     return (
       <EmptyState
         icon={<FileSearch size={20} />}
-        title="No site connected yet"
-        hint="Connect a WordPress site with the Insightistic plugin to review its crawl issues here."
+        title="No website yet"
+        hint="Add a website to review its crawl issues here — any platform works."
       />
     );
 

@@ -1,6 +1,7 @@
 "use client";
 import { createContext, useContext, useEffect, useState, ReactNode } from "react";
 import { apiGet, apiPost, setToken } from "./api";
+import { getAttributionBundle } from "./attribution";
 import type { Org, User } from "./types";
 
 interface RegisterInput {
@@ -73,8 +74,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   async function register(p: RegisterInput) {
     // The form has a single password field; mirror it as the confirmation so
-    // the backend's `confirmed` rule passes without a second input.
-    const res = await apiPost("/auth/register", { ...p, password_confirmation: p.password });
+    // the backend's `confirmed` rule passes without a second input. The
+    // attribution bundle (UTM/gclid first+last touch, spec §32) rides along.
+    const attribution = getAttributionBundle() ?? undefined;
+    const res = await apiPost("/auth/register", {
+      ...p,
+      password_confirmation: p.password,
+      attribution,
+    });
     setToken(res.token);
     setUser(res.user);
     setOrgs(res.organization ? [{ ...res.organization, role: "owner" }] : []);

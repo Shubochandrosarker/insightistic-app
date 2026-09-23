@@ -63,8 +63,8 @@ export default function PerformancePage() {
     return (
       <EmptyState
         icon={<Gauge size={20} />}
-        title="No site connected yet"
-        hint="Connect a WordPress site with the Insightistic plugin to start tracking site speed here."
+        title="No website yet"
+        hint="Add a website to start tracking site speed here — any platform works."
       />
     );
 

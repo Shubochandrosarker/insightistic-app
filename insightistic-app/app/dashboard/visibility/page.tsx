@@ -174,8 +174,8 @@ export default function VisibilityPage() {
     return (
       <EmptyState
         icon={<Sparkles size={20} />}
-        title="No site connected yet"
-        hint="Connect a WordPress site with the Insightistic plugin to start measuring AI visibility."
+        title="No website yet"
+        hint="Add a website to start measuring its AI visibility."
       />
     );
 

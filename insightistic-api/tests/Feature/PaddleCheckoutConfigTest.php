@@ -46,6 +46,7 @@ function paddleConfiguredPlan(string $slug): Plan
 
 it('returns checkout config for an owner when the flag is on and the price exists', function () {
     config()->set('feature-flags.paddle', true);
+    config()->set('billing.paddle.client_token', 'test-client-token');
 
     [, $org, $token] = paddleConfigOwner('paddle-cfg-ok@example.com');
     $plan = paddleConfiguredPlan('paddle-cfg-ok-' . Str::random(4));

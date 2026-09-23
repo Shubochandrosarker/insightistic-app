@@ -6,6 +6,7 @@ use App\Models\BillingTransaction;
 use App\Models\EntitlementGrant;
 use App\Models\Organization;
 use App\Models\PlanPrice;
+use App\Models\ProductEvent;
 use App\Models\Subscription;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Log;
@@ -91,9 +92,47 @@ final class PaddleTransactionProjector
 
         if ($completed) {
             $this->fulfill($txn);
+            $this->firePurchaseEvents($txn, $org);
         }
 
         return $txn;
+    }
+
+    /**
+     * Server-side purchase conversion events (spec §32/§33) — recorded from
+     * VERIFIED Paddle webhook state, never from a browser callback. Exactly-
+     * once per transaction: dedupe key is transaction_id inside props.
+     */
+    private function firePurchaseEvents(BillingTransaction $txn, Organization $org): void
+    {
+        try {
+            $analytics = app(\App\Services\Analytics\AttributionService::class);
+
+            $already = ProductEvent::withoutGlobalScope('organization')
+                ->where('event', 'purchase_completed')
+                ->where('props_json->transaction_id', $txn->provider_transaction_id)
+                ->exists();
+            if ($already) {
+                return;
+            }
+
+            $analytics->event('purchase_completed', $org, null, [
+                'transaction_id'  => $txn->provider_transaction_id,
+                'subscription_id' => $txn->provider_subscription_id,
+                'plan_kind'       => $txn->kind,
+                'price_id'        => $txn->provider_price_id,
+                'currency'        => $txn->currency,
+                'amount'          => $txn->total_minor,
+            ]);
+
+            match ($txn->kind) {
+                'lifetime'    => $analytics->event('ltd_purchased', $org, null, ['transaction_id' => $txn->provider_transaction_id, 'price_id' => $txn->provider_price_id]),
+                'credit_pack' => $analytics->event('credit_pack_purchased', $org, null, ['transaction_id' => $txn->provider_transaction_id, 'price_id' => $txn->provider_price_id]),
+                default       => null,
+            };
+        } catch (\Throwable $e) {
+            Log::warning('purchase event recording failed', ['txn' => $txn->id, 'error' => $e->getMessage()]);
+        }
     }
 
     /**

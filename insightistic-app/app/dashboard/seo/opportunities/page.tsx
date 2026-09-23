@@ -71,8 +71,8 @@ export default function SearchOpportunitiesPage() {
     return (
       <EmptyState
         icon={<Sparkles size={20} />}
-        title="No site connected yet"
-        hint="Connect a WordPress site with the Insightistic plugin to see its search opportunities here."
+        title="No website yet"
+        hint="Add a website and connect Search Console to see its search opportunities here."
       />
     );
 

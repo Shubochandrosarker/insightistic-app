@@ -12,7 +12,7 @@ class Organization extends Model
 {
     protected $fillable = [
         'name', 'slug', 'owner_user_id', 'plan_id', 'status', 'trial_ends_at',
-        'archived_at', 'internal_notes',
+        'archived_at', 'internal_notes', 'first_touch_json', 'last_touch_json',
     ];
 
     protected function casts(): array
@@ -23,6 +23,8 @@ class Organization extends Model
             'deletion_requested_at'  => 'datetime',
             'deletion_scheduled_for' => 'datetime',
             'onboarding_dismissed_at' => 'datetime',
+            'first_touch_json'       => 'array',
+            'last_touch_json'        => 'array',
         ];
     }
 

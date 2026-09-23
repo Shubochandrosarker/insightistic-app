@@ -213,6 +213,21 @@ class CrawlRunExecutor
                 'pages_discovered' => DB::table('crawl_frontier')->where('run_id', $fresh->id)->count(),
                 'issues_found' => $issuesFound,
             ])->save();
+
+            // Funnel event (spec §33) — the run truly finished.
+            try {
+                app(\App\Services\Analytics\AttributionService::class)->event(
+                    'crawler_completed',
+                    $fresh->site?->organization,
+                    null,
+                    [
+                        'domain'     => $fresh->site?->normalized_domain,
+                        'trigger'    => $fresh->trigger,
+                        'page_count' => $fresh->pages_crawled,
+                    ],
+                );
+            } catch (Throwable) {
+            }
         });
     }
 

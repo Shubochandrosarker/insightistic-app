@@ -390,6 +390,18 @@ class IntegrationsController extends Controller
         // pull an initial window immediately rather than waiting for tonight.
         SyncDataSource::dispatch($site->id, $source);
 
+        // Funnel events (spec §33) — best-effort, never blocking.
+        try {
+            $events = ['gsc' => 'gsc_connected', 'ga4' => 'ga4_connected', 'cloudflare' => 'cloudflare_connected', 'bing' => 'bing_connected'];
+            if ($event = $events[$source] ?? null) {
+                app(\App\Services\Analytics\AttributionService::class)
+                    ->event($event, $site->organization, $request->user(), [
+                        'domain' => $site->normalized_domain, 'provider' => $source,
+                    ]);
+            }
+        } catch (\Throwable) {
+        }
+
         return response()->json(['status' => 'selected']);
     }
 

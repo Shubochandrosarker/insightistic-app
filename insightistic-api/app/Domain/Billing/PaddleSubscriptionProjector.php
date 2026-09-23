@@ -64,6 +64,20 @@ final class PaddleSubscriptionProjector
         $scheduledAt = $this->date($payload['scheduled_change']['effective_at'] ?? null);
         $period = $payload['current_billing_period'] ?? [];
 
+        $isNewSubscription = ! $sub->exists;
+
+        // Funnel events (spec §33) — exactly-once per subscription lifecycle.
+        try {
+            $analytics = app(\App\Services\Analytics\AttributionService::class);
+            if ($isNewSubscription && $status !== 'canceled') {
+                $analytics->event('subscription_started', $org, null, [
+                    'subscription_id' => $payload['id'] ?? null,
+                    'price_id'        => $payload['items'][0]['price']['id'] ?? null,
+                ]);
+            }
+        } catch (\Throwable) {
+        }
+
         $sub->organization_id          = $org->id;
         $sub->billing_provider         = 'paddle';
         $sub->provider_subscription_id = $payload['id'];

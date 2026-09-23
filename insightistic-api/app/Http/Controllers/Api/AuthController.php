@@ -38,7 +38,14 @@ class AuthController extends Controller
             'email'             => ['required', 'email', 'max:190', 'unique:users,email'],
             'password'          => ['required', 'confirmed', Password::min(8)],
             'organization_name' => ['required', 'string', 'max:120'],
+            // Marketing attribution captured client-side (spec §32); the
+            // service whitelists every key before storage.
+            'attribution'       => ['nullable', 'array'],
+            'attribution.first_touch' => ['nullable', 'array'],
+            'attribution.last_touch'  => ['nullable', 'array'],
         ]);
+        $attribution = $data['attribution'] ?? null;
+        unset($data['attribution']);
 
         $rawLicenseKey = null;
 
@@ -63,6 +70,29 @@ class AuthController extends Controller
         // Reload so DB-defaulted columns (is_super_admin=false, …) are present
         // on the model — the response must never report null for them.
         $user->refresh();
+
+        // Attribution (spec §32): first/last touch on the org, sanitized copy
+        // on the user, then the signup_completed funnel event (spec §33).
+        try {
+            $analytics = app(\App\Services\Analytics\AttributionService::class);
+            $analytics->applyToOrganization(
+                $org,
+                $attribution['first_touch'] ?? null,
+                $attribution['last_touch'] ?? null,
+            );
+            $clean = $analytics->sanitize($attribution['first_touch'] ?? null);
+            if ($clean) {
+                $user->attribution_json = $clean;
+                $user->save();
+            }
+            $analytics->event('signup_completed', $org, $user, [
+                'utm_source'  => $clean['utm_source'] ?? null,
+                'utm_medium'  => $clean['utm_medium'] ?? null,
+                'utm_campaign' => $clean['utm_campaign'] ?? null,
+            ]);
+        } catch (\Throwable $e) {
+            report($e); // analytics must never break signup
+        }
 
         $token = $user->createToken('spa')->plainTextToken;
 

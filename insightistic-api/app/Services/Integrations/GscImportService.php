@@ -90,6 +90,8 @@ class GscImportService
         $used  = Site::withoutGlobalScope('organization')->where('organization_id', $org->id)->count();
 
         $created = $attached = $skipped = [];
+        $analytics = app(\App\Services\Analytics\AttributionService::class);
+        $analytics?->event('gsc_import_started', $org, null, ['property_count' => count($properties)]);
 
         foreach (array_values(array_unique($properties)) as $property) {
             if (! $readable->has($property)) {
@@ -124,6 +126,16 @@ class GscImportService
                 $attached[] = $this->attachAndSync($site, $account, $property, $userId, false);
             }
         }
+
+        foreach ($created as $item) {
+            $analytics->event('site_imported', $org, null, [
+                'domain' => $item['domain'], 'source' => 'gsc', 'is_new' => true,
+            ]);
+        }
+        $analytics->event('gsc_import_completed', $org, null, [
+            'property_count' => count($properties),
+            'site_count'     => count($created) + count($attached),
+        ]);
 
         return ['created' => $created, 'attached' => $attached, 'skipped' => $skipped];
     }

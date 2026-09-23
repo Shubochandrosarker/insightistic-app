@@ -86,6 +86,16 @@ class SiteController extends Controller
         $kickoff = app(SiteKickoff::class)->start($site);
         $token = $site->issueConnectorToken();
 
+        try {
+            app(\App\Services\Analytics\AttributionService::class)
+                ->event('site_added', $org, $request->user(), [
+                    'domain'   => $parts['host_key'],
+                    'platform' => 'generic',
+                    'method'   => 'url',
+                ]);
+        } catch (\Throwable) {
+        }
+
         return response()->json([
             'site'            => $site->only(['id', 'name', 'domain', 'platform', 'normalized_domain', 'canonical_url', 'status', 'connection_status']),
             'kickoff'         => $kickoff,

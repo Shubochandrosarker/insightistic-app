@@ -231,6 +231,24 @@ Route::middleware(['auth:sanctum', 'tenant', 'restrict.impersonation'])->group(f
     Route::get('sites', [SiteController::class, 'index']);
     Route::post('sites', [SiteController::class, 'store']);
 
+    // Product funnel events from the SPA (spec §33). Strict taxonomy +
+    // props whitelist enforced server-side (AttributionService::event).
+    Route::post('events', function (\Illuminate\Http\Request $request) {
+        $data = $request->validate([
+            'event' => ['required', 'string', 'max:64'],
+            'props' => ['nullable', 'array'],
+        ]);
+
+        $recorded = app(\App\Services\Analytics\AttributionService::class)->event(
+            $data['event'],
+            app(\App\Support\Tenancy::class)->organization(),
+            $request->user(),
+            $data['props'] ?? [],
+        );
+
+        return response()->json(['recorded' => $recorded !== null]);
+    })->middleware('throttle:auth');
+
     // Org-level provider accounts (spec §5/§6): ONE Google consent for
     // every site in the organization. Not under site.access — these are
     // organization-scoped, not site-scoped.

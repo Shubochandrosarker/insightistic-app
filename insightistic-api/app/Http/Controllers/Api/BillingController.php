@@ -208,6 +208,19 @@ class BillingController extends Controller
             'kind' => ['required', 'in:monthly,yearly,lifetime,credit_pack'],
         ]);
 
+        // Funnel event (spec §33): checkout OPENED — the verified purchase
+        // event lands later from the Paddle webhook projector, never from
+        // the browser.
+        try {
+            app(\App\Services\Analytics\AttributionService::class)->event(
+                'checkout_started',
+                $this->tenancy->organization(),
+                $request->user(),
+                ['plan' => $data['plan'], 'checkout_kind' => $data['kind']],
+            );
+        } catch (\Throwable) {
+        }
+
         try {
             return response()->json($this->paddleBilling->checkoutConfig(
                 $this->tenancy->organization(),

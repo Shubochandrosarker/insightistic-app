@@ -43,10 +43,28 @@ class BackfillGscHistory implements ShouldQueue
     ) {
     }
 
+    /**
+     * Early dispatches used the singular GSC dimension names ('query'/'page')
+     * and blew up in the client's match with "Unknown SEO daily dimension".
+     * Normalizing here (not just in the constructor) also fixes jobs that were
+     * already serialized into failed_jobs — a `queue:retry` replays them with
+     * the old property values, and unserialize never re-runs the constructor.
+     */
+    private function dimension(): string
+    {
+        return match ($this->dimension) {
+            'query' => 'queries',
+            'page'  => 'pages',
+            default => $this->dimension,
+        };
+    }
+
     public function handle(GscClient $gsc): void
     {
+        $dimension = $this->dimension();
+
         $state = SeoBackfillState::firstOrCreate(
-            ['site_id' => $this->site->id, 'dimension' => $this->dimension],
+            ['site_id' => $this->site->id, 'dimension' => $dimension],
             ['status' => 'pending'],
         );
 
@@ -110,7 +128,7 @@ class BackfillGscHistory implements ShouldQueue
             do {
                 $chunkEnd = $cursor->addDays(29)->min($to);
 
-                $gsc->fetchDailyWindow($this->site, $credential, $cursor->toDateString(), $chunkEnd->toDateString(), $this->dimension);
+                $gsc->fetchDailyWindow($this->site, $credential, $cursor->toDateString(), $chunkEnd->toDateString(), $dimension);
 
                 // Advance the coverage cursor only after the chunk fully
                 // landed, so a crash mid-window replays that whole window.

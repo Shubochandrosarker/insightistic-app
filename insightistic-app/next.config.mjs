@@ -79,6 +79,12 @@ const securityHeaders = [
 const nextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
+  // The API proxy streams SSE (copilot chat). Next's compression middleware
+  // gzips responses and holds small SSE deltas in the zlib buffer, so the
+  // browser sees zero bytes for the whole answer and the outer nginx
+  // read-timeout kills the "stalled" connection mid-stream ("network
+  // error"). TLS+gzip terminates at nginx; this hop must stay unbuffered.
+  compress: false,
   // No next/image usage in this app; keep the optimizer (and its native sharp
   // pipeline) explicitly out of the request path.
   images: { unoptimized: true },

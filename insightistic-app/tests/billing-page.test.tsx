@@ -139,9 +139,9 @@ describe("Billing page checkout", () => {
     await waitFor(() => expect(document.getElementById("paddle-js")).toBeTruthy());
     resolvePaddleLoad();
 
-    await waitFor(() =>
-      expect(P.Initialize).toHaveBeenCalledWith({ token: "test_client_token", environment: "production" }),
-    );
+    // Initialize takes only the token — passing `environment` throws
+    // "[PADDLE] Unknown option parameter 'environment'" in Paddle.js v2.
+    await waitFor(() => expect(P.Initialize).toHaveBeenCalledWith({ token: "test_client_token" }));
     expect(P.Environment.set).not.toHaveBeenCalled();
 
     await waitFor(() => expect(P.Checkout.open).toHaveBeenCalled());

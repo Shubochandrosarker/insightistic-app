@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Api\Connector\SyncV2Controller;
 use App\Models\DataSourceConnection;
+use App\Models\PerformanceRun;
 use App\Models\ProviderAccount;
 use App\Models\Site;
 use App\Services\Integrations\ProviderAccountManager;
@@ -31,6 +32,72 @@ function pushPluginGscDaily(Site $site, array $days): void
         'Content-Type' => 'application/json',
     ])->assertOk();
 }
+
+function pushPluginPerformanceRun(Site $site, array $payload): void
+{
+    $body = json_encode($payload);
+    $ts = (string) now()->timestamp;
+    $nonce = Str::random(16);
+    $path = '/api/connector/v1/sync/performance/runs';
+    $sig = hash_hmac('sha256', "POST\n{$path}\n{$ts}\n{$nonce}\n".hash('sha256', $body), $site->connector_secret);
+
+    test()->postJson($path, $payload, [
+        'X-INS-Key-Id' => $site->connector_key_id,
+        'X-INS-Timestamp' => $ts,
+        'X-INS-Nonce' => $nonce,
+        'X-INS-Signature' => $sig,
+        'Content-Type' => 'application/json',
+    ])->assertOk();
+}
+
+it('marks scoreless performance pushes failed and keeps the last valid score visible', function () {
+    [$user, $org] = makeOrgUser('cm-scoreless-performance@example.com');
+    $site = Site::withoutGlobalScope('organization')->create([
+        'organization_id' => $org->id,
+        'name' => 'Performance',
+        'domain' => 'performance.example.com',
+        'normalized_domain' => 'performance.example.com',
+        'platform' => 'wordpress',
+    ]);
+    $site->issueConnectorToken();
+
+    $valid = PerformanceRun::create([
+        'site_id' => $site->id,
+        'url' => 'https://performance.example.com',
+        'strategy' => 'mobile',
+        'run_at' => now()->subDay(),
+        'status' => 'complete',
+        'performance_score' => 84,
+    ]);
+
+    pushPluginPerformanceRun($site, [
+        'url' => 'https://performance.example.com',
+        'strategy' => 'mobile',
+        'run_at' => now()->toIso8601String(),
+        'performance_score' => null,
+        'status' => 'complete',
+    ]);
+
+    $failed = PerformanceRun::where('site_id', $site->id)->latest('id')->firstOrFail();
+    expect($failed->status)->toBe('failed')
+        ->and($failed->error_message)->toBe('No performance score in connector payload.')
+        ->and(DataSourceConnection::withoutGlobalScope('organization')
+            ->where('site_id', $site->id)->where('source', 'pagespeed')->value('state'))->toBe('error');
+
+    // Existing installations may already contain a scoreless row marked
+    // complete. The read endpoint must still select a usable older result.
+    PerformanceRun::create([
+        'site_id' => $site->id,
+        'url' => 'https://performance.example.com',
+        'strategy' => 'mobile',
+        'run_at' => now()->addMinute(),
+        'status' => 'complete',
+        'performance_score' => null,
+    ]);
+
+    $response = $this->actingAs($user)->getJson("/api/sites/{$site->id}/analytics/performance/latest?strategy=mobile");
+    $response->assertOk()->assertJsonPath('run.id', $valid->id)->assertJsonPath('run.performance_score', 84);
+});
 
 it('plugin GSC push without direct connection shows plugin-fed, direct stays connectable', function () {
     [$user, $org] = makeOrgUser('cm-plugin-only@example.com');

@@ -206,8 +206,10 @@ class GscImportService
 
         // Initial window now; full history in the background.
         SyncDataSource::dispatch($site->id, 'gsc', 30);
-        Queue::push(new BackfillGscHistory($site, 'query', now()->subMonths(16)->toDateString(), now()->subDay()->toDateString()));
-        Queue::push(new BackfillGscHistory($site, 'page', now()->subMonths(16)->toDateString(), now()->subDay()->toDateString()));
+        $backfillFrom = now()->subMonths(16)->toDateString();
+        $backfillTo = now()->subDay()->toDateString();
+        Queue::push(new BackfillGscHistory($site, 'queries', $backfillFrom, $backfillTo));
+        Queue::push(new BackfillGscHistory($site, 'pages', $backfillFrom, $backfillTo));
 
         if ($isNew) {
             $this->kickoff->start($site); // crawler + uptime + pagespeed + platform detect

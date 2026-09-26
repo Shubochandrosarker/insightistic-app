@@ -34,7 +34,9 @@ return [
         'model'    => env('INSIGHTISTIC_AI_MODEL', 'gpt-4o-mini'),
         'api_key'  => env('OPENAI_API_KEY'),
         'base_url' => env('OPENAI_BASE_URL', 'https://api.openai.com/v1'),
-        'timeout'  => (int) env('INSIGHTISTIC_AI_TIMEOUT', 60),
+        // Keep AI calls below the 300s proxy/FastCGI ceiling while allowing
+        // slower generation responses to finish instead of dying at 60s.
+        'timeout'  => (int) env('INSIGHTISTIC_AI_TIMEOUT', 240),
     ],
 
     // Shared WordPressistic AI Brain gateway (wpistic-ai-gateway Worker).

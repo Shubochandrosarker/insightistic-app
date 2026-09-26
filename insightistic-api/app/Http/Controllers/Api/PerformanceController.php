@@ -47,9 +47,13 @@ class PerformanceController extends Controller
         $site = $this->site($request);
         $strategy = $request->query('strategy', 'mobile') === 'desktop' ? 'desktop' : 'mobile';
 
+        // A complete run with a null score (a PSI 200 that carried no
+        // Lighthouse result) must not shadow the newest score-bearing run —
+        // otherwise the dashboard tile goes blank on stale-but-valid data.
         $run = PerformanceRun::where('site_id', $site->id)
             ->where('strategy', $strategy)
             ->where('status', 'complete')
+            ->whereNotNull('performance_score')
             ->orderByDesc('run_at')
             ->with('issues')
             ->first();

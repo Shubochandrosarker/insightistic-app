@@ -61,6 +61,34 @@ class ContextAssembler
         $sessions = (int) $rows->sum('sessions');
         $dateRange = "{$range->dateFrom()} to {$range->dateTo()}";
 
+        // GSC-only sites never get GA4/connector traffic rows; without this
+        // fallback the "traffic" insight is permanently "no data yet" for the
+        // majority of WordPress installs that only connect Search Console.
+        if ($sessions === 0) {
+            $seoRows = SeoDaily::where('site_id', $site->id)
+                ->whereBetween('date', [$range->dateFrom(), $range->dateTo()])
+                ->get(['clicks', 'impressions']);
+
+            $clicks = (int) $seoRows->sum('clicks');
+            $impressions = (int) $seoRows->sum('impressions');
+
+            return [
+                'has_data' => $clicks > 0 || $impressions > 0,
+                'evidence' => [
+                    ['label' => 'Organic clicks', 'value' => $clicks, 'source' => 'gsc', 'date_range' => $dateRange],
+                    ['label' => 'Organic impressions', 'value' => $impressions, 'source' => 'gsc', 'date_range' => $dateRange],
+                ],
+                'raw' => [
+                    'sessions' => 0,
+                    'users' => 0,
+                    'conversions' => 0,
+                    'organic_clicks' => $clicks,
+                    'organic_impressions' => $impressions,
+                    'data_note' => 'No GA4/connector traffic data; organic Search Console figures stand in for traffic.',
+                ],
+            ];
+        }
+
         $topChannel = TrafficDimensionSnapshot::where('site_id', $site->id)
             ->where('dimension_type', 'channel')
             ->where('period_start', '>=', $range->dateFrom())
@@ -121,6 +149,7 @@ class ContextAssembler
         $run = PerformanceRun::where('site_id', $site->id)
             ->where('strategy', $strategy)
             ->where('status', 'complete')
+            ->whereNotNull('performance_score')
             ->orderByDesc('run_at')
             ->first();
 

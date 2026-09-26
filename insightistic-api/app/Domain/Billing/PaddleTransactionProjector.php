@@ -210,6 +210,35 @@ final class PaddleTransactionProjector
             }
         }
 
+        // Purchases created outside our checkout (Paddle dashboard quick
+        // sales, payment links, customer-portal upgrades) may carry no
+        // custom_data or subscription. Use known Paddle customer references,
+        // but only when they identify exactly one organization; a shared
+        // customer must never be guessed onto the most recent tenant.
+        $customerId = $payload['customer_id'] ?? null;
+
+        if ($customerId) {
+            $transactionOrganizations = BillingTransaction::withoutGlobalScope('organization')
+                ->where('provider', 'paddle')
+                ->where('summary_json->customer_id', $customerId)
+                ->whereNotNull('organization_id')
+                ->pluck('organization_id');
+            $subscriptionOrganizations = Subscription::withoutGlobalScope('organization')
+                ->where('billing_provider', 'paddle')
+                ->where('provider_customer_id', $customerId)
+                ->whereNotNull('organization_id')
+                ->pluck('organization_id');
+
+            $organizationIds = $transactionOrganizations
+                ->merge($subscriptionOrganizations)
+                ->unique()
+                ->values();
+
+            if ($organizationIds->count() === 1 && ($org = Organization::find($organizationIds->first()))) {
+                return $org;
+            }
+        }
+
         return $txn->exists ? Organization::find($txn->organization_id) : null;
     }
 
@@ -219,10 +248,12 @@ final class PaddleTransactionProjector
             return null;
         }
 
+        // Identity lookup, deliberately without an is_active filter: the
+        // projector must keep classifying historical prices (founder LTDs,
+        // retired plans) correctly when an old webhook is replayed.
         return PlanPrice::query()
             ->where('provider', 'paddle')
             ->where('provider_price_id', $priceId)
-            ->where('is_active', true)
             ->first();
     }
 

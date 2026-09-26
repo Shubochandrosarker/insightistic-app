@@ -120,8 +120,22 @@ function MultiSelect({
   onToggle: (value: string) => void;
   allLabel: string;
 }) {
+  const detailsRef = useRef<HTMLDetailsElement>(null);
+
+  // Native <details> elements toggle independently — two open at once
+  // overlap their panels. A pointer outside this details element closes it.
+  useEffect(() => {
+    const el = detailsRef.current;
+    if (!el) return;
+    const onPointerDown = (e: PointerEvent) => {
+      if (!el.contains(e.target as Node)) el.open = false;
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    return () => document.removeEventListener("pointerdown", onPointerDown);
+  }, []);
+
   return (
-    <details className="relative">
+    <details ref={detailsRef} className="relative">
       <summary className="flex cursor-pointer list-none items-center gap-1.5 rounded-full border border-line bg-card2 px-3 py-1.5 text-xs font-semibold text-fg hover:border-violet/40 [&::-webkit-details-marker]:hidden">
         {label}
         <span className="text-muted">{selected.length ? selected.length : "auto"}</span>

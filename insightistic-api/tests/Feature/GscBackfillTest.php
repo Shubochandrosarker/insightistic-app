@@ -72,6 +72,29 @@ function gscGrainFake(\Closure $onQueryDaily): \Closure
     };
 }
 
+it('normalizes already-dispatched singular dimensions before state and client lookup', function () {
+    [, $org] = makeOrgUser('seo-grain-legacy-job@example.com');
+    $site = gscGrainSite($org);
+    gscGrainCredential($site);
+
+    Http::fake(gscGrainFake(fn () => [[
+        'keys' => ['2026-07-01', 'blue widgets'],
+        'clicks' => 4,
+        'impressions' => 150,
+        'ctr' => 0.0267,
+        'position' => 9.5,
+    ]]));
+
+    // This is the serialized property value on the previously failed jobs.
+    (new BackfillGscHistory($site, 'query', '2026-07-01', '2026-07-01'))
+        ->handle(app(GscClient::class));
+
+    $state = SeoBackfillState::where('site_id', $site->id)->firstOrFail();
+    expect($state->dimension)->toBe('queries')
+        ->and($state->status)->toBe('done')
+        ->and(SeoBackfillState::where('site_id', $site->id)->where('dimension', 'query')->exists())->toBeFalse();
+});
+
 it('writes daily-grain rows on sync and replays them idempotently', function () {
     [$user, $org] = makeOrgUser('seo-grain-sync@example.com');
     $site = gscGrainSite($org);

@@ -27,8 +27,6 @@ export interface PaddleCheckoutOpenOptions {
 
 export interface PaddleInitializeOptions {
   token: string;
-  /** Read by newer Paddle.js builds; older builds rely on Environment.set. */
-  environment?: string;
 }
 
 /** The slice of Paddle.js v2 this app uses. */
@@ -93,8 +91,11 @@ function loadPaddleJs(): Promise<void> {
  */
 export function initializeWith(P: PaddleJs, token: string, environment: PaddleEnvironment): PaddleJs {
   if (environment === "sandbox") P.Environment.set("sandbox");
-  // `environment` is only understood by newer builds; older builds ignore it.
-  P.Initialize({ token, environment });
+  // Initialize takes ONLY the token. `environment` is not an Initialize
+  // option in any Paddle.js v2 build — passing it throws
+  // "[PADDLE] Unknown option parameter 'environment'" and every checkout
+  // dies before opening. Sandbox selection above is the whole mechanism.
+  P.Initialize({ token });
   return P;
 }
 

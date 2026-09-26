@@ -357,7 +357,14 @@ class SyncV2Controller extends Controller
             'issues.*.description'   => ['nullable', 'string'],
         ]);
 
-        $run = DB::transaction(function () use ($site, $data) {
+        $hasScore = array_key_exists('performance_score', $data) && $data['performance_score'] !== null;
+        $reportedStatus = $data['status'] ?? null;
+        $runStatus = ! $hasScore && ($reportedStatus === null || $reportedStatus === 'complete')
+            ? 'failed'
+            : ($reportedStatus ?? 'complete');
+        $runError = $data['error_message'] ?? (! $hasScore ? 'No performance score in connector payload.' : null);
+
+        $run = DB::transaction(function () use ($site, $data, $runStatus, $runError) {
             $run = PerformanceRun::create([
                 'site_id'              => $site->id,
                 'url'                  => $data['url'],
@@ -382,8 +389,10 @@ class SyncV2Controller extends Controller
                 'ttfb_ms'              => $data['ttfb_ms'] ?? null,
                 'field_data_available' => $data['field_data_available'] ?? false,
                 'lab_data_available'   => $data['lab_data_available'] ?? true,
-                'status'               => $data['status'] ?? 'complete',
-                'error_message'        => $data['error_message'] ?? null,
+                // A scoreless push cannot remain complete even when the
+                // connector explicitly sent status=complete.
+                'status'               => $runStatus,
+                'error_message'        => $runError,
             ]);
 
             $issues = $data['issues'] ?? [];
@@ -406,8 +415,16 @@ class SyncV2Controller extends Controller
             return $run;
         });
 
-        $this->recordSource($site, 'pagespeed', ($data['status'] ?? 'complete') === 'complete');
-        $this->log($site, $this->batchId($request), 'performance_run', 'success', 1 + count($data['issues'] ?? []));
+        $successful = $run->status === 'complete';
+        $this->recordSource($site, 'pagespeed', $successful);
+        $this->log(
+            $site,
+            $this->batchId($request),
+            'performance_run',
+            $successful ? 'success' : 'error',
+            1 + count($data['issues'] ?? []),
+            $successful ? null : $run->error_message,
+        );
 
         return response()->json(['status' => 'ok', 'run_id' => $run->id]);
     }

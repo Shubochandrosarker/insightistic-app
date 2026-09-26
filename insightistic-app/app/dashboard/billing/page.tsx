@@ -94,6 +94,21 @@ function isPaddleNotEnabled(e: any): boolean {
   return e?.status === 501 || e?.data?.code === "paddle_not_enabled" || e?.code === "paddle_not_enabled";
 }
 
+/**
+ * Checkout errors split in two: API validation (readable, show as-is) and
+ * Paddle.js internals throwing inside the overlay flow — those surface as
+ * minified TypeErrors like "ton is not a function", which read as broken to
+ * the user. Log the original for diagnostics and show something actionable.
+ */
+function checkoutErrorMessage(e: any): string {
+  const raw = e?.message ? String(e.message) : "";
+  if (/is not a function|is not a constructor|Unknown option parameter/i.test(raw)) {
+    console.error("Paddle checkout failed", e);
+    return "Checkout could not start — a payment-script error. Refresh the page and try again; if it keeps failing, contact support.";
+  }
+  return raw || "Checkout could not be started.";
+}
+
 export default function BillingPage() {
   const { data, loading, reload } = useApi<any>("/billing/subscription");
   const { data: plansData } = useApi<any>("/public/plans");
@@ -187,7 +202,7 @@ export default function BillingPage() {
         },
       });
     } catch (e: any) {
-      setMsg(e?.message || "Checkout could not be started.");
+      setMsg(checkoutErrorMessage(e));
       setPhase("idle");
       setBusy(false);
     }
@@ -218,7 +233,7 @@ export default function BillingPage() {
         },
       });
     } catch (e: any) {
-      setMsg(e?.message || "Checkout could not be started.");
+      setMsg(checkoutErrorMessage(e));
       setPhase("idle");
       setBusy(false);
     }

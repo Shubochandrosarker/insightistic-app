@@ -1,6 +1,8 @@
 <?php
 
 use App\Domain\Billing\PaddleTransactionProjector;
+use App\Models\BillingTransaction;
+use App\Models\EntitlementGrant;
 use App\Models\Organization;
 use App\Models\PlanPrice;
 use App\Models\ProductEvent;
@@ -115,6 +117,47 @@ it('records purchase_completed server-side exactly once per Paddle transaction',
     expect($purchase->organization_id)->toBe($org->id)
         ->and($purchase->props_json['transaction_id'])->toBe('txn_dedupe_1')
         ->and($purchase->props_json['amount'])->toBe(9900);
+});
+
+it('resolves an external Paddle purchase through a unique known customer and inactive price mapping', function () {
+    [, $org] = makeOrgUser('ev-paddle-external-customer@example.com');
+    config()->set('billing.provider', 'paddle');
+
+    BillingTransaction::withoutGlobalScope('organization')->create([
+        'organization_id' => $org->id,
+        'provider' => 'paddle',
+        'provider_transaction_id' => 'txn_prior_customer',
+        'kind' => 'subscription',
+        'status' => 'completed',
+        'currency' => 'USD',
+        'summary_json' => ['customer_id' => 'ctm_known_customer'],
+    ]);
+
+    PlanPrice::create([
+        'provider' => 'paddle',
+        'provider_price_id' => 'pri_retired_ltd',
+        'plan_id' => $org->plan_id,
+        'kind' => 'lifetime',
+        'currency' => 'USD',
+        'amount_minor' => 9900,
+        'is_active' => false,
+    ]);
+
+    $transaction = app(PaddleTransactionProjector::class)->project([
+        'id' => 'txn_external_ltd',
+        'status' => 'completed',
+        'customer_id' => 'ctm_known_customer',
+        'items' => [['price' => ['id' => 'pri_retired_ltd']]],
+        'details' => ['totals' => ['total' => 9900, 'currency_code' => 'USD']],
+        'billed_at' => now()->toIso8601String(),
+    ]);
+
+    expect($transaction->organization_id)->toBe($org->id)
+        ->and($transaction->kind)->toBe('lifetime')
+        ->and(EntitlementGrant::withoutGlobalScope('organization')
+            ->where('organization_id', $org->id)
+            ->where('source_reference', 'txn_external_ltd')
+            ->exists())->toBeTrue();
 });
 
 it('delivers a consented Meta purchase only when a matching ad click exists', function () {

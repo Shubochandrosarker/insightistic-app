@@ -88,9 +88,16 @@ PROMPT;
     {
         $cfg = config('insightistic.ai');
 
+        // Guzzle's `read_timeout` is only honored by its PHP stream handler;
+        // production uses cURL, so that option silently leaves the request
+        // unbounded. Keep a generous total ceiling below the proxy timeout so
+        // stalled providers release their worker and the client gets run.failed.
         $response = Http::withToken((string) $cfg['api_key'])
-            ->withOptions(['stream' => true])
-            ->timeout((int) ($cfg['timeout'] ?? 60))
+            ->withOptions([
+                'stream'          => true,
+                'timeout'         => (int) ($cfg['timeout'] ?? 240),
+                'connect_timeout' => 10,
+            ])
             ->post(rtrim((string) $cfg['base_url'], '/') . '/chat/completions', [
                 'model'    => $cfg['model'] ?? 'gpt-4o-mini',
                 'stream'   => true,

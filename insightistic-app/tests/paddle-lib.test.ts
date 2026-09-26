@@ -56,7 +56,9 @@ describe("paddle lib", () => {
     await done;
 
     expect(P.Environment.set).toHaveBeenCalledWith("sandbox");
-    expect(P.Initialize).toHaveBeenCalledWith({ token: "tok_sandbox", environment: "sandbox" });
+    // Initialize takes only the token — Paddle.js v2 throws on unknown
+    // options, so `environment` must never be passed to Initialize.
+    expect(P.Initialize).toHaveBeenCalledWith({ token: "tok_sandbox" });
     // Order is the whole point: sandbox mode must be set before Initialize.
     expect(P.Environment.set.mock.invocationCallOrder[0]).toBeLessThan(
       P.Initialize.mock.invocationCallOrder[0],
@@ -72,7 +74,7 @@ describe("paddle lib", () => {
     await done;
 
     expect(P.Environment.set).not.toHaveBeenCalled();
-    expect(P.Initialize).toHaveBeenCalledWith({ token: "tok_prod", environment: "production" });
+    expect(P.Initialize).toHaveBeenCalledWith({ token: "tok_prod" });
   });
 
   it("runs Initialize only once per token+environment", async () => {
@@ -94,7 +96,7 @@ describe("paddle lib", () => {
     expect(sandbox.Environment.set.mock.invocationCallOrder[0]).toBeLessThan(
       sandbox.Initialize.mock.invocationCallOrder[0],
     );
-    expect(sandbox.Initialize).toHaveBeenCalledWith({ token: "tok_direct", environment: "sandbox" });
+    expect(sandbox.Initialize).toHaveBeenCalledWith({ token: "tok_direct" });
 
     const production = fakePaddle();
     initializeWith(production as unknown as PaddleJs, "tok_direct", "production");

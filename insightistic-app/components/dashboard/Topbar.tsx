@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useAuth } from "@/lib/auth";
 import { useDashboard, PERIODS } from "@/lib/dashboard";
 import { CalendarDays, ChevronDown, LogOut, Check } from "lucide-react";
@@ -23,7 +23,24 @@ export function Topbar() {
   const [customOpen, setCustomOpen] = useState(false);
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
+  const headerRef = useRef<HTMLElement>(null);
   const active = sites.find((s) => s.id === siteId);
+
+  // The site and period panels are siblings anchored over the page; two open
+  // menus paint over each other (later DOM wins). Opening one closes the
+  // other, and a pointer outside the header dismisses both.
+  useEffect(() => {
+    if (!siteMenu && !periodMenu) return;
+    const onPointerDown = (e: PointerEvent) => {
+      if (headerRef.current && !headerRef.current.contains(e.target as Node)) {
+        setSiteMenu(false);
+        setPeriodMenu(false);
+        setCustomOpen(false);
+      }
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    return () => document.removeEventListener("pointerdown", onPointerDown);
+  }, [siteMenu, periodMenu]);
 
   const preset = PERIODS.find((p) => p.key === period);
   const customMatch = /&from=(\d{4}-\d{2}-\d{2})&to=(\d{4}-\d{2}-\d{2})/.exec(rangeQuery);
@@ -48,11 +65,15 @@ export function Topbar() {
   };
 
   return (
-    <header className="sticky top-0 z-20 flex flex-wrap items-center gap-3 border-b border-line bg-bg/85 px-5 py-3 backdrop-blur">
+    <header
+      ref={headerRef}
+      className="sticky top-0 z-40 flex flex-wrap items-center gap-3 border-b border-line bg-bg/85 px-5 py-3 backdrop-blur"
+    >
       {/* Site selector */}
       <div className="relative">
         <button
-          onClick={() => setSiteMenu((m) => !m)}
+          onClick={() => { setPeriodMenu(false); setSiteMenu((m) => !m); }}
+          aria-expanded={siteMenu}
           className="flex items-center gap-2.5 rounded-xl border border-line bg-card px-2.5 py-1.5 text-left shadow-sm"
         >
           <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-brand text-xs font-bold text-white">
@@ -86,7 +107,7 @@ export function Topbar() {
       {/* Period dropdown: presets + custom range */}
       <div className="relative">
         <button
-          onClick={() => setPeriodMenu((m) => !m)}
+          onClick={() => { setSiteMenu(false); setPeriodMenu((m) => !m); }}
           aria-label="Date period"
           aria-expanded={periodMenu}
           className="flex items-center gap-2 rounded-xl border border-line bg-card px-3 py-1.5 text-xs font-medium text-fg shadow-sm hover:text-brand"

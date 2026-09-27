@@ -13,7 +13,7 @@ use Illuminate\Support\Facades\Log;
  *
  * Server-selected plan-aware provider order:
  *   - free: WordPressistic gateway → OpenRouter free router/models → rule
- *   - paid: OpenRouter GPT-6 Luna (GLM-5.3 Flash/Prime fallbacks) → gateway → rule
+ *   - paid: OpenRouter GPT-6 Luna (GLM-5.3 Flash fallback) → gateway → rule
  *   - privacy opt-out: deterministic local summarizer only
  *
  * The model is asked for a markdown answer followed by a fenced ```json

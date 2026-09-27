@@ -55,7 +55,7 @@ return [
         'paid_model' => env('OPENROUTER_PAID_MODEL', 'openai/gpt-6-luna'),
         'paid_fallback_models' => array_values(array_filter(array_map(
             'trim',
-            explode(',', (string) env('OPENROUTER_PAID_FALLBACK_MODELS', 'z-ai/glm-5.3-flash,z-ai/glm-5.3-prime')),
+            explode(',', (string) env('OPENROUTER_PAID_FALLBACK_MODELS', 'z-ai/glm-5.3-flash')),
         ))),
     ],
 

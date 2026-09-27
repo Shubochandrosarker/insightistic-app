@@ -139,12 +139,16 @@ TXT;
      */
     private function providerName(AiProvider $provider): string
     {
-        if ($provider instanceof RuleProvider) {
+        if ($provider instanceof RuleProvider || str_starts_with($provider->model(), 'rule-based')) {
             return 'rule';
         }
 
         if (str_starts_with($provider->model(), 'wpistic-gateway:')) {
             return 'wpistic_gateway';
+        }
+
+        if (str_starts_with($provider->model(), 'openrouter:')) {
+            return 'openrouter';
         }
 
         return 'openai';

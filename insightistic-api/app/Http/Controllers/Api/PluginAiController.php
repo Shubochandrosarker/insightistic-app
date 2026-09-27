@@ -16,11 +16,10 @@ use Illuminate\Http\Request;
  * insightistic/docs/APP-CONNECT-WORKFLOW.md §8 for the frozen contract.
  *
  * Deliberately does NOT stand up a separate Ollama/Hermes integration.
- * Reuses the exact same AiProvider abstraction (bound in
+ * Reuses the exact same plan-aware AiProvider abstraction (bound in
  * AppServiceProvider) and the exact same monthly quota
  * (UsageService::canGenerateInsight) already powering the SaaS dashboard's
- * own "Generate Insight" button — whichever provider is configured via
- * INSIGHTISTIC_AI_PROVIDER serves both callers. The plugin's `model`
+ * own "Generate Insight" button. The plugin's `model`
  * field (ollama-balanced|hermes-seo) and `skill_profile` are forwarded as
  * context so a future provider implementation can route on them; today
  * they don't change which provider answers, only the prompt/system text
@@ -96,6 +95,17 @@ class PluginAiController extends Controller
 
         if ($result === null) {
             return $this->error('ai_error', 'Insightistic Cloud AI returned an error. Please try again.', 502);
+        }
+
+        // A plan-aware chain may end in the deterministic provider after all
+        // configured external providers fail. The plugin endpoint has a
+        // different response schema, so do not return a mismatched insight.
+        if (str_starts_with($provider->model(), 'rule-based')) {
+            return $this->error(
+                'ai_provider_unavailable',
+                'Insightistic Cloud AI is temporarily unavailable. Please try again shortly.',
+                503,
+            );
         }
 
         $this->usage->recordInsight($org);

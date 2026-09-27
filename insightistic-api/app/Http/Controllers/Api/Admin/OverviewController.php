@@ -81,33 +81,46 @@ class OverviewController extends AdminController
         ]);
     }
 
-    /**
-     * AI health — configured AND reachable. A no-token-billed GET /models
-     * ping checks API connectivity and credentials; completion quota/model
-     * failures are surfaced by Copilot diagnostics. Null when rule mode
-     * skips the provider ping.
-     */
+    /** AI routing readiness and a no-generation OpenRouter credential probe. */
     private function aiHealth(): array
     {
-        $provider = config('insightistic.ai.provider', 'openai');
-        $configured = ! empty(config('insightistic.ai.api_key')) || $provider === 'rule';
+        $openrouterConfigured = ! empty(config('insightistic.openrouter.api_key'));
+        $gatewayConfigured = ! empty(config('insightistic.wpistic_gateway.shared_secret'));
+        $openrouterReachable = null;
 
-        $reachable = null;
-        if ($configured && $provider === 'openai') {
+        if ($openrouterConfigured) {
             try {
-                $ping = \Illuminate\Support\Facades\Http::withToken((string) config('insightistic.ai.api_key'))
+                $ping = \Illuminate\Support\Facades\Http::withToken((string) config('insightistic.openrouter.api_key'))
                     ->timeout(5)
-                    ->get(rtrim((string) config('insightistic.ai.base_url', 'https://api.openai.com/v1'), '/') . '/models');
-                $reachable = $ping->successful();
+                    ->get(rtrim((string) config('insightistic.openrouter.base_url'), '/') . '/key');
+                $openrouterReachable = $ping->successful();
             } catch (\Throwable) {
-                $reachable = false;
+                $openrouterReachable = false;
             }
         }
 
         return [
-            'provider'   => $provider,
-            'configured' => $configured,
-            'reachable'  => $reachable,
+            'provider'   => 'plan_aware',
+            'configured' => $openrouterConfigured || $gatewayConfigured,
+            'reachable'  => $openrouterReachable,
+            'routing' => [
+                'free' => array_values(array_filter([
+                    $gatewayConfigured ? 'wpistic_gateway' : null,
+                    $openrouterConfigured ? (string) config('insightistic.openrouter.free_model') : null,
+                    'rule',
+                ])),
+                'paid' => array_values(array_filter([
+                    $openrouterConfigured ? (string) config('insightistic.openrouter.paid_model') : null,
+                    ...($openrouterConfigured ? (array) config('insightistic.openrouter.paid_fallback_models', []) : []),
+                    $gatewayConfigured ? 'wpistic_gateway' : null,
+                    'rule',
+                ])),
+            ],
+            'providers' => [
+                'openrouter' => ['configured' => $openrouterConfigured, 'reachable' => $openrouterReachable],
+                'wpistic_gateway' => ['configured' => $gatewayConfigured, 'reachable' => null],
+                'rule' => ['configured' => true, 'reachable' => true],
+            ],
         ];
     }
 

@@ -6,6 +6,7 @@ use App\Models\AiRun;
 use App\Models\AiThread;
 use App\Models\KnowledgeChunk;
 use App\Models\KnowledgeSource;
+use Illuminate\Support\Facades\Http;
 
 /**
  * Copilot: thread lifecycle, SSE streaming (rule provider — offline),
@@ -80,6 +81,60 @@ it('creates a thread, streams an answer and stores real citations', function () 
     // Thread title auto-set from the first question.
     expect(AiThread::withoutGlobalScope('organization')->find($threadId)->title)
         ->toContain('warranty');
+});
+
+it('uses the WPistic product gateway before the free OpenRouter route', function () {
+    [$user, $org] = makeOrgUser('copilot-wpistic-gateway@example.com');
+    $org->forceFill(['allow_external_ai' => true])->save();
+
+    config()->set('insightistic.wpistic_gateway', [
+        'base_url'    => 'https://ai.wpistic.com',
+        'product_key' => 'test-product-key',
+        'product_id'  => 'insightistic',
+        'model'       => 'glm-5.3',
+        'max_tokens'  => 1200,
+        'timeout'     => 30,
+    ]);
+    config()->set('insightistic.openrouter.api_key', null);
+
+    $content = <<<'ANSWER'
+WPistic gateway response.
+
+```json
+{"direct_answer":"Connected","key_finding":null,"supporting_metrics":[],"why_it_matters":"The gateway responded.","recommended_actions":[],"confidence":"high","data_limitations":"No business data used","citation_refs":[]}
+```
+ANSWER;
+
+    Http::fake([
+        'https://ai.wpistic.com/v1/chat/completions' => Http::response([
+            'model'   => 'z-ai/glm-5.3',
+            'choices' => [['message' => ['role' => 'assistant', 'content' => $content]]],
+            'usage'   => ['prompt_tokens' => 120, 'completion_tokens' => 45],
+        ]),
+    ]);
+
+    $threadId = $this->actingAs($user)->postJson('/api/copilot/threads', [])->assertCreated()->json('thread.id');
+    $response = $this->actingAs($user)->post("/api/copilot/threads/{$threadId}/messages", [
+        'content' => 'Confirm the AI connection without using business data.',
+    ], ['Accept' => 'text/event-stream']);
+    $response->assertOk();
+    $stream = $response->streamedContent();
+
+    $assistant = AiMessage::withoutGlobalScope('organization')
+        ->where('ai_thread_id', $threadId)->where('role', 'assistant')->firstOrFail();
+    $run = AiRun::withoutGlobalScope('organization')->where('ai_message_id', $assistant->id)->firstOrFail();
+
+    expect($assistant->content)->toContain('WPistic gateway response.')
+        ->and($assistant->answer_json['direct_answer'])->toBe('Connected')
+        ->and($run->provider)->toBe('wpistic_gateway')
+        ->and($run->model)->toBe('wpistic-gateway:z-ai/glm-5.3');
+    expect($stream)->toContain('event: run.completed');
+
+    Http::assertSent(fn ($request) =>
+        $request->hasHeader('X-Wpistic-Product', 'insightistic')
+        && $request->hasHeader('X-Wpistic-User', 'org-' . $org->id)
+        && $request['model'] === 'glm-5.3'
+    );
 });
 
 it('enforces the monthly AI message quota with a structured 402', function () {

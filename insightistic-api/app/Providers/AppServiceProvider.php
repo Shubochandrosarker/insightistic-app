@@ -40,10 +40,10 @@ class AppServiceProvider extends ServiceProvider
                 $name,
             );
 
-            $gatewayConfigured = ! empty($gatewayConfig['shared_secret']);
+            $gatewayConfigured = ! empty($gatewayConfig['product_key']);
             $routerConfigured = ! empty($routerConfig['api_key']);
             $gateway = $gatewayConfigured
-                ? fn () => $meter(new WpisticGatewayProvider($gatewayConfig, $this->app->make(AiTierResolver::class)), 'wpistic_gateway')
+                ? fn () => $meter(new WpisticGatewayProvider($this->app->make(\App\Services\Ai\WpisticGatewayClient::class)), 'wpistic_gateway')
                 : null;
 
             $free = [];

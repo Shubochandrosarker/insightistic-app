@@ -44,6 +44,59 @@ function cfEdgeError(string $message): array
     return ['errors' => [['message' => $message]]];
 }
 
+it('keeps Cloudflare traffic when only optional firewall analytics are forbidden', function () {
+    $day = now()->subDay()->toDateString();
+    [, $org] = makeOrgUser('edge-partial@example.com');
+    $site = makeCfEdgeSite($org);
+
+    Http::fake([
+        'api.cloudflare.com/client/v4/graphql' => Http::response([
+            'data' => [
+                'viewer' => [
+                    'zones' => [[
+                        'httpRequests1dGroups' => [[
+                            'dimensions' => ['date' => $day],
+                            'sum'        => ['requests' => 500, 'pageViews' => 120],
+                            'uniq'       => ['uniques' => 80],
+                        ]],
+                        'firewallEventsAdaptiveGroups' => null,
+                    ]],
+                ],
+            ],
+            'errors' => [[
+                'message' => 'Zone does not have access to firewall event analytics.',
+                'path'    => ['GetZoneAnalytics', 'viewer', 'zones', '0', 'firewallEventsAdaptiveGroups'],
+                'extensions' => ['code' => 'authz'],
+            ]],
+        ]),
+    ]);
+
+    $payload = app(\App\Services\CloudflareTrafficService::class)->fetch($site, 7);
+
+    expect($payload)->not->toBeNull()
+        ->and($payload['totals']['requests'])->toBe(500)
+        ->and($payload['totals']['page_views'])->toBe(120)
+        ->and($payload['timeline'])->toHaveCount(1)
+        ->and($payload['firewall_events'])->toBe([]);
+});
+
+it('still rejects Cloudflare GraphQL errors on the core traffic dataset', function () {
+    [, $org] = makeOrgUser('edge-core-error@example.com');
+    $site = makeCfEdgeSite($org);
+
+    Http::fake([
+        'api.cloudflare.com/client/v4/graphql' => Http::response([
+            'errors' => [[
+                'message' => 'Zone does not have access to HTTP request analytics.',
+                'path'    => ['GetZoneAnalytics', 'viewer', 'zones', '0', 'httpRequests1dGroups'],
+                'extensions' => ['code' => 'authz'],
+            ]],
+        ]),
+    ]);
+
+    expect(app(\App\Services\CloudflareTrafficService::class)->fetch($site, 7))->toBeNull();
+});
+
 /**
  * Four-push sequence: legacy traffic pull, then edge 1dGroups, firewall and
  * bots. $times repeats the whole round (one manager sync = 4 requests, so a

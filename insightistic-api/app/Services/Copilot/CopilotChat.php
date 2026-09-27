@@ -4,6 +4,7 @@ namespace App\Services\Copilot;
 
 use App\Models\Organization;
 use App\Services\Ai\AiTierResolver;
+use App\Services\Ai\WpisticGatewayClient;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
@@ -25,7 +26,10 @@ use Illuminate\Support\Facades\Log;
  */
 class CopilotChat
 {
-    public function __construct(private AiTierResolver $tiers) {}
+    public function __construct(
+        private AiTierResolver $tiers,
+        private WpisticGatewayClient $gatewayClient,
+    ) {}
 
     public const PROMPT_VERSION = 'copilot-v1';
 
@@ -125,7 +129,7 @@ PROMPT;
         $paid = $this->tiers->isPaid($org->id);
         $chain = [];
 
-        if (! $paid && ! empty(config('insightistic.wpistic_gateway.shared_secret'))) {
+        if (! $paid && ! empty(config('insightistic.wpistic_gateway.product_key'))) {
             $chain[] = 'gateway';
         }
 
@@ -133,7 +137,7 @@ PROMPT;
             $chain[] = $paid ? 'openrouter_paid' : 'openrouter_free';
         }
 
-        if ($paid && ! empty(config('insightistic.wpistic_gateway.shared_secret'))) {
+        if ($paid && ! empty(config('insightistic.wpistic_gateway.product_key'))) {
             $chain[] = 'gateway';
         }
 
@@ -264,43 +268,21 @@ PROMPT;
 
     private function gateway(string $userMessage, callable $onDelta, Organization $org): array
     {
-        $cfg = config('insightistic.wpistic_gateway');
+        $response = $this->gatewayClient->complete([
+            ['role' => 'system', 'content' => self::SYSTEM_PROMPT],
+            ['role' => 'user', 'content' => $userMessage],
+        ], $org->id);
 
-        $timestamp = (string) time();
-        $principal = rtrim(strtr(base64_encode((string) json_encode([
-            'userId'         => $org->id,
-            'tier'           => $this->tiers->gatewayTier($org->id),
-            'emailVerified'  => true,
-            'storageTarget'  => 'cloud',
-            'sharedLearning' => false,
-        ], JSON_UNESCAPED_SLASHES)), '+/', '-_'), '=');
-        $signature = hash_hmac('sha256', "{$timestamp}.{$principal}", (string) ($cfg['shared_secret'] ?? ''));
-
-        $response = Http::timeout((int) ($cfg['timeout'] ?? 30))
-            ->withHeaders([
-                'X-WPistic-Principal' => $principal,
-                'X-WPistic-Timestamp' => $timestamp,
-                'X-WPistic-Signature' => $signature,
-            ])
-            ->post(rtrim((string) $cfg['base_url'], '/') . '/chat', [
-                'agent'   => $cfg['agent'] ?? 'analytics-pro',
-                'message' => self::SYSTEM_PROMPT . "\n\n" . $userMessage,
-            ]);
-
-        if (! $response->successful() || empty($response->json('answer'))) {
-            throw new \RuntimeException('AI gateway unavailable.');
-        }
-
-        [$display, $contract] = $this->splitContract((string) $response->json('answer'));
+        [$display, $contract] = $this->splitContract($response['content']);
         $onDelta($display);
 
         return [
             'content'     => $display,
             'answer_json' => $contract,
             'provider'    => 'wpistic_gateway',
-            'model'       => 'wpistic-gateway:' . ($cfg['agent'] ?? 'analytics-pro'),
-            'tokens_in'   => null,
-            'tokens_out'  => null,
+            'model'       => 'wpistic-gateway:' . $response['model'],
+            'tokens_in'   => $response['tokens_in'],
+            'tokens_out'  => $response['tokens_out'],
         ];
     }
 

@@ -3,7 +3,9 @@
 namespace App\Providers;
 
 use App\Services\Ai\AiProvider;
-use App\Services\Ai\OpenAiProvider;
+use App\Services\Ai\AiTierResolver;
+use App\Services\Ai\OpenRouterProvider;
+use App\Services\Ai\PlanAwareAiProvider;
 use App\Services\Ai\RuleProvider;
 use App\Services\Ai\WpisticGatewayProvider;
 use App\Support\Tenancy;
@@ -23,34 +25,54 @@ class AppServiceProvider extends ServiceProvider
         $this->app->singleton(\App\Services\Observability\Telemetry::class);
         $this->app->singleton(\App\Services\Observability\QueueHealth::class);
 
-        // AI provider: OpenAI or the wpistic-ai-gateway brain when fully
-        // configured, else the $0 rule-based fallback so insights/reports
-        // work end-to-end without any AI spend.
+        // One plan-aware routing policy shared by insights, reports, Ask,
+        // AI visibility, and investigations. Every external attempt is
+        // independently metered so fallback behavior is visible in ops.
         $this->app->bind(AiProvider::class, function () {
-            $cfg = config('insightistic.ai');
-            $configured = $cfg['provider'] ?? 'openai';
-
-            $provider = match ($configured) {
-                'wpistic_gateway' => ! empty(config('insightistic.wpistic_gateway.shared_secret'))
-                    ? new WpisticGatewayProvider(config('insightistic.wpistic_gateway'))
-                    : new RuleProvider(),
-                'openai' => ! empty($cfg['api_key']) ? new OpenAiProvider($cfg) : new RuleProvider(),
-                default => new RuleProvider(),
-            };
-
-            /*
-             * Wrapped for latency/cost telemetry (spec Phase 2.3). The name
-             * recorded is the provider that actually ran, not the one that was
-             * configured — otherwise a missing API key silently falls back to
-             * the rule provider while the dashboard still claims OpenAI, and
-             * "the AI got worse" becomes impossible to diagnose.
-             */
-            return new \App\Services\Observability\MeteredAiProvider(
+            $gatewayConfig = config('insightistic.wpistic_gateway');
+            $routerConfig = config('insightistic.openrouter');
+            $telemetry = $this->app->make(\App\Services\Observability\Telemetry::class);
+            $tracing = $this->app->make(\App\Services\Observability\Tracing::class);
+            $meter = fn (AiProvider $provider, string $name) => new \App\Services\Observability\MeteredAiProvider(
                 $provider,
-                $this->app->make(\App\Services\Observability\Telemetry::class),
-                $this->app->make(\App\Services\Observability\Tracing::class),
-                $provider instanceof RuleProvider ? 'rule' : $configured,
+                $telemetry,
+                $tracing,
+                $name,
             );
+
+            $gatewayConfigured = ! empty($gatewayConfig['shared_secret']);
+            $routerConfigured = ! empty($routerConfig['api_key']);
+            $gateway = $gatewayConfigured
+                ? fn () => $meter(new WpisticGatewayProvider($gatewayConfig, $this->app->make(AiTierResolver::class)), 'wpistic_gateway')
+                : null;
+
+            $free = [];
+            $paid = [];
+
+            if ($gateway) {
+                $free[] = $gateway();
+            }
+
+            if ($routerConfigured) {
+                $free[] = $meter(new OpenRouterProvider($routerConfig + [
+                    'model' => $routerConfig['free_model'],
+                    'fallback_models' => [],
+                ]), 'openrouter');
+                $paid[] = $meter(new OpenRouterProvider($routerConfig + [
+                    'model' => $routerConfig['paid_model'],
+                    'fallback_models' => $routerConfig['paid_fallback_models'],
+                ]), 'openrouter');
+            }
+
+            if ($gateway) {
+                $paid[] = $gateway();
+            }
+
+            $rule = $meter(new RuleProvider(), 'rule');
+            $free[] = $rule;
+            $paid[] = $rule;
+
+            return new PlanAwareAiProvider($free, $paid, $this->app->make(AiTierResolver::class));
         });
 
         // Embedding provider for the knowledge base. 'none' (or a missing

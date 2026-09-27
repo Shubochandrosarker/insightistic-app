@@ -3,17 +3,17 @@
 namespace App\Services\Copilot;
 
 use App\Models\Organization;
+use App\Services\Ai\AiTierResolver;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
 /**
  * Provider-facing half of the Copilot (spec Phase 5).
  *
- * Three modes, chosen server-side:
- *   - openai   : OpenAI-compatible chat completions with REAL token streaming
- *   - gateway  : WordPressistic AI Gateway (single-shot; one delta)
- *   - rule     : deterministic local summarizer — used when nothing is
- *                configured or the organization disabled external AI
+ * Server-selected plan-aware provider order:
+ *   - free: WordPressistic gateway → OpenRouter's free model router → rule
+ *   - paid: OpenRouter GPT-6 Luna (GLM-5.3 Flash model fallback) → gateway → rule
+ *   - privacy opt-out: deterministic local summarizer only
  *
  * The model is asked for a markdown answer followed by a fenced ```json
  * "answer contract" block (direct_answer, key_finding, supporting_metrics,
@@ -25,6 +25,8 @@ use Illuminate\Support\Facades\Log;
  */
 class CopilotChat
 {
+    public function __construct(private AiTierResolver $tiers) {}
+
     public const PROMPT_VERSION = 'copilot-v1';
 
     public const SYSTEM_PROMPT = <<<'PROMPT'
@@ -55,16 +57,46 @@ PROMPT;
      */
     public function answer(Organization $org, string $question, string $promptContext, callable $onDelta): array
     {
-        $mode = $this->mode($org);
-
         $userMessage = ($promptContext !== '' ? $promptContext . "\n\n" : '')
             . 'QUESTION: ' . $question;
 
-        return match ($mode) {
-            'openai'  => $this->openAiStream($userMessage, $onDelta),
-            'gateway' => $this->gateway($userMessage, $onDelta, $org),
-            default   => $this->ruleAnswer($question, $promptContext, $onDelta),
-        };
+        foreach ($this->providerChain($org) as $provider) {
+            $emitted = false;
+            $attemptDelta = function (string $delta) use ($onDelta, &$emitted): void {
+                if ($delta !== '') {
+                    $emitted = true;
+                    $onDelta($delta);
+                }
+            };
+
+            try {
+                $result = match ($provider) {
+                    'openrouter_free' => $this->openAiStream($userMessage, $attemptDelta, $this->openRouterConfig(false), 'openrouter'),
+                    'openrouter_paid' => $this->openAiStream($userMessage, $attemptDelta, $this->openRouterConfig(true), 'openrouter'),
+                    'gateway' => $this->gateway($userMessage, $attemptDelta, $org),
+                    default => $this->ruleAnswer($question, $promptContext, $attemptDelta),
+                };
+
+                if (trim((string) ($result['content'] ?? '')) !== '') {
+                    return $result;
+                }
+            } catch (\Throwable $e) {
+                // A streamed provider can only be retried before any visible
+                // answer text has been sent; otherwise the client would see
+                // a duplicated or contradictory partial answer.
+                Log::warning('Insightistic Copilot provider failed', [
+                    'provider'  => $provider,
+                    'exception' => $e::class,
+                    'tier'      => $this->tiers->resolve($org->id)['tier'],
+                ]);
+
+                if ($emitted) {
+                    throw $e;
+                }
+            }
+        }
+
+        return $this->ruleAnswer($question, $promptContext, $onDelta);
     }
 
     public function mode(Organization $org): string
@@ -73,32 +105,73 @@ PROMPT;
             return 'rule';
         }
 
-        $cfg = config('insightistic.ai');
+        $first = $this->providerChain($org)[0] ?? 'rule';
 
-        return match ($cfg['provider'] ?? 'openai') {
-            'openai'          => ! empty($cfg['api_key']) ? 'openai' : 'rule',
-            'wpistic_gateway' => ! empty(config('insightistic.wpistic_gateway.shared_secret')) ? 'gateway' : 'rule',
-            default           => 'rule',
+        return match ($first) {
+            'openrouter_free', 'openrouter_paid' => 'openrouter',
+            'gateway' => 'wpistic_gateway',
+            default => $first,
         };
     }
 
     // ------------------------------------------------------------------
 
-    private function openAiStream(string $userMessage, callable $onDelta): array
+    private function providerChain(Organization $org): array
     {
-        $cfg = config('insightistic.ai');
+        if (! $org->allow_external_ai) {
+            return ['rule'];
+        }
 
+        $paid = $this->tiers->isPaid($org->id);
+        $chain = [];
+
+        if (! $paid && ! empty(config('insightistic.wpistic_gateway.shared_secret'))) {
+            $chain[] = 'gateway';
+        }
+
+        if (! empty(config('insightistic.openrouter.api_key'))) {
+            $chain[] = $paid ? 'openrouter_paid' : 'openrouter_free';
+        }
+
+        if ($paid && ! empty(config('insightistic.wpistic_gateway.shared_secret'))) {
+            $chain[] = 'gateway';
+        }
+
+        $chain[] = 'rule';
+
+        return array_values(array_unique($chain));
+    }
+
+    private function openRouterConfig(bool $paid): array
+    {
+        $config = config('insightistic.openrouter');
+        $config['model'] = $paid ? $config['paid_model'] : $config['free_model'];
+        $config['fallback_models'] = $paid ? $config['paid_fallback_models'] : [];
+
+        return $config;
+    }
+
+    private function openAiStream(string $userMessage, callable $onDelta, array $cfg, string $providerName): array
+    {
         // Guzzle's `read_timeout` is only honored by its PHP stream handler;
         // production uses cURL, so that option silently leaves the request
         // unbounded. Keep a generous total ceiling below the proxy timeout so
         // stalled providers release their worker and the client gets run.failed.
-        $response = Http::withToken((string) $cfg['api_key'])
+        $request = Http::withToken((string) $cfg['api_key'])
             ->withOptions([
                 'stream'          => true,
                 'timeout'         => (int) ($cfg['timeout'] ?? 240),
                 'connect_timeout' => 10,
-            ])
-            ->post(rtrim((string) $cfg['base_url'], '/') . '/chat/completions', [
+            ]);
+
+        if ($providerName === 'openrouter') {
+            $request = $request->withHeaders([
+                'HTTP-Referer' => config('app.url', 'https://app.insightistic.com'),
+                'X-Title'      => 'Insightistic',
+            ]);
+        }
+
+        $payload = [
                 'model'    => $cfg['model'] ?? 'gpt-4o-mini',
                 'stream'   => true,
                 'stream_options' => ['include_usage' => true],
@@ -106,23 +179,22 @@ PROMPT;
                     ['role' => 'system', 'content' => self::SYSTEM_PROMPT],
                     ['role' => 'user', 'content' => $userMessage],
                 ],
-            ]);
+            ];
+
+        if ($providerName === 'openrouter' && ! empty($cfg['fallback_models'])) {
+            $payload['models'] = array_values($cfg['fallback_models']);
+        }
+
+        $response = $request->post(rtrim((string) $cfg['base_url'], '/') . '/chat/completions', $payload);
 
         if (! $response->successful()) {
-            // Surface the provider's own error body (invalid key, exhausted
-            // quota, unknown model) — it flows into report($e) and the AiRun
-            // record, and is the only way to diagnose the dashboard's
-            // generic "AI provider is unavailable" from the server side.
-            $errorBody = trim(mb_substr((string) $response->body(), 0, 300));
-
-            throw new \RuntimeException(
-                'AI provider returned HTTP ' . $response->status() . ($errorBody !== '' ? ': ' . $errorBody : '')
-            );
+            throw new \RuntimeException($providerName . ' returned HTTP ' . $response->status());
         }
 
         $body = $response->toPsrResponse()->getBody();
         $full = '';
         $tokensIn = $tokensOut = null;
+        $actualModel = (string) ($cfg['model'] ?? 'unknown');
         $buffer = '';
         // Once the answer-contract fence starts we stop emitting display text.
         $fencePos = null;
@@ -152,6 +224,10 @@ PROMPT;
                     $tokensOut = $json['usage']['completion_tokens'] ?? null;
                 }
 
+                if (is_string($json['model'] ?? null) && $json['model'] !== '') {
+                    $actualModel = $json['model'];
+                }
+
                 $delta = $json['choices'][0]['delta']['content'] ?? '';
                 if ($delta === '') {
                     continue;
@@ -172,11 +248,15 @@ PROMPT;
 
         [$display, $contract] = $this->splitContract($full);
 
+        if (trim($display) === '') {
+            throw new \RuntimeException($providerName . ' returned an empty answer');
+        }
+
         return [
             'content'     => $display,
             'answer_json' => $contract,
-            'provider'    => 'openai',
-            'model'       => (string) ($cfg['model'] ?? 'gpt-4o-mini'),
+            'provider'    => $providerName,
+            'model'       => $providerName === 'openrouter' ? 'openrouter:' . $actualModel : $actualModel,
             'tokens_in'   => $tokensIn,
             'tokens_out'  => $tokensOut,
         ];
@@ -189,7 +269,7 @@ PROMPT;
         $timestamp = (string) time();
         $principal = rtrim(strtr(base64_encode((string) json_encode([
             'userId'         => $org->id,
-            'tier'           => $cfg['tier'] ?? 'agency',
+            'tier'           => $this->tiers->gatewayTier($org->id),
             'emailVerified'  => true,
             'storageTarget'  => 'cloud',
             'sharedLearning' => false,

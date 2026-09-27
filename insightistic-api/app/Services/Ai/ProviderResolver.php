@@ -12,15 +12,13 @@ use App\Models\Site;
  * consent) so every AI call site — insights, and now Ask Insightistic V2
  * (P3) — enforces the same rule instead of re-deriving it.
  *
- * `CopilotChat::mode()` predates this class and does the equivalent check
- * inline for its own three-mode (openai/gateway/rule) dispatch; it is left
- * as-is rather than refactored onto this helper, to avoid regression risk
- * on already-shipped streaming chat code for an unrelated phase of work.
+ * CopilotChat applies the same consent decision before it enters its own
+ * streaming provider chain.
  */
 class ProviderResolver
 {
     /**
-     * @param  AiProvider  $configured  The app-wide provider the container resolved from config (openai/gateway/rule, possibly metered).
+     * @param  AiProvider  $configured  The app-wide plan-aware provider chain.
      */
     public function resolve(AiProvider $configured, Site $site): AiProvider
     {

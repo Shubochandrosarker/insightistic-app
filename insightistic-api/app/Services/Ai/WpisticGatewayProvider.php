@@ -26,7 +26,7 @@ use Illuminate\Support\Facades\Log;
  */
 class WpisticGatewayProvider implements AiProvider
 {
-    public function __construct(private array $config) {}
+    public function __construct(private array $config, private ?AiTierResolver $tiers = null) {}
 
     public function model(): string
     {
@@ -39,7 +39,7 @@ class WpisticGatewayProvider implements AiProvider
             $timestamp = (string) time();
             $principalRaw = $this->base64UrlEncode(json_encode([
                 'userId'         => $identityId ?? 0,
-                'tier'           => $this->config['tier'] ?? 'agency',
+                'tier'           => $this->tiers?->gatewayTier($identityId) ?? 'free',
                 'emailVerified'  => true,
                 'storageTarget'  => 'cloud',
                 'sharedLearning' => false,
@@ -73,7 +73,7 @@ class WpisticGatewayProvider implements AiProvider
             $parsed = json_decode($data['answer'], true);
             return is_array($parsed) ? $parsed : null;
         } catch (\Throwable $e) {
-            Log::warning('wpistic-ai-gateway exception: ' . $e->getMessage());
+            Log::warning('wpistic-ai-gateway request raised an exception', ['exception' => $e::class]);
             return null;
         }
     }

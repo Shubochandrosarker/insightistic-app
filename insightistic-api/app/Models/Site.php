@@ -6,6 +6,7 @@ use App\Concerns\BelongsToOrganization;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 class Site extends Model
@@ -27,10 +28,10 @@ class Site extends Model
     protected function casts(): array
     {
         return [
-            'last_sync_at'          => 'datetime',
-            'connector_secret'      => 'encrypted', // AES at rest via APP_KEY
-            'cloudflare_api_token'  => 'encrypted', // AES at rest via APP_KEY
-            'archived_at'           => 'datetime',
+            'last_sync_at' => 'datetime',
+            'connector_secret' => 'encrypted', // AES at rest via APP_KEY
+            'cloudflare_api_token' => 'encrypted', // AES at rest via APP_KEY
+            'archived_at' => 'datetime',
         ];
     }
 
@@ -67,16 +68,39 @@ class Site extends Model
      * - key_id : public, stored plain, indexed, sent on every request.
      * - secret : private, stored AES-encrypted, used only to sign/verify.
      */
-    public function issueConnectorToken(): string
+    public function issueConnectorToken(array $additionalAttributes = []): string
     {
-        $keyId  = 'ik_' . Str::random(24);
-        $secret = 'sk_' . Str::random(48);
+        $keyId = 'ik_'.Str::random(24);
+        $secret = 'sk_'.Str::random(48);
 
+        // Plugin activation can recover sites whose prior connector secret
+        // was encrypted with an older APP_KEY. Persist the replacement with
+        // a targeted query so Eloquent does not decrypt the stale value while
+        // comparing dirty attributes. Callers may include already-validated
+        // site metadata that should be saved in the same update.
+        $this->forceFill($additionalAttributes);
         $this->connector_key_id = $keyId;
-        $this->connector_secret = $secret; // encrypted by cast on save
-        $this->save();
+        $this->connector_secret = $secret; // encrypted by cast
 
-        return $keyId . '.' . $secret;
+        if (! $this->exists) {
+            $this->save();
+        } else {
+            $rawAttributes = $this->getAttributes();
+            $updatedAt = $this->freshTimestampString();
+            $persisted = array_replace(array_intersect_key($rawAttributes, $additionalAttributes), [
+                'connector_key_id' => $rawAttributes['connector_key_id'],
+                'connector_secret' => $rawAttributes['connector_secret'],
+                'updated_at' => $updatedAt,
+            ]);
+
+            DB::table($this->getTable())
+                ->where($this->getKeyName(), $this->getKey())
+                ->update($persisted);
+
+            $this->setRawAttributes(array_replace($rawAttributes, $persisted), true);
+        }
+
+        return $keyId.'.'.$secret;
     }
 
     public static function findByKeyId(string $keyId): ?self

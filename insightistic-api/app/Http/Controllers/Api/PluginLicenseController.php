@@ -34,12 +34,12 @@ class PluginLicenseController extends Controller
     public function activate(Request $request)
     {
         $data = $request->validate([
-            'license_key'        => ['required', 'string', 'max:64'],
-            'site_url'           => ['required', 'string', 'max:190'],
-            'site_name'          => ['nullable', 'string', 'max:120'],
-            'wp_version'         => ['nullable', 'string', 'max:20'],
-            'php_version'        => ['nullable', 'string', 'max:20'],
-            'plugin_version'     => ['nullable', 'string', 'max:20'],
+            'license_key' => ['required', 'string', 'max:64'],
+            'site_url' => ['required', 'string', 'max:190'],
+            'site_name' => ['nullable', 'string', 'max:120'],
+            'wp_version' => ['nullable', 'string', 'max:20'],
+            'php_version' => ['nullable', 'string', 'max:20'],
+            'plugin_version' => ['nullable', 'string', 'max:20'],
             'woocommerce_active' => ['nullable', 'boolean'],
         ]);
 
@@ -59,14 +59,15 @@ class PluginLicenseController extends Controller
         }
         if (! $license->isEntitled()) {
             $code = $license->status === 'expired' ? 'license_expired' : 'payment_required';
+
             return $this->error($code, 'This license is not active. Sign in to reactivate.', 402, [
-                'status'      => $license->status,
-                'upgrade_url' => rtrim(config('insightistic.app_url'), '/') . '/dashboard/billing',
+                'status' => $license->status,
+                'upgrade_url' => rtrim(config('insightistic.app_url'), '/').'/dashboard/billing',
             ]);
         }
 
-        $normalized  = $this->licenses->normalizeSiteUrl($data['site_url']);
-        $siteHash    = $this->licenses->siteHash($normalized);
+        $normalized = $this->licenses->normalizeSiteUrl($data['site_url']);
+        $siteHash = $this->licenses->siteHash($normalized);
         $environment = $this->licenses->classifyEnvironment($normalized);
 
         // Idempotent: re-activating the same site returns fresh creds + state.
@@ -86,7 +87,7 @@ class PluginLicenseController extends Controller
                     'activation_limit_reached',
                     "Your plan allows {$license->activation_limit} connected website(s) and all slots are in use.",
                     402,
-                    ['upgrade_url' => rtrim(config('insightistic.app_url'), '/') . '/dashboard/billing'],
+                    ['upgrade_url' => rtrim(config('insightistic.app_url'), '/').'/dashboard/billing'],
                 );
             }
         }
@@ -107,78 +108,79 @@ class PluginLicenseController extends Controller
 
         if (! $site) {
             $site = new Site([
-                'name'              => $data['site_name'] ?: $normalized,
-                'domain'            => $normalized,
+                'name' => $data['site_name'] ?: $normalized,
+                'domain' => $normalized,
                 'normalized_domain' => DomainNormalizer::hostKey($normalized),
-                'platform'          => ($data['woocommerce_active'] ?? false) ? 'woocommerce' : 'wordpress',
+                'platform' => ($data['woocommerce_active'] ?? false) ? 'woocommerce' : 'wordpress',
                 'detected_platform' => ($data['woocommerce_active'] ?? false) ? 'woocommerce' : 'wordpress',
-                'status'            => 'active',
+                'status' => 'active',
             ]);
             $site->organization_id = $org->id;
         }
 
-        $site->connection_status = 'connected';
-        $site->wp_version        = $data['wp_version'] ?? $site->wp_version;
-        $site->plugin_version    = $data['plugin_version'] ?? $site->plugin_version;
+        $siteAttributes = [
+            'connection_status' => 'connected',
+            'wp_version' => $data['wp_version'] ?? $site->wp_version,
+            'plugin_version' => $data['plugin_version'] ?? $site->plugin_version,
+        ];
         // An activating plugin is definitive platform proof — record it as
         // detection (never override an explicit user choice).
         if (! $site->platform_override) {
-            $site->detected_platform = ($data['woocommerce_active'] ?? false) ? 'woocommerce' : 'wordpress';
-            $site->platform = $site->detected_platform;
+            $siteAttributes['detected_platform'] = ($data['woocommerce_active'] ?? false) ? 'woocommerce' : 'wordpress';
+            $siteAttributes['platform'] = $siteAttributes['detected_platform'];
         }
-        $site->save();
 
-        $connectorToken = $site->issueConnectorToken(); // "<key_id>.<secret>"
+        $connectorToken = $site->issueConnectorToken($siteAttributes); // "<key_id>.<secret>"
         [$connectorKeyId, $connectorSecret] = explode('.', $connectorToken, 2);
 
         $activation ??= new LicenseActivation(['license_id' => $license->id, 'site_hash' => $siteHash]);
         $activation->fill([
-            'site_id'             => $site->id,
-            'site_url'            => $data['site_url'],
+            'site_id' => $site->id,
+            'site_url' => $data['site_url'],
             'normalized_site_url' => $normalized,
-            'wp_version'          => $data['wp_version'] ?? null,
-            'php_version'         => $data['php_version'] ?? null,
-            'plugin_version'      => $data['plugin_version'] ?? null,
-            'woocommerce_active'  => (bool) ($data['woocommerce_active'] ?? false),
-            'environment'         => $environment,
-            'status'              => 'active',
-            'activated_at'        => $activation->activated_at ?? now(),
-            'last_seen_at'        => now(),
-            'deactivated_at'      => null,
+            'wp_version' => $data['wp_version'] ?? null,
+            'php_version' => $data['php_version'] ?? null,
+            'plugin_version' => $data['plugin_version'] ?? null,
+            'woocommerce_active' => (bool) ($data['woocommerce_active'] ?? false),
+            'environment' => $environment,
+            'status' => 'active',
+            'activated_at' => $activation->activated_at ?? now(),
+            'last_seen_at' => now(),
+            'deactivated_at' => null,
         ]);
         $activation->license_id = $license->id;
-        $activation->site_hash  = $siteHash;
+        $activation->site_hash = $siteHash;
         $activation->save();
 
         PluginEvent::record($license, $activation, $isNew ? 'activated' : 'reactivated', [
-            'site'        => $normalized,
+            'site' => $normalized,
             'environment' => $environment,
         ]);
 
         if ($isNew) {
             $this->mailer->send($org, 'site_connected', [
-                'site_url'  => $normalized,
+                'site_url' => $normalized,
                 'site_name' => $site->name,
-            ], 'site:' . substr($siteHash, 0, 16));
+            ], 'site:'.substr($siteHash, 0, 16));
 
             Notification::withoutGlobalScope('organization')->create([
                 'organization_id' => $org->id,
-                'type'            => 'site_connected',
-                'title'           => 'Website connected',
-                'message'         => $normalized . ' activated your license and is syncing now.',
-                'action_url'      => '/dashboard/licenses',
-                'created_at'      => now(),
+                'type' => 'site_connected',
+                'title' => 'Website connected',
+                'message' => $normalized.' activated your license and is syncing now.',
+                'action_url' => '/dashboard/licenses',
+                'created_at' => now(),
             ]);
         }
 
         return response()->json([
-            'ok'            => true,
-            'license'       => $this->licenses->entitlements($license->fresh()),
+            'ok' => true,
+            'license' => $this->licenses->entitlements($license->fresh()),
             'activation_id' => $activation->id,
-            'site_id'       => $site->id,
-            'connector'     => [
-                'key_id'   => $connectorKeyId,
-                'secret'   => $connectorSecret,
+            'site_id' => $site->id,
+            'connector' => [
+                'key_id' => $connectorKeyId,
+                'secret' => $connectorSecret,
                 'api_base' => rtrim(config('app.url') ?: 'https://api.insightistic.com', '/'),
             ],
         ]);
@@ -193,7 +195,7 @@ class PluginLicenseController extends Controller
         }
 
         $org = Organization::find($license->organization_id);
-        $license->status            = $this->licenses->computeStatus($org, $license);
+        $license->status = $this->licenses->computeStatus($org, $license);
         $license->last_validated_at = now();
         $license->save();
 
@@ -211,7 +213,7 @@ class PluginLicenseController extends Controller
         PluginEvent::record($license, $activation, $license->isEntitled() ? 'validation_ok' : 'validation_denied');
 
         return response()->json([
-            'ok'      => true,
+            'ok' => true,
             'license' => $this->licenses->entitlements($license),
         ]);
     }
@@ -225,7 +227,7 @@ class PluginLicenseController extends Controller
         }
 
         return response()->json([
-            'ok'      => true,
+            'ok' => true,
             'license' => $this->licenses->entitlements($license),
         ]);
     }

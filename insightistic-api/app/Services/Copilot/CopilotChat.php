@@ -12,8 +12,8 @@ use Illuminate\Support\Facades\Log;
  * Provider-facing half of the Copilot (spec Phase 5).
  *
  * Server-selected plan-aware provider order:
- *   - free: WordPressistic gateway → OpenRouter's free model router → rule
- *   - paid: OpenRouter GPT-6 Luna (GLM-5.3 Flash model fallback) → gateway → rule
+ *   - free: WordPressistic gateway → OpenRouter free router/models → rule
+ *   - paid: OpenRouter GPT-6 Luna (GLM-5.3 Flash/Prime fallbacks) → gateway → rule
  *   - privacy opt-out: deterministic local summarizer only
  *
  * The model is asked for a markdown answer followed by a fenced ```json
@@ -61,8 +61,8 @@ PROMPT;
      */
     public function answer(Organization $org, string $question, string $promptContext, callable $onDelta): array
     {
-        $userMessage = ($promptContext !== '' ? $promptContext . "\n\n" : '')
-            . 'QUESTION: ' . $question;
+        $userMessage = ($promptContext !== '' ? $promptContext."\n\n" : '')
+            .'QUESTION: '.$question;
 
         foreach ($this->providerChain($org) as $provider) {
             $emitted = false;
@@ -89,9 +89,9 @@ PROMPT;
                 // answer text has been sent; otherwise the client would see
                 // a duplicated or contradictory partial answer.
                 Log::warning('Insightistic Copilot provider failed', [
-                    'provider'  => $provider,
+                    'provider' => $provider,
                     'exception' => $e::class,
-                    'tier'      => $this->tiers->resolve($org->id)['tier'],
+                    'tier' => $this->tiers->resolve($org->id)['tier'],
                 ]);
 
                 if ($emitted) {
@@ -150,7 +150,7 @@ PROMPT;
     {
         $config = config('insightistic.openrouter');
         $config['model'] = $paid ? $config['paid_model'] : $config['free_model'];
-        $config['fallback_models'] = $paid ? $config['paid_fallback_models'] : [];
+        $config['fallback_models'] = $paid ? $config['paid_fallback_models'] : $config['free_fallback_models'];
 
         return $config;
     }
@@ -163,36 +163,36 @@ PROMPT;
         // stalled providers release their worker and the client gets run.failed.
         $request = Http::withToken((string) $cfg['api_key'])
             ->withOptions([
-                'stream'          => true,
-                'timeout'         => (int) ($cfg['timeout'] ?? 240),
+                'stream' => true,
+                'timeout' => (int) ($cfg['timeout'] ?? 240),
                 'connect_timeout' => 10,
             ]);
 
         if ($providerName === 'openrouter') {
             $request = $request->withHeaders([
                 'HTTP-Referer' => config('app.url', 'https://app.insightistic.com'),
-                'X-Title'      => 'Insightistic',
+                'X-Title' => 'Insightistic',
             ]);
         }
 
         $payload = [
-                'model'    => $cfg['model'] ?? 'gpt-4o-mini',
-                'stream'   => true,
-                'stream_options' => ['include_usage' => true],
-                'messages' => [
-                    ['role' => 'system', 'content' => self::SYSTEM_PROMPT],
-                    ['role' => 'user', 'content' => $userMessage],
-                ],
-            ];
+            'model' => $cfg['model'] ?? 'gpt-4o-mini',
+            'stream' => true,
+            'stream_options' => ['include_usage' => true],
+            'messages' => [
+                ['role' => 'system', 'content' => self::SYSTEM_PROMPT],
+                ['role' => 'user', 'content' => $userMessage],
+            ],
+        ];
 
         if ($providerName === 'openrouter' && ! empty($cfg['fallback_models'])) {
             $payload['models'] = array_values($cfg['fallback_models']);
         }
 
-        $response = $request->post(rtrim((string) $cfg['base_url'], '/') . '/chat/completions', $payload);
+        $response = $request->post(rtrim((string) $cfg['base_url'], '/').'/chat/completions', $payload);
 
         if (! $response->successful()) {
-            throw new \RuntimeException($providerName . ' returned HTTP ' . $response->status());
+            throw new \RuntimeException($providerName.' returned HTTP '.$response->status());
         }
 
         $body = $response->toPsrResponse()->getBody();
@@ -253,16 +253,16 @@ PROMPT;
         [$display, $contract] = $this->splitContract($full);
 
         if (trim($display) === '') {
-            throw new \RuntimeException($providerName . ' returned an empty answer');
+            throw new \RuntimeException($providerName.' returned an empty answer');
         }
 
         return [
-            'content'     => $display,
+            'content' => $display,
             'answer_json' => $contract,
-            'provider'    => $providerName,
-            'model'       => $providerName === 'openrouter' ? 'openrouter:' . $actualModel : $actualModel,
-            'tokens_in'   => $tokensIn,
-            'tokens_out'  => $tokensOut,
+            'provider' => $providerName,
+            'model' => $providerName === 'openrouter' ? 'openrouter:'.$actualModel : $actualModel,
+            'tokens_in' => $tokensIn,
+            'tokens_out' => $tokensOut,
         ];
     }
 
@@ -277,12 +277,12 @@ PROMPT;
         $onDelta($display);
 
         return [
-            'content'     => $display,
+            'content' => $display,
             'answer_json' => $contract,
-            'provider'    => 'wpistic_gateway',
-            'model'       => 'wpistic-gateway:' . $response['model'],
-            'tokens_in'   => $response['tokens_in'],
-            'tokens_out'  => $response['tokens_out'],
+            'provider' => 'wpistic_gateway',
+            'model' => 'wpistic-gateway:'.$response['model'],
+            'tokens_in' => $response['tokens_in'],
+            'tokens_out' => $response['tokens_out'],
         ];
     }
 
@@ -293,23 +293,23 @@ PROMPT;
     private function ruleAnswer(string $question, string $promptContext, callable $onDelta): array
     {
         $hasAnalytics = str_contains($promptContext, 'ANALYTICS DATA');
-        $hasDocs      = str_contains($promptContext, '<documents>');
+        $hasDocs = str_contains($promptContext, '<documents>');
 
-        $lines = ["**Rule-based answer** (no external AI configured for this organization)."];
+        $lines = ['**Rule-based answer** (no external AI configured for this organization).'];
 
         if (! $hasAnalytics && ! $hasDocs) {
             $lines[] = 'No analytics data or knowledge documents matched this question yet. '
-                . 'Connect a site or upload knowledge sources, then ask again.';
+                .'Connect a site or upload knowledge sources, then ask again.';
             $confidence = 'low';
             $limitations = 'No data was available for this question.';
         } else {
             $lines[] = 'Here is the evidence Insightistic found for your question'
-                . ($hasDocs ? ' (see the citations panel for matching documents)' : '') . ':';
+                .($hasDocs ? ' (see the citations panel for matching documents)' : '').':';
             if ($hasAnalytics && preg_match('/ANALYTICS DATA[^:]*:\n(\{.*?\})(?:\n\n|$)/s', $promptContext, $m)) {
-                $lines[] = "```json\n" . mb_substr($m[1], 0, 2000) . "\n```";
+                $lines[] = "```json\n".mb_substr($m[1], 0, 2000)."\n```";
             }
             $lines[] = '_Configure an AI provider (Settings → AI) to get narrative analysis, '
-                . 'trends and recommendations on top of this data._';
+                .'trends and recommendations on top of this data._';
             $confidence = 'low';
             $limitations = 'Rule-based mode lists matched evidence without model reasoning.';
         }
@@ -318,23 +318,23 @@ PROMPT;
         $onDelta($display);
 
         return [
-            'content'     => $display,
+            'content' => $display,
             'answer_json' => [
-                'direct_answer'      => $hasAnalytics || $hasDocs
+                'direct_answer' => $hasAnalytics || $hasDocs
                     ? 'Evidence matched — see the details above.'
                     : 'Not enough data to answer this yet.',
-                'key_finding'        => null,
+                'key_finding' => null,
                 'supporting_metrics' => [],
-                'why_it_matters'     => null,
+                'why_it_matters' => null,
                 'recommended_actions' => [],
-                'confidence'         => $confidence,
-                'data_limitations'   => $limitations,
-                'citation_refs'      => [],
+                'confidence' => $confidence,
+                'data_limitations' => $limitations,
+                'citation_refs' => [],
             ],
-            'provider'    => 'rule',
-            'model'       => 'rule-based',
-            'tokens_in'   => null,
-            'tokens_out'  => null,
+            'provider' => 'rule',
+            'model' => 'rule-based',
+            'tokens_in' => null,
+            'tokens_out' => null,
         ];
     }
 

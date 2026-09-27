@@ -38,7 +38,7 @@ export default function AdminSystemHealth() {
         <Health title="Storage" ok={!!data.storage?.writable} detail={`${data.storage?.writable ? "writable" : "not writable"} · disk: ${data.storage?.reports_disk}`} />
         <Health title="Mail" ok={!!data.mail?.configured} warn={!data.mail?.configured} detail={`Mailer: ${data.mail?.mailer}`} />
         <Health title="Paddle" ok={data.paddle?.configured ?? false} warn={!(data.paddle?.configured ?? false)} detail={`${data.paddle?.configured ? "configured" : "not configured"} · ${data.paddle?.environment || "—"}`} />
-        <Health title="AI provider" ok={!!data.ai?.configured} warn={!data.ai?.configured} detail={`Provider: ${data.ai?.provider}`} />
+        <Health title="AI provider" ok={!!data.ai?.configured && data.ai?.reachable !== false} warn={!data.ai?.configured || data.ai?.reachable === false} detail={`Provider: ${data.ai?.provider}${data.ai?.reachable === false ? " · unreachable (check API key/quota)" : data.ai?.reachable === true ? " · reachable" : ""}`} />
       </div>
 
       <Card className="mt-5" title="Recent failed jobs">

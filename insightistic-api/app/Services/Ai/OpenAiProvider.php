@@ -34,7 +34,11 @@ class OpenAiProvider implements AiProvider
                 ]);
 
             if (! $response->successful()) {
-                Log::warning('Insightistic AI call failed', ['status' => $response->status()]);
+                Log::warning('Insightistic AI call failed', [
+                    'status' => $response->status(),
+                    'body'   => mb_substr((string) $response->body(), 0, 300),
+                ]);
+
                 return null;
             }
 

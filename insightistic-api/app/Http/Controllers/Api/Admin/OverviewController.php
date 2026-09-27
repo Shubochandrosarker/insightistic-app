@@ -48,6 +48,11 @@ class OverviewController extends AdminController
     /** Lightweight platform health probes (no secrets). */
     public function systemHealth()
     {
+        return response()->json($this->systemHealthPayload());
+    }
+
+    private function systemHealthPayload(): array
+    {
         try {
             DB::connection()->getPdo();
             $db = 'ok';
@@ -68,12 +73,42 @@ class OverviewController extends AdminController
             'mail'     => ['mailer' => config('mail.default'), 'configured' => ! empty(config('mail.mailers.smtp.host')) || config('mail.default') !== 'smtp'],
             'stripe'   => ['configured' => $stripeSecret !== '', 'mode' => Str::startsWith($stripeSecret, 'sk_live') ? 'live' : 'test'],
             'paddle'   => ['configured' => ! empty(config('billing.paddle.api_key')) && ! empty(config('billing.paddle.webhook_secret')), 'environment' => config('billing.paddle.sandbox') ? 'sandbox' : 'production'],
-            'ai'       => ['provider' => config('insightistic.ai.provider'), 'configured' => ! empty(config('insightistic.ai.api_key')) || config('insightistic.ai.provider') === 'rule'],
+            'ai'       => $this->aiHealth(),
             'recent_failed_jobs' => Schema::hasTable('failed_jobs')
                 ? DB::table('failed_jobs')->latest('id')->limit(5)->get(['id', 'queue', 'exception', 'failed_at'])
                     ->map(fn ($r) => ['id' => $r->id, 'queue' => $r->queue, 'failed_at' => $r->failed_at, 'error' => Str::limit((string) $r->exception, 160)])
                 : [],
         ]);
+    }
+
+    /**
+     * AI health — configured AND reachable. A no-token-billed GET /models
+     * ping checks API connectivity and credentials; completion quota/model
+     * failures are surfaced by Copilot diagnostics. Null when rule mode
+     * skips the provider ping.
+     */
+    private function aiHealth(): array
+    {
+        $provider = config('insightistic.ai.provider', 'openai');
+        $configured = ! empty(config('insightistic.ai.api_key')) || $provider === 'rule';
+
+        $reachable = null;
+        if ($configured && $provider === 'openai') {
+            try {
+                $ping = \Illuminate\Support\Facades\Http::withToken((string) config('insightistic.ai.api_key'))
+                    ->timeout(5)
+                    ->get(rtrim((string) config('insightistic.ai.base_url', 'https://api.openai.com/v1'), '/') . '/models');
+                $reachable = $ping->successful();
+            } catch (\Throwable) {
+                $reachable = false;
+            }
+        }
+
+        return [
+            'provider'   => $provider,
+            'configured' => $configured,
+            'reachable'  => $reachable,
+        ];
     }
 
     private function mrr(): float

@@ -109,7 +109,15 @@ PROMPT;
             ]);
 
         if (! $response->successful()) {
-            throw new \RuntimeException('AI provider returned HTTP ' . $response->status());
+            // Surface the provider's own error body (invalid key, exhausted
+            // quota, unknown model) — it flows into report($e) and the AiRun
+            // record, and is the only way to diagnose the dashboard's
+            // generic "AI provider is unavailable" from the server side.
+            $errorBody = trim(mb_substr((string) $response->body(), 0, 300));
+
+            throw new \RuntimeException(
+                'AI provider returned HTTP ' . $response->status() . ($errorBody !== '' ? ': ' . $errorBody : '')
+            );
         }
 
         $body = $response->toPsrResponse()->getBody();

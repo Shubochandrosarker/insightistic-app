@@ -57,8 +57,13 @@ class TrafficController extends Controller
     }
 
     /** GET /sites/{site}/analytics/traffic/dimensions/{type} */
-    public function dimensions(Request $request, string $type)
+    public function dimensions(Request $request, int $siteId, string $type)
     {
+        // $siteId soaks the first route parameter: Laravel injects route
+        // params positionally, so without this slot {site} lands on $type
+        // and every dimension type fails the allowlist below (422
+        // "Unknown dimension type." on all dashboard breakdown tabs).
+
         if (! in_array($type, self::DIMENSION_TYPES, true)) {
             return response()->json(['message' => 'Unknown dimension type.'], 422);
         }

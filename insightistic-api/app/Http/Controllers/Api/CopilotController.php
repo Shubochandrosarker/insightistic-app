@@ -333,11 +333,17 @@ class CopilotController extends Controller
                     'error_message'   => mb_substr($e->getMessage(), 0, 500),
                 ]);
 
-                // No usage charged on failure.
+                // No usage charged on failure. The HTTP status (parsed from
+                // the provider exception) tells the operator whether this is
+                // auth (401), quota (429), or a bad model name (404).
+                $status = preg_match('/HTTP (\d{3})/', $e->getMessage(), $m) ? $m[1] : null;
+
                 $emit('run.failed', [
                     'message_id' => $assistantMessage->id,
                     'code'       => 'provider_error',
-                    'message'    => 'The AI provider is unavailable right now. No usage was charged.',
+                    'message'    => 'The AI provider is unavailable right now'
+                        . ($status ? " (HTTP {$status})" : '')
+                        . '. No usage was charged.',
                 ]);
             }
         }, 200, [

@@ -144,16 +144,17 @@ php artisan storage:link                   # serve generated report files
 ```
 `.env`:
 ```
-# AI — leave OPENAI_API_KEY empty to use the free rule-based provider
-INSIGHTISTIC_AI_PROVIDER=openai
-INSIGHTISTIC_AI_MODEL=gpt-4o-mini
-OPENAI_API_KEY=
-
-# Or set INSIGHTISTIC_AI_PROVIDER=wpistic_gateway to use the shared
-# WordPressistic AI Brain gateway instead of OpenAI directly:
-WPISTIC_GATEWAY_URL=https://wpistic-ai-gateway.wordpressistic.workers.dev
-WPISTIC_GATEWAY_SHARED_SECRET=
-WPISTIC_GATEWAY_AGENT=analytics-pro
+# Plan-aware AI routing; all credentials stay server-side.
+OPENROUTER_API_KEY=
+OPENROUTER_FREE_MODEL=openrouter/free
+OPENROUTER_PAID_MODEL=openai/gpt-6-luna
+OPENROUTER_PAID_FALLBACK_MODELS=z-ai/glm-5.3-flash
+WPISTIC_GATEWAY_URL=https://ai.wpistic.com
+WPISTIC_GATEWAY_PRODUCT_KEY=
+WPISTIC_GATEWAY_PRODUCT_ID=insightistic
+WPISTIC_GATEWAY_MODEL=glm-5.3
+WPISTIC_GATEWAY_MAX_TOKENS=1200
+WPISTIC_GATEWAY_TIMEOUT=30
 
 # Mail (for emailing reports)
 MAIL_MAILER=smtp

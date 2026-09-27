@@ -54,10 +54,13 @@ return [
 
     // Shared WordPressistic AI Brain gateway (wpistic-ai-gateway Worker).
     'wpistic_gateway' => [
-        'base_url'      => env('WPISTIC_GATEWAY_URL', 'https://wpistic-ai-gateway.wordpressistic.workers.dev'),
-        'shared_secret' => env('WPISTIC_GATEWAY_SHARED_SECRET'),
-        'agent'         => env('WPISTIC_GATEWAY_AGENT', 'analytics-pro'),
-        // Per-request tier is resolved from the org's effective subscription.
+        'base_url'      => env('WPISTIC_GATEWAY_URL', 'https://ai.wpistic.com'),
+        'product_key'   => env('WPISTIC_GATEWAY_PRODUCT_KEY'),
+        'product_id'    => env('WPISTIC_GATEWAY_PRODUCT_ID', 'insightistic'),
+        'model'         => env('WPISTIC_GATEWAY_MODEL', 'glm-5.3'),
+        'max_tokens'    => (int) env('WPISTIC_GATEWAY_MAX_TOKENS', 1200),
+        // The product key identifies Insightistic; X-Wpistic-User scopes
+        // gateway daily usage to each customer organization.
         'timeout'       => (int) env('WPISTIC_GATEWAY_TIMEOUT', 30),
     ],
 

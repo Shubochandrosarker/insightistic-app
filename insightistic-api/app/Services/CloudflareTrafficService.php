@@ -89,8 +89,30 @@ class CloudflareTrafficService
         }
 
         $body = $response->json();
-        if (! empty($body['errors'])) {
-            Log::warning('Cloudflare Traffic Insights GraphQL error', ['site_id' => $site->id, 'errors' => $body['errors']]);
+        $errors = is_array($body['errors'] ?? null) ? $body['errors'] : [];
+        $requiredErrors = array_values(array_filter($errors, static function ($error): bool {
+            if (! is_array($error)) {
+                return true;
+            }
+
+            $path = $error['path'] ?? null;
+
+            // Firewall event analytics need permissions that are not included
+            // in every Zone Analytics token. GraphQL still returns the useful
+            // HTTP request data alongside this field-level denial; keep the
+            // core traffic sync available and report an empty firewall list.
+            return ! is_array($path) || ! in_array('firewallEventsAdaptiveGroups', $path, true);
+        }));
+
+        if ($requiredErrors !== []) {
+            Log::warning('Cloudflare Traffic Insights GraphQL error', ['site_id' => $site->id, 'errors' => $requiredErrors]);
+            return null;
+        }
+
+        $zone = $body['data']['viewer']['zones'][0] ?? null;
+        if ($errors !== [] && (! is_array($zone) || ! array_key_exists('httpRequests1dGroups', $zone))) {
+            Log::warning('Cloudflare Traffic Insights returned no core data with optional field errors', ['site_id' => $site->id]);
+
             return null;
         }
 

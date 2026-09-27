@@ -85,7 +85,7 @@ class OverviewController extends AdminController
     private function aiHealth(): array
     {
         $openrouterConfigured = ! empty(config('insightistic.openrouter.api_key'));
-        $gatewayConfigured = ! empty(config('insightistic.wpistic_gateway.shared_secret'));
+        $gatewayConfigured = ! empty(config('insightistic.wpistic_gateway.product_key'));
         $openrouterReachable = null;
 
         if ($openrouterConfigured) {

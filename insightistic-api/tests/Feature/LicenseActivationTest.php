@@ -2,10 +2,11 @@
 
 use App\Models\License;
 use App\Models\LicenseActivation;
-use App\Models\Organization;
 use App\Models\Site;
 use App\Models\Subscription;
 use App\Services\LicenseService;
+use Illuminate\Encryption\Encrypter;
+use Illuminate\Support\Facades\DB;
 
 /**
  * License activation and the payment/trial grace windows.
@@ -14,7 +15,6 @@ use App\Services\LicenseService;
  * logic is the part most likely to be got wrong in a way nobody notices
  * until a paying customer is locked out — or a lapsed one keeps full access.
  */
-
 function licensedOrg(string $email, array $orgAttrs = []): array
 {
     [, $org] = makeOrgUser($email);
@@ -32,8 +32,8 @@ function activate(string $key, string $siteUrl = 'https://shop.example.com')
 {
     return test()->postJson('/api/plugin/activate', [
         'license_key' => $key,
-        'site_url'    => $siteUrl,
-        'site_name'   => 'Shop',
+        'site_url' => $siteUrl,
+        'site_name' => 'Shop',
     ]);
 }
 
@@ -78,6 +78,27 @@ it('re-activating the same site is idempotent and rotates the secret', function 
     expect($first->fresh()->connector_secret)->not->toBe($firstSecret);
 });
 
+it('recovers activation when the stored connector secret uses an old encryption key', function () {
+    [, $key] = licensedOrg('lic-stale-connector-secret@example.com');
+
+    activate($key)->assertOk();
+    $site = Site::withoutGlobalScope('organization')->firstOrFail();
+
+    // Simulate ciphertext created before the production APP_KEY changed.
+    $previousKey = new Encrypter(str_repeat('x', 32), 'AES-256-CBC');
+    DB::table('sites')->where('id', $site->id)->update([
+        'connector_secret' => $previousKey->encryptString('stale-secret'),
+    ]);
+
+    $response = activate($key)->assertOk();
+    $rotatedSecret = $response->json('connector.secret');
+
+    expect($rotatedSecret)->toStartWith('sk_')
+        ->and($site->fresh()->connector_secret)->toBe($rotatedSecret)
+        ->and($site->fresh()->connection_status)->toBe('connected')
+        ->and(LicenseActivation::withoutGlobalScope('organization')->count())->toBe(1);
+});
+
 it('refuses a revoked key', function () {
     [, $key, $license] = licensedOrg('lic-revoked@example.com');
     $license->forceFill(['revoked_at' => now()])->save();
@@ -87,8 +108,8 @@ it('refuses a revoked key', function () {
 
 it('keeps a trialing organization entitled until the trial actually lapses', function () {
     [$org, $key] = licensedOrg('lic-trial@example.com', [
-        'status'         => 'trialing',
-        'trial_ends_at'  => now()->addDays(3),
+        'status' => 'trialing',
+        'trial_ends_at' => now()->addDays(3),
     ]);
 
     activate($key)->assertOk();
@@ -98,7 +119,7 @@ it('keeps a trialing organization entitled until the trial actually lapses', fun
 
 it('locks out an expired trial', function () {
     [$org, $key] = licensedOrg('lic-trial-over@example.com', [
-        'status'        => 'trialing',
+        'status' => 'trialing',
         'trial_ends_at' => now()->subDay(),
     ]);
 
@@ -115,9 +136,9 @@ it('keeps a failed payment usable inside the grace window and suspends it after'
     [$org, $key] = licensedOrg('lic-grace@example.com', ['status' => 'past_due']);
 
     $subscription = Subscription::create([
-        'organization_id'    => $org->id,
+        'organization_id' => $org->id,
         'stripe_customer_id' => 'cus_grace',
-        'status'             => 'past_due',
+        'status' => 'past_due',
     ]);
 
     // Day 2 of a 7-day grace window: still working, flagged as payment_failed.
@@ -138,10 +159,10 @@ it('keeps a cancelled organization running until the paid period ends', function
     [$org, $key] = licensedOrg('lic-cancelled@example.com', ['status' => 'canceled']);
 
     $subscription = Subscription::create([
-        'organization_id'      => $org->id,
-        'stripe_customer_id'   => 'cus_cancel',
-        'status'               => 'canceled',
-        'current_period_end'   => now()->addDays(10),
+        'organization_id' => $org->id,
+        'stripe_customer_id' => 'cus_cancel',
+        'status' => 'canceled',
+        'current_period_end' => now()->addDays(10),
     ]);
 
     // Paid through: still entitled.
@@ -157,9 +178,9 @@ it('a super admin entitlement override beats billing state but not a revoke', fu
     [$org, $key, $license] = licensedOrg('lic-override@example.com', ['status' => 'past_due']);
 
     $subscription = Subscription::create([
-        'organization_id'    => $org->id,
+        'organization_id' => $org->id,
         'stripe_customer_id' => 'cus_override',
-        'status'             => 'past_due',
+        'status' => 'past_due',
     ]);
     $subscription->forceFill(['updated_at' => now()->subDays(30), 'internal_override_active' => true])->save();
 

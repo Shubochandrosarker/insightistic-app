@@ -15,7 +15,7 @@ it('uses the ordered model fallback list and records the model that answered', f
         'api_key' => 'test-key',
         'base_url' => 'https://openrouter.ai/api/v1',
         'model' => 'openai/gpt-6-luna',
-        'fallback_models' => ['z-ai/glm-5.3-flash', 'z-ai/glm-5.3-prime'],
+        'fallback_models' => ['z-ai/glm-5.3-flash'],
         'timeout' => 10,
     ]);
 
@@ -24,7 +24,7 @@ it('uses the ordered model fallback list and records the model that answered', f
 
     Http::assertSent(fn ($request) => $request->url() === 'https://openrouter.ai/api/v1/chat/completions'
         && $request['model'] === 'openai/gpt-6-luna'
-        && $request['models'] === ['z-ai/glm-5.3-flash', 'z-ai/glm-5.3-prime']
+        && $request['models'] === ['z-ai/glm-5.3-flash']
         && $request->hasHeader('Authorization', 'Bearer test-key')
     );
 });

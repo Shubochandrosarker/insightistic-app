@@ -11,6 +11,9 @@ const PLAN_LABELS: Record<string, string> = {
   growth: "Growth",
   agency: "Agency",
   agency_pro: "Agency Pro",
+  founder_tier_1: "Angel Solo lifetime",
+  founder_tier_2: "Angel Studio lifetime",
+  founder_tier_3: "Angel Agency lifetime",
 };
 
 export default function Register() {
@@ -73,7 +76,7 @@ export default function Register() {
     >
       {plan && (
         <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-brand/30 bg-brand/10 px-3 py-1 text-xs font-semibold text-brand-700">
-          <span className="ins-logo-dot" /> {PLAN_LABELS[plan]} plan selected
+          <span className="ins-logo-dot" /> {PLAN_LABELS[plan]} selected
         </div>
       )}
 

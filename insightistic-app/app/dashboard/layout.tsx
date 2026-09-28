@@ -57,7 +57,7 @@ function DesktopSidebar() {
   return (
     <aside className="ins-scroll hidden w-60 shrink-0 flex-col overflow-y-auto border-r border-line bg-card lg:flex">
       <div className="flex items-center gap-2 px-5 py-5">
-        <BrandLogo className="rounded-md bg-white px-1.5" imageClassName="h-8 w-auto" />
+        <BrandLogo size={32} />
       </div>
 
       <nav className="flex-1 px-3 pb-4" aria-label="Dashboard sections">

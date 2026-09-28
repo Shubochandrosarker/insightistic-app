@@ -49,14 +49,47 @@ body {
 .ins-brand-logo {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  overflow: hidden;
   flex-shrink: 0;
+  min-width: 0;
+  color: var(--ins-fg);
+  line-height: 1;
 }
-.ins-brand-logo img {
+.ins-brand-logo__wordmark {
   display: block;
   max-width: 100%;
   object-fit: contain;
+}
+.ins-brand-logo__lockup {
+  display: none;
+  align-items: center;
+  gap: 0.35rem;
+  color: inherit;
+  font-size: 1rem;
+  font-weight: 750;
+  letter-spacing: -0.045em;
+  white-space: nowrap;
+}
+.ins-brand-logo__mark {
+  display: block;
+  flex: 0 0 auto;
+  object-fit: contain;
+}
+.ins-brand-logo[data-variant="inverse"] .ins-brand-logo__wordmark,
+.ins-brand-logo[data-variant="icon"] .ins-brand-logo__wordmark {
+  display: none;
+}
+.ins-brand-logo[data-variant="inverse"] .ins-brand-logo__lockup,
+.ins-brand-logo[data-variant="icon"] .ins-brand-logo__lockup {
+  display: inline-flex;
+}
+.ins-brand-logo[data-variant="icon"] .ins-brand-logo__name {
+  display: none;
+}
+.dark .ins-brand-logo[data-variant="auto"] .ins-brand-logo__wordmark {
+  display: none;
+}
+.dark .ins-brand-logo[data-variant="auto"] .ins-brand-logo__lockup {
+  display: inline-flex;
 }
 
 .ins-logo-dot {

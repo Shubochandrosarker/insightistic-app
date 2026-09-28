@@ -507,7 +507,7 @@ function DirectSourceCard({ source: s, siteId, onChanged }: { source: Source; si
       )}
 
       {/* Step 2 — credential exists, resource still needs picking. */}
-      {s.state !== "not_configured" && !s.connected && (
+      {s.state !== "not_configured" && (!s.connected || resources !== null) && (
         <div className="mt-4">
           <p className="mb-2 text-xs text-muted">Choose which {noun} this site should report on.</p>
           {resources === null ? (
@@ -533,6 +533,11 @@ function DirectSourceCard({ source: s, siteId, onChanged }: { source: Source; si
                 </li>
               ))}
             </ul>
+          )}
+          {s.connected && resources !== null && (
+            <Button className="mt-2" variant="ghost" onClick={() => setResources(null)}>
+              Cancel
+            </Button>
           )}
         </div>
       )}

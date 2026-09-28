@@ -90,6 +90,18 @@ export function crawlListParams(opts: {
   return sp.toString();
 }
 
+/** The API's runs endpoint returns `{ runs: [...] }`; keep tolerating the
+ * array/data envelopes used by older deployments and the test helpers. */
+export function crawlRunsFromResponse(res: unknown): CrawlRun[] {
+  if (Array.isArray(res)) return res as CrawlRun[];
+  if (!res || typeof res !== "object") return [];
+
+  const payload = res as { runs?: unknown; data?: unknown };
+  if (Array.isArray(payload.runs)) return payload.runs as CrawlRun[];
+  if (Array.isArray(payload.data)) return payload.data as CrawlRun[];
+  return [];
+}
+
 /**
  * The crawl runs feed (last 20) plus the newest run as a convenience. Every
  * audit page starts here: no runs at all means the not-crawled-yet state
@@ -105,7 +117,7 @@ export function useLatestRun(siteId: number | null) {
     setLoading(true);
     setError(null);
     apiGet(`/sites/${siteId}/crawl/runs`)
-      .then((res: any) => setRuns(Array.isArray(res) ? res : res?.data || []))
+      .then((res: any) => setRuns(crawlRunsFromResponse(res)))
       .catch((e: any) => setError(e?.message || "Couldn't load crawl runs."))
       .finally(() => setLoading(false));
   }, [siteId]);
@@ -183,7 +195,7 @@ export function RunBar({
     apiGet(`/sites/${siteId}/crawl/runs`)
       .then((res: any) => {
         if (!alive.current) return;
-        const list: CrawlRun[] = Array.isArray(res) ? res : res?.data || [];
+        const list = crawlRunsFromResponse(res);
         const current = list[0];
         if (current && (current.status === "pending" || current.status === "running")) {
           setTimeout(() => poll(tries + 1), 5000);

@@ -8,10 +8,11 @@ entitlement on the server. The browser cannot request a higher model tier.
 | Free and trial | WPistic AI gateway → OpenRouter `openrouter/free` → deterministic rule fallback |
 | Paid | OpenRouter `openai/gpt-6-luna` → `z-ai/glm-5.3-flash` model fallback → WPistic AI gateway → deterministic rule fallback |
 
-The explicit free-model retry list includes NVIDIA Nemotron 3 Super, Google
-Gemma 4 31B, Gemma 4 26B A4B, and GLM 5.3 Flash `:free`. Keep `:free` on the
-free-tier GLM ID; the paid GLM fallback omits that suffix and incurs the normal
-OpenRouter model charge.
+The explicit free-model retry list includes NVIDIA Nemotron 3 Super and
+LiquidAI LFM2.5-2.6B. Both are listed by OpenRouter as zero-cost text models
+supporting structured outputs, which the insights provider requests. The free
+router remains first and can select other compatible free models. Paid GLM 5.3
+Flash has a normal OpenRouter charge; do not add it to a free-tier fallback.
 
 An organization with external AI processing disabled uses only the local
 rule provider. Trial accounts use the free model chain unless a Super Admin

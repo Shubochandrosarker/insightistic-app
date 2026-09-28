@@ -32,13 +32,12 @@ it('uses the ordered model fallback list and records the model that answered', f
 it('sends the configured zero-cost free-model failovers in order', function () {
     $fallbacks = [
         'nvidia/nemotron-3-super-120b-a12b:free',
-        'google/gemma-4-31b-it:free',
-        'google/gemma-4-26b-a4b-it:free',
+        'liquid/lfm-2.5-2.6b:free',
     ];
 
     Http::fake([
         'openrouter.ai/api/v1/chat/completions' => Http::response([
-            'model' => 'google/gemma-4-31b-it:free',
+            'model' => 'liquid/lfm-2.5-2.6b:free',
             'choices' => [['message' => ['content' => '{"title":"free fallback"}']]],
         ]),
     ]);
@@ -52,7 +51,7 @@ it('sends the configured zero-cost free-model failovers in order', function () {
     ]);
 
     expect($provider->generate('system', ['metric' => 1]))->toBe(['title' => 'free fallback'])
-        ->and($provider->model())->toBe('openrouter:google/gemma-4-31b-it:free');
+        ->and($provider->model())->toBe('openrouter:liquid/lfm-2.5-2.6b:free');
 
     Http::assertSent(fn ($request) => $request['model'] === 'openrouter/free'
         && $request['models'] === $fallbacks

@@ -76,10 +76,13 @@ class AppServiceProvider extends ServiceProvider
                 $free[] = $meter(new OpenRouterProvider($routerConfig + [
                     'model' => $routerConfig['free_model'],
                     'fallback_models' => $routerConfig['free_fallback_models'],
+                    'reasoning_effort' => $routerConfig['free_reasoning_effort'] ?? 'low',
+                    'require_parameters' => true,
                 ]), 'openrouter');
                 $paid[] = $meter(new OpenRouterProvider($routerConfig + [
                     'model' => $routerConfig['paid_model'],
                     'fallback_models' => $routerConfig['paid_fallback_models'],
+                    'require_parameters' => true,
                 ]), 'openrouter');
             }
 

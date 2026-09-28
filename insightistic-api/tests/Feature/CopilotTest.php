@@ -88,7 +88,7 @@ it('uses the WPistic product gateway before the free OpenRouter route', function
     $org->forceFill(['allow_external_ai' => true])->save();
 
     config()->set('insightistic.wpistic_gateway', [
-        'base_url'    => 'https://ai-api.wpistic.com',
+        'base_url'    => 'https://ai.wpistic.com',
         'chat_path'   => '/compat/chat/completions',
         'product_key' => 'test-product-key',
         'product_id'  => 'insightistic',
@@ -107,7 +107,7 @@ WPistic gateway response.
 ANSWER;
 
     Http::fake([
-        'https://ai-api.wpistic.com/compat/chat/completions' => Http::response([
+        'https://ai.wpistic.com/compat/chat/completions' => Http::response([
             'model'   => 'z-ai/glm-5.3',
             'choices' => [['message' => ['role' => 'assistant', 'content' => $content]]],
             'usage'   => ['prompt_tokens' => 120, 'completion_tokens' => 45],

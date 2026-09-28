@@ -23,7 +23,7 @@ class WpisticGatewayClient
         $productId = trim((string) ($config['product_id'] ?? 'insightistic'));
         $model = trim((string) ($config['model'] ?? 'glm-5.3'));
         $maxTokens = min(4000, max(256, (int) ($config['max_tokens'] ?? 1200)));
-        $baseUrl = rtrim((string) ($config['base_url'] ?? 'https://ai-api.wpistic.com'), '/');
+        $baseUrl = rtrim((string) ($config['base_url'] ?? 'https://ai.wpistic.com'), '/');
         $chatPath = '/' . ltrim((string) ($config['chat_path'] ?? '/compat/chat/completions'), '/');
         // Accept either a gateway origin or a fully qualified chat endpoint.
         // This keeps production overrides from accidentally duplicating the path.

@@ -6,7 +6,7 @@ use Illuminate\Support\Facades\Http;
 
 it('calls the current WPistic product gateway and normalizes its completion', function () {
     config()->set('insightistic.wpistic_gateway', [
-        'base_url'    => 'https://ai-api.wpistic.com',
+        'base_url'    => 'https://ai.wpistic.com',
         'chat_path'   => '/compat/chat/completions',
         'product_key' => 'test-product-key',
         'product_id'  => 'insightistic',
@@ -16,7 +16,7 @@ it('calls the current WPistic product gateway and normalizes its completion', fu
     ]);
 
     Http::fake([
-        'https://ai-api.wpistic.com/compat/chat/completions' => Http::response([
+        'https://ai.wpistic.com/compat/chat/completions' => Http::response([
             'model'   => 'z-ai/glm-5.3',
             'choices' => [[
                 'message' => ['role' => 'assistant', 'content' => 'A grounded answer.'],
@@ -38,7 +38,7 @@ it('calls the current WPistic product gateway and normalizes its completion', fu
     ]);
 
     Http::assertSent(fn ($request) =>
-        $request->url() === 'https://ai-api.wpistic.com/compat/chat/completions'
+        $request->url() === 'https://ai.wpistic.com/compat/chat/completions'
         && $request->hasHeader('X-Wpistic-Product', 'insightistic')
         && $request->hasHeader('X-Wpistic-Key', 'test-product-key')
         && $request->hasHeader('X-Wpistic-User', 'org-42')
@@ -50,7 +50,7 @@ it('calls the current WPistic product gateway and normalizes its completion', fu
 
 it('rejects empty WPistic completions so another provider can take over', function () {
     config()->set('insightistic.wpistic_gateway', [
-        'base_url'    => 'https://ai-api.wpistic.com',
+        'base_url'    => 'https://ai.wpistic.com',
         'chat_path'   => '/compat/chat/completions',
         'product_key' => 'test-product-key',
         'product_id'  => 'insightistic',
@@ -60,7 +60,7 @@ it('rejects empty WPistic completions so another provider can take over', functi
     ]);
 
     Http::fake([
-        'https://ai-api.wpistic.com/compat/chat/completions' => Http::response([
+        'https://ai.wpistic.com/compat/chat/completions' => Http::response([
             'model'   => 'z-ai/glm-5.3',
             'choices' => [['message' => ['role' => 'assistant', 'content' => '']]],
         ]),
@@ -73,7 +73,7 @@ it('rejects empty WPistic completions so another provider can take over', functi
 
 it('parses structured AI insight output from the WPistic gateway', function () {
     config()->set('insightistic.wpistic_gateway', [
-        'base_url'    => 'https://ai-api.wpistic.com',
+        'base_url'    => 'https://ai.wpistic.com',
         'chat_path'   => '/compat/chat/completions',
         'product_key' => 'test-product-key',
         'product_id'  => 'insightistic',
@@ -83,7 +83,7 @@ it('parses structured AI insight output from the WPistic gateway', function () {
     ]);
 
     Http::fake([
-        'https://ai-api.wpistic.com/compat/chat/completions' => Http::response([
+        'https://ai.wpistic.com/compat/chat/completions' => Http::response([
             'model' => 'z-ai/glm-5.3',
             'choices' => [['message' => [
                 'role' => 'assistant',

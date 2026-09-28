@@ -79,6 +79,9 @@ const securityHeaders = [
 const nextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
+  // Avoid spawning a large page-generation pool on machines with limited RAM.
+  // This app has enough dashboard routes for Next.js to default to 15 workers.
+  experimental: { cpus: 2 },
   // The API proxy streams SSE (copilot chat). Next's compression middleware
   // gzips responses and holds small SSE deltas in the zlib buffer, so the
   // browser sees zero bytes for the whole answer and the outer nginx

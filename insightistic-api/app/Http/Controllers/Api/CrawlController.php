@@ -9,11 +9,15 @@ use App\Models\CrawlIssue;
 use App\Models\CrawlLink;
 use App\Models\CrawlPage;
 use App\Models\CrawlRun;
+use App\Models\Organization;
 use App\Models\Site;
 use App\Services\Crawler\ChangeDetection;
 use App\Services\Crawler\CrawlHealthScore;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+use Throwable;
 
 /**
  * Site crawler API (Phase 7, doc 12). Runs are queued (CrawlSiteJob —
@@ -35,11 +39,8 @@ use Illuminate\Http\Request;
  *
  * COORDINATION (workstream E1): App\Models\{CrawlRun,CrawlPage,CrawlLink,
  * CrawlIssue} and App\Jobs\CrawlSiteJob are created by the parallel
- * crawler engine workstream. The dispatch signature pinned here is
- * CrawlSiteJob(siteId: int, maxPages: int, trigger: string = 'manual') —
- * the job opens its own CrawlRun row, so run_id below is populated from
- * the freshest row when the job has (synchronously) created one, and null
- * while the run is still queue-only.
+ * crawler engine workstream. Manual runs are persisted as pending before
+ * dispatch, so clients receive a stable run_id while the job waits in queue.
  */
 class CrawlController extends Controller
 {
@@ -58,67 +59,106 @@ class CrawlController extends Controller
             'max_pages' => ['sometimes', 'integer', 'min:1'],
         ]);
 
-        $org = $site->organization;
-        $limit = (int) ($org->plan?->limit('crawl_pages_monthly') ?? 0);
+        // Lock the organization while reserving its org-wide page budget.
+        // This also serializes same-site requests, so two rapid clicks cannot
+        // both pass the pending/running check before either run is recorded.
+        $result = DB::transaction(function () use ($site, $validated) {
+            $org = Organization::query()
+                ->whereKey($site->organization_id)
+                ->lockForUpdate()
+                ->firstOrFail();
+            $org->load('plan');
+            $site->setRelation('organization', $org);
 
-        // One crawl at a time per site. pending counts as in-flight too:
-        // the queued job owns the pending -> running transition, so only
-        // looking at "running" would let a double-click slip two jobs in
-        // before the first worker picks anything up.
-        $inFlight = CrawlRun::where('site_id', $site->id)
-            ->whereIn('status', ['pending', 'running'])
-            ->orderBy('id')
-            ->first();
+            $inFlight = CrawlRun::where('site_id', $site->id)
+                ->whereIn('status', ['pending', 'running'])
+                ->orderBy('id')
+                ->first();
 
-        if ($inFlight) {
-            return response()->json([
-                'code'    => 'crawl_already_running',
-                'message' => 'A crawl is already in progress for this site.',
-                'run_id'  => $inFlight->id,
-            ], 409);
+            if ($inFlight) {
+                return response()->json([
+                    'code'    => 'crawl_already_running',
+                    'message' => 'A crawl is already in progress for this site.',
+                    'run_id'  => $inFlight->id,
+                ], 409);
+            }
+
+            $limit = (int) ($org->plan?->limit('crawl_pages_monthly') ?? 0);
+            $maxPages = min(
+                (int) ($validated['max_pages'] ?? self::MAX_PAGES_PER_RUN),
+                self::MAX_PAGES_PER_RUN,
+                max($limit, 0),
+            );
+
+            if ($limit <= 0 || $maxPages < 1) {
+                return response()->json([
+                    'code'    => 'crawl_limit_reached',
+                    'limit'   => $limit,
+                    'used'    => $this->monthlyUsed($site),
+                    'message' => 'Your plan includes no crawl pages. Upgrade to run crawls.',
+                ], 422);
+            }
+
+            $used = $this->monthlyUsed($site);
+            if ($used + $maxPages > $limit) {
+                return response()->json([
+                    'code'    => 'crawl_limit_reached',
+                    'limit'   => $limit,
+                    'used'    => $used,
+                    'message' => 'Monthly crawl page budget exhausted. Upgrade or wait for the next cycle.',
+                ], 422);
+            }
+
+            // Persist the queued run before publishing the job. Its ID and
+            // pending status are immediately visible to every audit tab.
+            return CrawlRun::create([
+                'site_id'   => $site->id,
+                'status'    => 'pending',
+                'trigger'   => 'manual',
+                'max_pages' => $maxPages,
+            ]);
+        });
+
+        if ($result instanceof JsonResponse) {
+            return $result;
         }
 
-        // Tolerant clamp: requested pages never exceed the per-run ceiling
-        // or the plan's monthly entitlement, and default to min(1000, plan).
-        $maxPages = min(
-            (int) ($validated['max_pages'] ?? self::MAX_PAGES_PER_RUN),
-            self::MAX_PAGES_PER_RUN,
-            max($limit, 0),
-        );
+        $run = $result;
+        try {
+            CrawlSiteJob::dispatch(
+                $site->id,
+                (int) $run->max_pages,
+                'manual',
+                \App\Services\Crawler\CrawlRunExecutor::DEFAULT_DELAY_MS,
+                (int) $run->id,
+            );
+        } catch (Throwable $e) {
+            // The reservation did not reach a worker, so it must not burn the
+            // monthly crawl quota. Keep a failed record for support visibility.
+            $run->update([
+                'status'         => 'failed',
+                'max_pages'      => 0,
+                'error_summary'  => 'The crawl could not be queued. Please try again.',
+                'completed_at'   => now(),
+            ]);
 
-        if ($limit <= 0 || $maxPages < 1) {
+            Log::error('Crawl job dispatch failed.', [
+                'run_id' => $run->id,
+                'site_id' => $site->id,
+                'exception' => get_class($e),
+            ]);
+
             return response()->json([
-                'code'    => 'crawl_limit_reached',
-                'limit'   => $limit,
-                'used'    => $this->monthlyUsed($site),
-                'message' => 'Your plan includes no crawl pages. Upgrade to run crawls.',
-            ], 422);
+                'code'    => 'crawl_dispatch_failed',
+                'run_id'  => $run->id,
+                'message' => 'The crawl could not be queued. Please try again.',
+            ], 503);
         }
-
-        $used = $this->monthlyUsed($site);
-
-        if ($used + $maxPages > $limit) {
-            return response()->json([
-                'code'    => 'crawl_limit_reached',
-                'limit'   => $limit,
-                'used'    => $used,
-                'message' => 'Monthly crawl page budget exhausted. Upgrade or wait for the next cycle.',
-            ], 422);
-        }
-
-        // Job signature (workstream E1): CrawlSiteJob(siteId: int,
-        // maxPages: int, trigger: string). It opens its own run row; the
-        // freshest-row lookup below surfaces its id when one already
-        // exists (sync queue driver), null otherwise — the client learns
-        // the id from the runs listing.
-        CrawlSiteJob::dispatch($site->id, $maxPages, 'manual');
-
-        $run = CrawlRun::where('site_id', $site->id)->orderByDesc('id')->first();
 
         return response()->json([
             'dispatched' => true,
-            'run_id'     => $run?->id,
-            'max_pages'  => $maxPages,
+            'run_id'     => $run->id,
+            'max_pages'  => $run->max_pages,
         ]);
     }
 

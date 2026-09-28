@@ -6,7 +6,7 @@ import { BrandLogo } from "@/components/BrandLogo";
 export function MobileTopbar({ brand = "Insightistic", children }: { brand?: string; children?: ReactNode }) {
   return (
     <header className="sticky top-0 z-30 flex items-center gap-2 border-b border-line bg-bg/85 px-4 py-2.5 backdrop-blur lg:hidden">
-      <BrandLogo className="rounded-md bg-white px-1.5" imageClassName="h-7 w-auto" aria-label={brand} />
+      <BrandLogo size={28} aria-label={brand} />
       <div className="ml-auto flex items-center gap-2">{children}</div>
     </header>
   );

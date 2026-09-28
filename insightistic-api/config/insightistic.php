@@ -62,7 +62,7 @@ return [
 
     // Shared WordPressistic AI Brain gateway (wpistic-ai-gateway Worker).
     'wpistic_gateway' => [
-        'base_url' => env('WPISTIC_GATEWAY_URL', 'https://ai-api.wpistic.com'),
+        'base_url' => env('WPISTIC_GATEWAY_URL', 'https://ai.wpistic.com'),
         'chat_path' => env('WPISTIC_GATEWAY_CHAT_PATH', '/compat/chat/completions'),
         'product_key' => env('WPISTIC_GATEWAY_PRODUCT_KEY'),
         'product_id' => env('WPISTIC_GATEWAY_PRODUCT_ID', 'insightistic'),

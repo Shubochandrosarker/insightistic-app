@@ -25,7 +25,7 @@ The key must stay server-side; do not add it to any `NEXT_PUBLIC_*` variable
 or frontend environment. `OPENROUTER_FREE_MODEL`,
 `OPENROUTER_FREE_FALLBACK_MODELS`, `OPENROUTER_PAID_MODEL`, and
 `OPENROUTER_PAID_FALLBACK_MODELS` control model IDs. Configure the WPistic
-gateway with `WPISTIC_GATEWAY_URL=https://ai-api.wpistic.com`,
+gateway with `WPISTIC_GATEWAY_URL=https://ai.wpistic.com`,
 `WPISTIC_GATEWAY_CHAT_PATH=/compat/chat/completions`, and the server-side
 `WPISTIC_GATEWAY_PRODUCT_KEY`; the client also accepts a complete chat endpoint
 as `WPISTIC_GATEWAY_URL`. For Docker Compose, store secrets in a mode-600 env

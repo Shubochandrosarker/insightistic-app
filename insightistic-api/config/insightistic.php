@@ -49,7 +49,7 @@ return [
             'trim',
             explode(',', (string) env(
                 'OPENROUTER_FREE_FALLBACK_MODELS',
-                'nvidia/nemotron-3-super-120b-a12b:free,google/gemma-4-31b-it:free,google/gemma-4-26b-a4b-it:free',
+                'nvidia/nemotron-3-super-120b-a12b:free,google/gemma-4-31b-it:free,google/gemma-4-26b-a4b-it:free,z-ai/glm-5.3-flash:free',
             )),
         ))),
         'paid_model' => env('OPENROUTER_PAID_MODEL', 'openai/gpt-6-luna'),
@@ -61,7 +61,8 @@ return [
 
     // Shared WordPressistic AI Brain gateway (wpistic-ai-gateway Worker).
     'wpistic_gateway' => [
-        'base_url' => env('WPISTIC_GATEWAY_URL', 'https://ai.wpistic.com'),
+        'base_url' => env('WPISTIC_GATEWAY_URL', 'https://ai-api.wpistic.com'),
+        'chat_path' => env('WPISTIC_GATEWAY_CHAT_PATH', '/compat/chat/completions'),
         'product_key' => env('WPISTIC_GATEWAY_PRODUCT_KEY'),
         'product_id' => env('WPISTIC_GATEWAY_PRODUCT_ID', 'insightistic'),
         'model' => env('WPISTIC_GATEWAY_MODEL', 'glm-5.3'),

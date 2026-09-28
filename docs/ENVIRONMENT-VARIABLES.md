@@ -70,10 +70,13 @@ dying silently an hour later.
 
 | Variable | Notes |
 |---|---|
-| `INSIGHTISTIC_AI_PROVIDER` | `rule` (default, $0, local) \| `openai` \| `wpistic_gateway` |
+| `INSIGHTISTIC_AI_PROVIDER` | Retained for older integrations; dashboard AI uses the plan-aware provider chain. |
 | `INSIGHTISTIC_AI_MODEL` / `INSIGHTISTIC_AI_TIMEOUT` | Chat model + timeout |
 | `OPENAI_API_KEY` / `OPENAI_BASE_URL` | Any OpenAI-compatible endpoint |
-| `WPISTIC_GATEWAY_URL/SHARED_SECRET/AGENT/TIER/TIMEOUT` | WordPressistic AI Gateway |
+| `OPENROUTER_API_KEY` and `OPENROUTER_*_MODEL(S)` | Server-side free/paid model routes and fallbacks |
+| `WPISTIC_GATEWAY_URL` / `WPISTIC_GATEWAY_CHAT_PATH` | Defaults to `https://ai-api.wpistic.com` and `/compat/chat/completions` |
+| `WPISTIC_GATEWAY_PRODUCT_KEY` / `WPISTIC_GATEWAY_PRODUCT_ID` | Product authentication; default product ID is `insightistic` |
+| `WPISTIC_GATEWAY_MODEL` / `WPISTIC_GATEWAY_TIMEOUT` | Gateway model and request timeout |
 
 ## AI Knowledge Base
 

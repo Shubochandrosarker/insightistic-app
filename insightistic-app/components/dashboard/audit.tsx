@@ -172,63 +172,112 @@ export function RunBar({
 }) {
   const [starting, setStarting] = useState(false);
   const [polling, setPolling] = useState(false);
+  const [activeRun, setActiveRun] = useState<CrawlRun | null>(null);
   const [msg, setMsg] = useState<{ text: string; tone: "info" | "warn" | "bad" } | null>(null);
   const alive = useRef(true);
+  const observedRunId = useRef<string | null>(null);
+  const onSettledRef = useRef(onSettled);
   useEffect(() => {
     alive.current = true;
     return () => {
       alive.current = false;
     };
   }, []);
+  useEffect(() => {
+    onSettledRef.current = onSettled;
+  }, [onSettled]);
 
   const busy = starting || polling;
-  const liveRun = run?.status === "pending" || run?.status === "running";
+  const displayRun = activeRun && (polling || !run || String(activeRun.id) === String(run.id)) ? activeRun : run;
+  const liveRun = displayRun?.status === "pending" || displayRun?.status === "running";
 
-  function poll(tries: number) {
+  const poll = useCallback((runId: number | string, tries: number) => {
     if (!alive.current) return;
     if (tries >= 60) {
       setPolling(false);
       setMsg({ text: "The crawl is still running in the background — check back in a few minutes for the results.", tone: "info" });
-      onSettled?.();
+      onSettledRef.current?.();
       return;
     }
     apiGet(`/sites/${siteId}/crawl/runs`)
       .then((res: any) => {
         if (!alive.current) return;
         const list = crawlRunsFromResponse(res);
-        const current = list[0];
-        if (current && (current.status === "pending" || current.status === "running")) {
-          setTimeout(() => poll(tries + 1), 5000);
-        } else {
-          setPolling(false);
-          if (current?.status === "failed") {
-            setMsg({ text: `The last crawl failed${current.error_summary ? `: ${current.error_summary}` : "."}`, tone: "bad" });
-          } else {
-            setMsg({ text: "Crawl finished.", tone: "info" });
-          }
-          onSettled?.();
+        const current = list.find((candidate) => String(candidate.id) === String(runId));
+
+        // A worker can take a moment to publish its run state. Keep watching
+        // the requested run instead of treating an empty list as completion.
+        if (!current) {
+          setTimeout(() => poll(runId, tries + 1), 5000);
+          return;
         }
+
+        setActiveRun(current);
+        if (current.status === "pending" || current.status === "running") {
+          setTimeout(() => poll(runId, tries + 1), 5000);
+          return;
+        }
+
+        setPolling(false);
+        if (current.status === "failed") {
+          setMsg({ text: `The last crawl failed${current.error_summary ? `: ${current.error_summary}` : "."}`, tone: "bad" });
+        } else if (current.status === "cancelled") {
+          setMsg({ text: "The crawl was cancelled.", tone: "warn" });
+        } else {
+          setMsg({ text: "Crawl finished.", tone: "info" });
+        }
+        onSettledRef.current?.();
       })
       .catch(() => {
         if (!alive.current) return;
         setPolling(false);
         setMsg({ text: "Lost track of the crawl status — try running again or reloading.", tone: "warn" });
-        onSettled?.();
+        onSettledRef.current?.();
       });
-  }
+  }, [siteId]);
+
+  useEffect(() => {
+    if (!siteId || !run || (run.status !== "pending" && run.status !== "running")) return;
+    const runId = String(run.id);
+    if (observedRunId.current === runId) return;
+
+    observedRunId.current = runId;
+    setActiveRun(run);
+    setPolling(true);
+    const timer = window.setTimeout(() => poll(run.id, 0), 3000);
+    return () => window.clearTimeout(timer);
+  }, [siteId, run, poll]);
 
   function startRun() {
     if (!siteId || busy) return;
+    setActiveRun(null);
+    observedRunId.current = null;
     setStarting(true);
     setMsg(null);
     apiPost(`/sites/${siteId}/crawl/run`, {})
-      .then(() => {
+      .then((response: any) => {
         if (!alive.current) return;
+        const runId = response?.run_id;
+        if (runId === undefined || runId === null) {
+          throw new Error("The server did not return the crawl run ID.");
+        }
+        observedRunId.current = String(runId);
+        setActiveRun({
+          id: runId,
+          status: "pending",
+          trigger: "manual",
+          started_at: null,
+          completed_at: null,
+          max_pages: response?.max_pages ?? null,
+          pages_discovered: 0,
+          pages_crawled: 0,
+          issues_found: 0,
+        });
         setStarting(false);
         setPolling(true);
         setMsg({ text: "Crawl dispatched — watching progress…", tone: "info" });
         // Give the worker a beat before the first status check.
-        setTimeout(() => poll(0), 3000);
+        setTimeout(() => poll(runId, 0), 3000);
       })
       .catch((e: any) => {
         if (!alive.current) return;
@@ -254,33 +303,33 @@ export function RunBar({
         className={`flex flex-wrap items-center gap-x-4 gap-y-2 ${compact ? "text-xs" : "text-sm"}`}
         data-testid="run-bar"
       >
-        {run ? (
-          <StatusChip status={run.status} />
+        {displayRun ? (
+          <StatusChip status={displayRun.status} />
         ) : (
           <Badge tone="slate" dot>
             Never crawled
           </Badge>
         )}
-        {run && (
+        {displayRun && (
           <>
             <span className="text-muted">
-              Crawled <span className="font-semibold text-fg">{num(run.pages_crawled ?? undefined)}</span>
-              {run.max_pages ? ` / ${num(run.max_pages)}` : ""}
+              Crawled <span className="font-semibold text-fg">{num(displayRun.pages_crawled ?? undefined)}</span>
+              {displayRun.max_pages ? ` / ${num(displayRun.max_pages)}` : ""}
             </span>
             {!compact && (
               <span className="text-muted">
-                Discovered <span className="font-semibold text-fg">{num(run.pages_discovered ?? undefined)}</span>
+                Discovered <span className="font-semibold text-fg">{num(displayRun.pages_discovered ?? undefined)}</span>
               </span>
             )}
             <span className="text-muted">
-              Issues <span className="font-semibold text-fg">{num(run.issues_found ?? undefined)}</span>
+              Issues <span className="font-semibold text-fg">{num(displayRun.issues_found ?? undefined)}</span>
             </span>
           </>
         )}
-        <SourceFreshness label="Last run" asOf={run?.started_at ?? null} />
+        <SourceFreshness label="Last run" asOf={displayRun?.started_at ?? null} />
         {!compact && liveRun && <span className="text-xs text-warn">Results update as the crawl progresses.</span>}
-        <Button variant="ghost" onClick={startRun} disabled={busy} className={compact ? "px-3 py-1.5 text-xs" : ""} title="Crawl this site now">
-          <Play size={14} /> {run ? "Run crawl now" : "Run first crawl"}
+        <Button variant="ghost" onClick={startRun} disabled={busy || liveRun} className={compact ? "px-3 py-1.5 text-xs" : ""} title="Crawl this site now">
+          <Play size={14} /> {displayRun ? "Run crawl now" : "Run first crawl"}
         </Button>
       </div>
       {msg && (

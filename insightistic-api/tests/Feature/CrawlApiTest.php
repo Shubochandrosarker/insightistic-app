@@ -173,21 +173,27 @@ it('dispatches a manual crawl with the plan-capped page budget', function () {
     ]);
     $site = crawlSite($org);
 
-    $this->actingAs($user)
+    $response = $this->actingAs($user)
         ->postJson("/api/sites/{$site->id}/crawl/run")
         ->assertOk()
         ->assertJsonPath('dispatched', true)
         // Default per-run allowance: min(1000, plan 2500).
         ->assertJsonPath('max_pages', 1000);
 
+    $runId = $response->json('run_id');
+    expect($runId)->not->toBeNull()
+        ->and(CrawlRun::where('site_id', $site->id)->find($runId)?->status)->toBe('pending');
+
     Queue::assertPushed(CrawlSiteJob::class, function (CrawlSiteJob $job) use ($site) {
         $props = crawlJobProps($job);
         $siteProp = $props['site'] ?? null;
         $siteId = $siteProp instanceof Site ? $siteProp->id : ($props['siteId'] ?? $props['site_id'] ?? null);
         $maxPages = $props['maxPages'] ?? $props['max_pages'] ?? null;
+        $runId = $props['runId'] ?? $props['run_id'] ?? null;
 
         return $maxPages === 1000
             && ($props['trigger'] ?? null) === 'manual'
+            && is_numeric($runId)
             && $siteId === $site->id;
     });
 });

@@ -137,6 +137,27 @@ it('completes a run and records pages, links, config and a drained frontier', fu
         ->and(CrawlIssue::query()->count())->toBe(0);
 });
 
+it('continues a pre-reserved pending run without creating a duplicate row', function () {
+    [, $org] = makeOrgUser('crawl-reserved@example.com');
+    $site = crawlSiteFor($org);
+    $run = CrawlRun::query()->create([
+        'site_id' => $site->id,
+        'status' => 'pending',
+        'trigger' => 'manual',
+        'max_pages' => 100,
+    ]);
+
+    fakeCrawlSite([
+        '/' => crawlPageHtml(CRAWL_BASE.'/', 'Home'),
+    ], [CRAWL_BASE.'/'], hits: $hits);
+
+    CrawlSiteJob::dispatch($site->id, 100, 'manual', 0, $run->id);
+
+    expect(CrawlRun::query()->where('site_id', $site->id)->count())->toBe(1)
+        ->and($run->fresh()->status)->toBe('completed')
+        ->and(CrawlPage::query()->where('run_id', $run->id)->where('url', CRAWL_BASE.'/')->exists())->toBeTrue();
+});
+
 it('honours the page budget on a large site without runaway crawling', function () {
     [, $org] = makeOrgUser('crawl-budget@example.com');
     $site = crawlSiteFor($org);

@@ -34,7 +34,6 @@ it('sends the configured zero-cost free-model failovers in order', function () {
         'nvidia/nemotron-3-super-120b-a12b:free',
         'google/gemma-4-31b-it:free',
         'google/gemma-4-26b-a4b-it:free',
-        'z-ai/glm-5.3-flash:free',
     ];
 
     Http::fake([

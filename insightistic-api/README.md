@@ -147,7 +147,7 @@ php artisan storage:link                   # serve generated report files
 # Plan-aware AI routing; all credentials stay server-side.
 OPENROUTER_API_KEY=
 OPENROUTER_FREE_MODEL=openrouter/free
-OPENROUTER_FREE_FALLBACK_MODELS=nvidia/nemotron-3-super-120b-a12b:free,google/gemma-4-31b-it:free,google/gemma-4-26b-a4b-it:free,z-ai/glm-5.3-flash:free
+OPENROUTER_FREE_FALLBACK_MODELS=nvidia/nemotron-3-super-120b-a12b:free,google/gemma-4-31b-it:free,google/gemma-4-26b-a4b-it:free
 OPENROUTER_PAID_MODEL=openai/gpt-6-luna
 OPENROUTER_PAID_FALLBACK_MODELS=z-ai/glm-5.3-flash
 WPISTIC_GATEWAY_URL=https://ai-api.wpistic.com

@@ -73,7 +73,7 @@ x-api-environment: &api-environment
   OPENROUTER_BASE_URL: ${OPENROUTER_BASE_URL:-https://openrouter.ai/api/v1}
   OPENROUTER_TIMEOUT: ${OPENROUTER_TIMEOUT:-180}
   OPENROUTER_FREE_MODEL: ${OPENROUTER_FREE_MODEL:-openrouter/free}
-  OPENROUTER_FREE_FALLBACK_MODELS: ${OPENROUTER_FREE_FALLBACK_MODELS:-nvidia/nemotron-3-super-120b-a12b:free,google/gemma-4-31b-it:free,google/gemma-4-26b-a4b-it:free,z-ai/glm-5.3-flash:free}
+  OPENROUTER_FREE_FALLBACK_MODELS: ${OPENROUTER_FREE_FALLBACK_MODELS:-nvidia/nemotron-3-super-120b-a12b:free,google/gemma-4-31b-it:free,google/gemma-4-26b-a4b-it:free}
   OPENROUTER_PAID_MODEL: ${OPENROUTER_PAID_MODEL:-openai/gpt-6-luna}
   OPENROUTER_PAID_FALLBACK_MODELS: ${OPENROUTER_PAID_FALLBACK_MODELS:-z-ai/glm-5.3-flash}
   WPISTIC_GATEWAY_URL: ${WPISTIC_GATEWAY_URL:-https://ai-api.wpistic.com}

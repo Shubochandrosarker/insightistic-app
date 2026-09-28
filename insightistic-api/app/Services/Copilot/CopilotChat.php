@@ -152,6 +152,12 @@ PROMPT;
         $config['model'] = $paid ? $config['paid_model'] : $config['free_model'];
         $config['fallback_models'] = $paid ? $config['paid_fallback_models'] : $config['free_fallback_models'];
 
+        if (! $paid) {
+            $config['reasoning_effort'] = $config['free_reasoning_effort'] ?? 'low';
+        } else {
+            unset($config['reasoning_effort']);
+        }
+
         return $config;
     }
 
@@ -187,6 +193,14 @@ PROMPT;
 
         if ($providerName === 'openrouter' && ! empty($cfg['fallback_models'])) {
             $payload['models'] = array_values($cfg['fallback_models']);
+        }
+
+        if ($providerName === 'openrouter') {
+            $payload['provider'] = ['require_parameters' => true];
+
+            if (! empty($cfg['reasoning_effort'])) {
+                $payload['reasoning'] = ['effort' => $cfg['reasoning_effort']];
+            }
         }
 
         $response = $request->post(rtrim((string) $cfg['base_url'], '/').'/chat/completions', $payload);

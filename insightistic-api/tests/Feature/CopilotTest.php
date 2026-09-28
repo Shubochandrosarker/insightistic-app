@@ -138,6 +138,55 @@ ANSWER;
     );
 });
 
+it('uses low reasoning and compatible free endpoints for Copilot', function () {
+    [$user, $org] = makeOrgUser('copilot-free-openrouter@example.com');
+    $org->forceFill(['allow_external_ai' => true])->save();
+
+    config()->set('insightistic.wpistic_gateway.product_key', null);
+    config()->set('insightistic.openrouter.api_key', 'test-openrouter-key');
+    config()->set('insightistic.openrouter.base_url', 'https://openrouter.ai/api/v1');
+    config()->set('insightistic.openrouter.free_model', 'openrouter/free');
+    config()->set('insightistic.openrouter.free_reasoning_effort', 'low');
+    config()->set('insightistic.openrouter.free_fallback_models', [
+        'nvidia/nemotron-3-super-120b-a12b:free',
+        'liquid/lfm-2.5-2.6b:free',
+    ]);
+
+    $answer = json_encode([
+        'id' => 'chatcmpl-free',
+        'model' => 'nvidia/nemotron-3-super-120b-a12b:free',
+        'choices' => [[
+            'delta' => ['content' => 'The free model is responding.'],
+            'finish_reason' => null,
+        ]],
+    ], JSON_UNESCAPED_SLASHES);
+
+    Http::fake([
+        'openrouter.ai/api/v1/chat/completions' => Http::response(
+            "data: {$answer}\n\ndata: [DONE]\n\n",
+            200,
+            ['Content-Type' => 'text/event-stream'],
+        ),
+    ]);
+
+    $threadId = $this->actingAs($user)->postJson('/api/copilot/threads', [])->assertCreated()->json('thread.id');
+    $response = $this->actingAs($user)->post("/api/copilot/threads/{$threadId}/messages", [
+        'content' => 'Confirm the free AI route without using business data.',
+    ], ['Accept' => 'text/event-stream']);
+
+    $response->assertOk();
+    expect($response->streamedContent())->toContain('The free model is responding.');
+
+    Http::assertSent(fn ($request) => $request['model'] === 'openrouter/free'
+        && $request['models'] === [
+            'nvidia/nemotron-3-super-120b-a12b:free',
+            'liquid/lfm-2.5-2.6b:free',
+        ]
+        && $request['reasoning']['effort'] === 'low'
+        && $request['provider']['require_parameters'] === true
+    );
+});
+
 it('enforces the monthly AI message quota with a structured 402', function () {
     [$user, $org] = makeOrgUser('copilot-quota@example.com', ['monthly_ai_messages' => 0]);
 

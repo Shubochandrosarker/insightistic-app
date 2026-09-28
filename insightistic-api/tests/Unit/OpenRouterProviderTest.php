@@ -47,6 +47,8 @@ it('sends the configured zero-cost free-model failovers in order', function () {
         'base_url' => 'https://openrouter.ai/api/v1',
         'model' => 'openrouter/free',
         'fallback_models' => $fallbacks,
+        'reasoning_effort' => 'low',
+        'require_parameters' => true,
         'timeout' => 10,
     ]);
 
@@ -56,5 +58,7 @@ it('sends the configured zero-cost free-model failovers in order', function () {
     Http::assertSent(fn ($request) => $request['model'] === 'openrouter/free'
         && $request['models'] === $fallbacks
         && $request['response_format']['type'] === 'json_object'
+        && $request['reasoning']['effort'] === 'low'
+        && $request['provider']['require_parameters'] === true
     );
 });

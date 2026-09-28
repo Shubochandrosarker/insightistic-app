@@ -9,10 +9,11 @@ entitlement on the server. The browser cannot request a higher model tier.
 | Paid | OpenRouter `openai/gpt-6-luna` → `z-ai/glm-5.3-flash` model fallback → WPistic AI gateway → deterministic rule fallback |
 
 The explicit free-model retry list includes NVIDIA Nemotron 3 Super and
-LiquidAI LFM2.5-2.6B. Both are listed by OpenRouter as zero-cost text models
-supporting structured outputs, which the insights provider requests. The free
-router remains first and can select other compatible free models. Paid GLM 5.3
-Flash has a normal OpenRouter charge; do not add it to a free-tier fallback.
+LiquidAI LFM2.5-2.6B. Free requests use low reasoning effort so reasoning
+models have output budget left for the requested answer. Structured insight
+requests require providers to support the requested parameters; this prevents
+the free router from selecting incompatible endpoints. Paid GLM 5.3 Flash has
+a normal OpenRouter charge; do not add it to a free-tier fallback.
 
 An organization with external AI processing disabled uses only the local
 rule provider. Trial accounts use the free model chain unless a Super Admin

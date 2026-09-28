@@ -45,6 +45,7 @@ return [
         'base_url' => env('OPENROUTER_BASE_URL', 'https://openrouter.ai/api/v1'),
         'timeout' => (int) env('OPENROUTER_TIMEOUT', 180),
         'free_model' => env('OPENROUTER_FREE_MODEL', 'openrouter/free'),
+        'free_reasoning_effort' => env('OPENROUTER_FREE_REASONING_EFFORT', 'low'),
         'free_fallback_models' => array_values(array_filter(array_map(
             'trim',
             explode(',', (string) env(

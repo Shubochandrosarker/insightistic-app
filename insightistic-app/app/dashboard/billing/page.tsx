@@ -11,7 +11,7 @@ import { PageHeader } from "@/components/dashboard/PageHeader";
 import { Spinner } from "@/components/ui/Spinner";
 import { initPaddle, openPaddleCheckout } from "@/lib/paddle";
 import type { PaddleEnvironment } from "@/lib/paddle";
-import { num } from "@/lib/format";
+import { money0, num } from "@/lib/format";
 
 // Fallback lineup — Growth is the featured "Best Value" plan. Live names and
 // featured flags come from /public/plans once loaded; this constant wins only
@@ -298,6 +298,12 @@ export default function BillingPage() {
     data.subscription?.billing_provider ?? (data.subscription?.stripe_subscription_id ? "stripe" : null);
   const cancelPending =
     !!data.subscription?.cancel_at_period_end || data.subscription?.scheduled_change_action === "cancel";
+  const trialStatusLabel =
+    data.organization?.status === "trialing"
+      ? "trial ends"
+      : data.organization?.status === "expired"
+        ? "trial ended"
+        : null;
   const hasSubscription = !!data.subscription?.stripe_subscription_id || !!provider;
   const lifetimeGrant = lifetimeGrantOf(data);
 
@@ -310,11 +316,11 @@ export default function BillingPage() {
           <div className="text-[11px] font-bold uppercase tracking-wide text-brand-700">Current plan</div>
           <div className="mt-1 flex items-baseline gap-2">
             <span className="text-3xl font-bold text-fg">{planObj.name || "Free trial"}</span>
-            {planObj.price_monthly != null && <span className="text-sm text-muted">${planObj.price_monthly}/mo</span>}
+            {planObj.price_monthly != null && <span className="text-sm text-muted">{money0(Number(planObj.price_monthly) / 100)}/mo</span>}
           </div>
           <div className="mt-1 text-sm text-muted">
             Status: {data.organization?.status}
-            {data.organization?.trial_ends_at && ` · trial ends ${new Date(data.organization.trial_ends_at).toLocaleDateString()}`}
+            {trialStatusLabel && data.organization?.trial_ends_at && ` · ${trialStatusLabel} ${new Date(data.organization.trial_ends_at).toLocaleDateString()}`}
           </div>
           {cancelPending && (
             <p className="mt-2 rounded-lg border border-warn/30 bg-warn/10 px-3 py-2 text-xs text-warn">

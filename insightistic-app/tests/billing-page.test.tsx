@@ -84,6 +84,25 @@ beforeEach(() => {
 });
 
 describe("Billing page checkout", () => {
+  it("formats cent-denominated plan prices and hides stale trial dates on active subscriptions", async () => {
+    apiMocks.apiGet.mockImplementation((path: string) =>
+      path === "/billing/subscription"
+        ? Promise.resolve({
+            ...paddleOrg,
+            organization: { status: "active", trial_ends_at: "2026-07-29T00:00:00Z" },
+            plan: { name: "Agency Pro", price_monthly: 29900 },
+          })
+        : path === "/public/plans"
+          ? Promise.resolve(livePlans)
+          : Promise.resolve({}),
+    );
+
+    render(<BillingPage />);
+
+    expect(await screen.findByText("$299/mo")).toBeInTheDocument();
+    expect(screen.queryByText(/trial ends/i)).not.toBeInTheDocument();
+  });
+
   it("keeps the legacy Stripe redirect when Paddle is not enabled (501)", async () => {
     apiMocks.apiPost.mockImplementation((path: string) =>
       path === "/billing/checkout-config"

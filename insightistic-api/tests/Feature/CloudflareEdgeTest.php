@@ -6,6 +6,7 @@ use App\Models\Site;
 use App\Models\TrafficDaily;
 use App\Services\Integrations\IntegrationFailure;
 use App\Services\Integrations\IntegrationManager;
+use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
 
 /**
@@ -44,7 +45,7 @@ function cfEdgeError(string $message): array
     return ['errors' => [['message' => $message]]];
 }
 
-it('keeps Cloudflare traffic when only optional firewall analytics are forbidden', function () {
+it('fetches Cloudflare traffic without requiring firewall analytics access', function () {
     $day = now()->subDay()->toDateString();
     [, $org] = makeOrgUser('edge-partial@example.com');
     $site = makeCfEdgeSite($org);
@@ -59,19 +60,16 @@ it('keeps Cloudflare traffic when only optional firewall analytics are forbidden
                             'sum'        => ['requests' => 500, 'pageViews' => 120],
                             'uniq'       => ['uniques' => 80],
                         ]],
-                        'firewallEventsAdaptiveGroups' => null,
                     ]],
                 ],
             ],
-            'errors' => [[
-                'message' => 'Zone does not have access to firewall event analytics.',
-                'path'    => ['GetZoneAnalytics', 'viewer', 'zones', '0', 'firewallEventsAdaptiveGroups'],
-                'extensions' => ['code' => 'authz'],
-            ]],
         ]),
     ]);
 
     $payload = app(\App\Services\CloudflareTrafficService::class)->fetch($site, 7);
+
+    Http::assertSent(fn (Request $request) => str_contains($request->data()['query'] ?? '', '$zoneTag: String!')
+        && ! str_contains($request->data()['query'] ?? '', 'firewallEventsAdaptiveGroups'));
 
     expect($payload)->not->toBeNull()
         ->and($payload['totals']['requests'])->toBe(500)

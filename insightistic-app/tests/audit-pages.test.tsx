@@ -57,7 +57,7 @@ function list(rows: any[], cursor: string | null = null, hasMore = false) {
   return { data: rows, meta: { next_cursor: cursor, has_more: hasMore, total: rows.length } };
 }
 
-function mockApi(opts: { runs?: any[]; health?: any; pages?: any; links?: any; issues?: any } = {}) {
+function mockApi(opts: { runs?: any; health?: any; pages?: any; links?: any; issues?: any } = {}) {
   apiMocks.apiGet.mockImplementation((path: string) => {
     const p = String(path);
     if (p.includes("/crawl/runs")) return Promise.resolve(opts.runs ?? [doneRun]);
@@ -110,6 +110,16 @@ describe("Audit overview", () => {
 
 describe("Crawled pages explorer", () => {
   beforeEach(() => vi.clearAllMocks());
+
+  it("reads the API runs envelope and shows the current crawl instead of the first-crawl state", async () => {
+    mockApi({ runs: { runs: [doneRun] } });
+    render(<AuditPagesPage />);
+
+    expect(await screen.findByText("Crawled pages")).toBeInTheDocument();
+    expect(await screen.findByText("Completed")).toBeInTheDocument();
+    expect(screen.getByText("310")).toBeInTheDocument();
+    expect(screen.queryByText("Run your first crawl")).not.toBeInTheDocument();
+  });
 
   it("renders rows with status tones and passes status=error when the filter changes", async () => {
     mockApi({

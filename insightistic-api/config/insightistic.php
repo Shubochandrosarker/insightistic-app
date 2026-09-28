@@ -49,7 +49,7 @@ return [
             'trim',
             explode(',', (string) env(
                 'OPENROUTER_FREE_FALLBACK_MODELS',
-                'nvidia/nemotron-3-super-120b-a12b:free,google/gemma-4-31b-it:free,google/gemma-4-26b-a4b-it:free',
+                'nvidia/nemotron-3-super-120b-a12b:free,liquid/lfm-2.5-2.6b:free',
             )),
         ))),
         'paid_model' => env('OPENROUTER_PAID_MODEL', 'openai/gpt-6-luna'),

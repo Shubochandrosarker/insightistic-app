@@ -320,8 +320,12 @@ class CloudflareAnalytics
         return $byDate;
     }
 
-    /** ai_crawler | search_bot | other | null (null = not a bot we claim to know). */
-    private function classify(string $userAgent): ?string
+    /**
+     * ai_crawler | search_bot | other | null (null = not a bot we claim to know).
+     * Public because the connector ingestion path classifies plugin-pushed
+     * raw user agents with the same taxonomy — one list, no drift.
+     */
+    public function classify(string $userAgent): ?string
     {
         $ua = mb_strtolower($userAgent);
 

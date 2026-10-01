@@ -64,12 +64,17 @@ class CrawlRunExecutor
     /**
      * @throws InvalidArgumentException when the site has no usable domain
      */
-    public function startRun(Site $site, int $maxPages, string $trigger, int $delayMs = self::DEFAULT_DELAY_MS): CrawlRun
+    public function startRun(
+        Site $site,
+        int $maxPages,
+        string $trigger,
+        int $delayMs = self::DEFAULT_DELAY_MS,
+        ?int $runId = null,
+    ): CrawlRun
     {
         $baseUrl = self::siteBaseUrl($site);
 
-        $run = CrawlRun::query()->create([
-            'site_id' => $site->id,
+        $attributes = [
             'status' => 'running',
             'trigger' => in_array($trigger, ['manual', 'schedule'], true) ? $trigger : 'manual',
             'started_at' => Carbon::now(),
@@ -81,7 +86,17 @@ class CrawlRunExecutor
                 'respect_robots' => true,
                 'user_agent' => self::USER_AGENT,
             ],
-        ]);
+        ];
+
+        if ($runId !== null) {
+            $run = CrawlRun::query()
+                ->where('site_id', $site->id)
+                ->where('status', 'pending')
+                ->findOrFail($runId);
+            $run->update($attributes);
+        } else {
+            $run = CrawlRun::query()->create($attributes + ['site_id' => $site->id]);
+        }
 
         try {
             $robots = RobotsTxt::forHost($baseUrl, self::USER_AGENT);

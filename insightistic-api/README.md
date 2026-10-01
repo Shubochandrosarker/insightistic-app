@@ -8,7 +8,7 @@ generate locally). You scaffold Laravel, then copy these files over it.
 
 - Full PostgreSQL schema (all 19 tables from the spec) as migrations
 - Multi-tenant isolation baked into the ORM (global scope, not manual WHERE clauses)
-- Auth: register (bootstraps org + owner + 7-day trial), login, me, logout
+- Auth: register (bootstraps org + owner + 14-day trial), login, me, logout
 - Organization + Site management with plan `site_limit` enforcement
 - One-time connector API key (sha256-hashed at rest)
 - Connector handshake endpoint for the WordPress plugin
@@ -147,14 +147,17 @@ php artisan storage:link                   # serve generated report files
 # Plan-aware AI routing; all credentials stay server-side.
 OPENROUTER_API_KEY=
 OPENROUTER_FREE_MODEL=openrouter/free
+OPENROUTER_FREE_FALLBACK_MODELS=nvidia/nemotron-3-super-120b-a12b:free,liquid/lfm-2.5-2.6b:free
 OPENROUTER_PAID_MODEL=openai/gpt-6-luna
 OPENROUTER_PAID_FALLBACK_MODELS=z-ai/glm-5.3-flash
 WPISTIC_GATEWAY_URL=https://ai.wpistic.com
+WPISTIC_GATEWAY_CHAT_PATH=/compat/chat/completions
 WPISTIC_GATEWAY_PRODUCT_KEY=
 WPISTIC_GATEWAY_PRODUCT_ID=insightistic
 WPISTIC_GATEWAY_MODEL=glm-5.3
 WPISTIC_GATEWAY_MAX_TOKENS=1200
 WPISTIC_GATEWAY_TIMEOUT=30
+INSIGHTISTIC_TRIAL_DAYS=14
 
 # Mail (for emailing reports)
 MAIL_MAILER=smtp

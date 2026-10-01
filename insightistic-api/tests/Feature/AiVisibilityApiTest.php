@@ -56,7 +56,10 @@ function aivApiRun(Site $site, AiVisibilityPrompt $prompt, array $overrides = []
         'status'          => AiVisibilityRun::STATUS_SUCCESS,
         'brand_mentioned' => false,
         'checked_at'      => now()->subDay(),
-        'created_at'      => now()->subDay(),
+        // Quota counts created_at >= startOfMonth; backdating past midnight
+        // on the 1st would land the run in the previous month and the quota
+        // tests would only fail on the first day of a month.
+        'created_at'      => now()->subDay()->max(now()->startOfMonth()),
     ], $overrides));
 }
 

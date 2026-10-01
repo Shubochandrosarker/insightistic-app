@@ -768,6 +768,10 @@ Route::prefix('connector/v1')->middleware(['connector.auth', 'throttle:connector
     Route::post('sync/engagement/daily', [SyncV2Controller::class, 'engagementDaily']);
     Route::post('sync/broken-links', [SyncV2Controller::class, 'brokenLinks']);
 
+    // Cloudflare edge analytics pushed from the plugin's own Zone ID + token
+    // (Settings → Cloudflare BYO path) — same tables the nightly pull fills.
+    Route::post('sync/cloudflare/daily', [SyncV2Controller::class, 'cloudflareDaily']);
+
     // Email analytics from WordPress-side platforms (FluentCRM, AutomateWoo,
     // WooCommerce mail) — the SaaS can't reach these, so the plugin pushes.
     Route::post('sync/email/campaigns', [\App\Http\Controllers\Api\Connector\EmailSyncController::class, 'campaigns']);

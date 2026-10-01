@@ -42,7 +42,7 @@ export default function OAuthCallback() {
     <main className="flex min-h-screen items-center justify-center bg-bg px-6">
       <div className="w-full max-w-sm rounded-2xl border border-line bg-card p-8 text-center shadow-card">
         <div className="mx-auto mb-4 flex items-center justify-center gap-2">
-          <BrandLogo className="rounded-md bg-white px-2" imageClassName="h-8 w-auto" />
+          <BrandLogo size={32} />
         </div>
 
         {error ? (

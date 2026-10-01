@@ -24,6 +24,12 @@ class WpisticGatewayClient
         $model = trim((string) ($config['model'] ?? 'glm-5.3'));
         $maxTokens = min(4000, max(256, (int) ($config['max_tokens'] ?? 1200)));
         $baseUrl = rtrim((string) ($config['base_url'] ?? 'https://ai.wpistic.com'), '/');
+        $chatPath = '/' . ltrim((string) ($config['chat_path'] ?? '/compat/chat/completions'), '/');
+        // Accept either a gateway origin or a fully qualified chat endpoint.
+        // This keeps production overrides from accidentally duplicating the path.
+        $endpoint = preg_match('~/chat/completions$~', $baseUrl) === 1
+            ? $baseUrl
+            : $baseUrl . $chatPath;
 
         $response = Http::timeout((int) ($config['timeout'] ?? 30))
             ->acceptJson()
@@ -32,7 +38,7 @@ class WpisticGatewayClient
                 'X-Wpistic-Key'     => $productKey,
                 'X-Wpistic-User'    => $organizationId ? 'org-' . $organizationId : 'insightistic-service',
             ])
-            ->post($baseUrl . '/v1/chat/completions', [
+            ->post($endpoint, [
                 'model'       => $model,
                 'messages'    => array_values($messages),
                 'max_tokens'  => $maxTokens,

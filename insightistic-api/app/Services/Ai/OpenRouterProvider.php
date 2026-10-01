@@ -30,6 +30,14 @@ class OpenRouterProvider implements AiProvider
                 ],
             ];
 
+            if (! empty($this->config['reasoning_effort'])) {
+                $payload['reasoning'] = ['effort' => $this->config['reasoning_effort']];
+            }
+
+            if (! empty($this->config['require_parameters'])) {
+                $payload['provider'] = ['require_parameters' => true];
+            }
+
             if (! empty($this->config['fallback_models'])) {
                 // OpenRouter tries these in order if the primary is unavailable,
                 // rate-limited, refuses, or cannot satisfy the request.

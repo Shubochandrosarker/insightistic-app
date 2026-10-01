@@ -41,7 +41,7 @@ export default function Pricing() {
       <section className="mx-auto max-w-6xl px-6 py-16">
         <div className="mb-10 text-center">
           <h1 className="text-3xl font-bold text-slate-900">Pricing</h1>
-          <p className="mt-3 text-slate-600">7-day free trial. No card required to start.</p>
+          <p className="mt-3 text-slate-600">14-day free trial. No card required to start.</p>
         </div>
         <PricingCards />
 

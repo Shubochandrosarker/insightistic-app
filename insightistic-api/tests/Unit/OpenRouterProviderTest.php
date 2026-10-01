@@ -22,10 +22,43 @@ it('uses the ordered model fallback list and records the model that answered', f
     expect($provider->generate('system', ['metric' => 1]))->toBe(['title' => 'ok'])
         ->and($provider->model())->toBe('openrouter:z-ai/glm-5.3-flash');
 
-    Http::assertSent(fn ($request) =>
-        $request->url() === 'https://openrouter.ai/api/v1/chat/completions'
+    Http::assertSent(fn ($request) => $request->url() === 'https://openrouter.ai/api/v1/chat/completions'
         && $request['model'] === 'openai/gpt-6-luna'
         && $request['models'] === ['z-ai/glm-5.3-flash']
         && $request->hasHeader('Authorization', 'Bearer test-key')
+    );
+});
+
+it('sends the configured zero-cost free-model failovers in order', function () {
+    $fallbacks = [
+        'nvidia/nemotron-3-super-120b-a12b:free',
+        'liquid/lfm-2.5-2.6b:free',
+    ];
+
+    Http::fake([
+        'openrouter.ai/api/v1/chat/completions' => Http::response([
+            'model' => 'liquid/lfm-2.5-2.6b:free',
+            'choices' => [['message' => ['content' => '{"title":"free fallback"}']]],
+        ]),
+    ]);
+
+    $provider = new OpenRouterProvider([
+        'api_key' => 'test-key',
+        'base_url' => 'https://openrouter.ai/api/v1',
+        'model' => 'openrouter/free',
+        'fallback_models' => $fallbacks,
+        'reasoning_effort' => 'low',
+        'require_parameters' => true,
+        'timeout' => 10,
+    ]);
+
+    expect($provider->generate('system', ['metric' => 1]))->toBe(['title' => 'free fallback'])
+        ->and($provider->model())->toBe('openrouter:liquid/lfm-2.5-2.6b:free');
+
+    Http::assertSent(fn ($request) => $request['model'] === 'openrouter/free'
+        && $request['models'] === $fallbacks
+        && $request['response_format']['type'] === 'json_object'
+        && $request['reasoning']['effort'] === 'low'
+        && $request['provider']['require_parameters'] === true
     );
 });

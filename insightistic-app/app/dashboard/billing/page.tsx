@@ -11,7 +11,7 @@ import { PageHeader } from "@/components/dashboard/PageHeader";
 import { Spinner } from "@/components/ui/Spinner";
 import { initPaddle, openPaddleCheckout } from "@/lib/paddle";
 import type { PaddleEnvironment } from "@/lib/paddle";
-import { num } from "@/lib/format";
+import { money0, num } from "@/lib/format";
 
 // Fallback lineup — Growth is the featured "Best Value" plan. Live names and
 // featured flags come from /public/plans once loaded; this constant wins only
@@ -35,23 +35,25 @@ const POLL_INTERVAL_MS = 2000;
 const FOUNDER_TIERS = [
   {
     slug: "founder_tier_1",
-    name: "Founder Tier 1",
+    name: "Angel Solo",
     price: 79,
     limits: "3 sites · 10k crawl pages/mo · 150 keywords · 10 AI prompts/mo · basic reports",
   },
   {
     slug: "founder_tier_2",
-    name: "Founder Tier 2",
+    name: "Angel Studio",
     price: 149,
     limits: "10 sites · 40k crawl pages/mo · 500 keywords · 40 AI prompts/mo · scheduled reports",
   },
   {
     slug: "founder_tier_3",
-    name: "Founder Tier 3",
+    name: "Angel Agency",
     price: 249,
     limits: "30 sites · 100k crawl pages/mo · 1,500 keywords · 100 AI prompts/mo · white-label reports · 5 team members",
   },
 ];
+
+const FOUNDER_TIER_SLUGS = new Set(FOUNDER_TIERS.map((tier) => tier.slug));
 
 // Insight Credit packs: one-time purchases granted to the credit ledger by
 // the webhook (credits arrive in price metadata). Core syncs never consume
@@ -119,12 +121,25 @@ export default function BillingPage() {
   const [busy, setBusy] = useState(false);
   const [phase, setPhase] = useState<Phase>("idle");
   const [finishLabel, setFinishLabel] = useState("Finishing your subscription setup…");
+  const [selectedFounderTier, setSelectedFounderTier] = useState<string | null>(null);
   const paidRef = useRef(false);
 
   // Preselect the plan passed from the marketing-site CTA (?plan=).
   useEffect(() => {
     const p = new URLSearchParams(window.location.search).get("plan");
-    if (p && PLANS.some((x) => x.slug === p)) setPlan(p);
+    if (!p) return;
+
+    if (PLANS.some((x) => x.slug === p)) {
+      setPlan(p);
+      return;
+    }
+
+    if (FOUNDER_TIER_SLUGS.has(p)) {
+      setSelectedFounderTier(p);
+      window.setTimeout(() => {
+        document.getElementById("founder-lifetime")?.scrollIntoView({ behavior: "smooth", block: "start" });
+      }, 250);
+    }
   }, []);
 
   // Live catalog names/featured flags win once loaded; the constant covers
@@ -298,6 +313,12 @@ export default function BillingPage() {
     data.subscription?.billing_provider ?? (data.subscription?.stripe_subscription_id ? "stripe" : null);
   const cancelPending =
     !!data.subscription?.cancel_at_period_end || data.subscription?.scheduled_change_action === "cancel";
+  const trialStatusLabel =
+    data.organization?.status === "trialing"
+      ? "trial ends"
+      : data.organization?.status === "expired"
+        ? "trial ended"
+        : null;
   const hasSubscription = !!data.subscription?.stripe_subscription_id || !!provider;
   const lifetimeGrant = lifetimeGrantOf(data);
 
@@ -310,11 +331,11 @@ export default function BillingPage() {
           <div className="text-[11px] font-bold uppercase tracking-wide text-brand-700">Current plan</div>
           <div className="mt-1 flex items-baseline gap-2">
             <span className="text-3xl font-bold text-fg">{planObj.name || "Free trial"}</span>
-            {planObj.price_monthly != null && <span className="text-sm text-muted">${planObj.price_monthly}/mo</span>}
+            {planObj.price_monthly != null && <span className="text-sm text-muted">{money0(Number(planObj.price_monthly) / 100)}/mo</span>}
           </div>
           <div className="mt-1 text-sm text-muted">
             Status: {data.organization?.status}
-            {data.organization?.trial_ends_at && ` · trial ends ${new Date(data.organization.trial_ends_at).toLocaleDateString()}`}
+            {trialStatusLabel && data.organization?.trial_ends_at && ` · ${trialStatusLabel} ${new Date(data.organization.trial_ends_at).toLocaleDateString()}`}
           </div>
           {cancelPending && (
             <p className="mt-2 rounded-lg border border-warn/30 bg-warn/10 px-3 py-2 text-xs text-warn">
@@ -379,6 +400,11 @@ export default function BillingPage() {
 
       <Card id="founder-lifetime" className="mt-5" title="Founder lifetime deals"
         subtitle="One-time purchase — the tier's features and published monthly allowances for as long as Insightistic operates.">
+        {selectedFounderTier && !lifetimeGrant && (
+          <p className="mb-3 rounded-lg border border-brand/30 bg-brand/10 px-3 py-2 text-sm font-medium text-brand-700">
+            {FOUNDER_TIERS.find((tier) => tier.slug === selectedFounderTier)?.name ?? "Lifetime tier"} selected from the lifetime deal page.
+          </p>
+        )}
         {lifetimeGrant ? (
           <div>
             <Badge tone="green" dot>Lifetime {grantTierLabel(lifetimeGrant.plan_slug!)} active</Badge>
@@ -390,7 +416,14 @@ export default function BillingPage() {
         ) : (
           <div className="grid gap-4 sm:grid-cols-3">
             {FOUNDER_TIERS.map((t) => (
-              <div key={t.slug} className="flex flex-col rounded-xl border border-line bg-card2 p-4">
+              <div
+                key={t.slug}
+                className={`flex flex-col rounded-xl border bg-card2 p-4 ${
+                  selectedFounderTier === t.slug
+                    ? "border-brand shadow-lg shadow-brand/10 ring-2 ring-brand/20"
+                    : "border-line"
+                }`}
+              >
                 <div className="flex items-baseline justify-between">
                   <span className="text-sm font-semibold text-fg">{t.name}</span>
                   <span className="text-lg font-bold text-fg">${t.price}</span>
@@ -402,7 +435,7 @@ export default function BillingPage() {
                   disabled={busy}
                   onClick={() => oneTimeCheckout(t.slug, "lifetime")}
                 >
-                  Buy {t.name.replace("Founder ", "")} — ${t.price}
+                  Buy {t.name} — ${t.price}
                 </Button>
               </div>
             ))}

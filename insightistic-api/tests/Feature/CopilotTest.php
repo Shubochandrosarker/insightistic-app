@@ -89,6 +89,7 @@ it('uses the WPistic product gateway before the free OpenRouter route', function
 
     config()->set('insightistic.wpistic_gateway', [
         'base_url'    => 'https://ai.wpistic.com',
+        'chat_path'   => '/compat/chat/completions',
         'product_key' => 'test-product-key',
         'product_id'  => 'insightistic',
         'model'       => 'glm-5.3',
@@ -106,7 +107,7 @@ WPistic gateway response.
 ANSWER;
 
     Http::fake([
-        'https://ai.wpistic.com/v1/chat/completions' => Http::response([
+        'https://ai.wpistic.com/compat/chat/completions' => Http::response([
             'model'   => 'z-ai/glm-5.3',
             'choices' => [['message' => ['role' => 'assistant', 'content' => $content]]],
             'usage'   => ['prompt_tokens' => 120, 'completion_tokens' => 45],
@@ -134,6 +135,55 @@ ANSWER;
         $request->hasHeader('X-Wpistic-Product', 'insightistic')
         && $request->hasHeader('X-Wpistic-User', 'org-' . $org->id)
         && $request['model'] === 'glm-5.3'
+    );
+});
+
+it('uses low reasoning and compatible free endpoints for Copilot', function () {
+    [$user, $org] = makeOrgUser('copilot-free-openrouter@example.com');
+    $org->forceFill(['allow_external_ai' => true])->save();
+
+    config()->set('insightistic.wpistic_gateway.product_key', null);
+    config()->set('insightistic.openrouter.api_key', 'test-openrouter-key');
+    config()->set('insightistic.openrouter.base_url', 'https://openrouter.ai/api/v1');
+    config()->set('insightistic.openrouter.free_model', 'openrouter/free');
+    config()->set('insightistic.openrouter.free_reasoning_effort', 'low');
+    config()->set('insightistic.openrouter.free_fallback_models', [
+        'nvidia/nemotron-3-super-120b-a12b:free',
+        'liquid/lfm-2.5-2.6b:free',
+    ]);
+
+    $answer = json_encode([
+        'id' => 'chatcmpl-free',
+        'model' => 'nvidia/nemotron-3-super-120b-a12b:free',
+        'choices' => [[
+            'delta' => ['content' => 'The free model is responding.'],
+            'finish_reason' => null,
+        ]],
+    ], JSON_UNESCAPED_SLASHES);
+
+    Http::fake([
+        'openrouter.ai/api/v1/chat/completions' => Http::response(
+            "data: {$answer}\n\ndata: [DONE]\n\n",
+            200,
+            ['Content-Type' => 'text/event-stream'],
+        ),
+    ]);
+
+    $threadId = $this->actingAs($user)->postJson('/api/copilot/threads', [])->assertCreated()->json('thread.id');
+    $response = $this->actingAs($user)->post("/api/copilot/threads/{$threadId}/messages", [
+        'content' => 'Confirm the free AI route without using business data.',
+    ], ['Accept' => 'text/event-stream']);
+
+    $response->assertOk();
+    expect($response->streamedContent())->toContain('The free model is responding.');
+
+    Http::assertSent(fn ($request) => $request['model'] === 'openrouter/free'
+        && $request['models'] === [
+            'nvidia/nemotron-3-super-120b-a12b:free',
+            'liquid/lfm-2.5-2.6b:free',
+        ]
+        && $request['reasoning']['effort'] === 'low'
+        && $request['provider']['require_parameters'] === true
     );
 });
 

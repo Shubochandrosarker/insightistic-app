@@ -35,7 +35,7 @@ class CloudflareTrafficService
         $since = now()->subDays($days)->toDateString();
 
         $query = <<<'GRAPHQL'
-        query GetZoneAnalytics($zoneTag: string!, $since: Date!, $until: Date!, $sinceTime: Time!, $untilTime: Time!, $rows: Int!) {
+        query GetZoneAnalytics($zoneTag: String!, $since: Date!, $until: Date!, $rows: Int!) {
             viewer {
                 zones(filter: { zoneTag: $zoneTag }) {
                     httpRequests1dGroups(limit: $rows, filter: { date_geq: $since, date_leq: $until }, orderBy: [date_ASC]) {
@@ -55,10 +55,6 @@ class CloudflareTrafficService
                         }
                         uniq { uniques }
                     }
-                    firewallEventsAdaptiveGroups(limit: 20, filter: { datetime_geq: $sinceTime, datetime_leq: $untilTime }, orderBy: [count_DESC]) {
-                        count
-                        dimensions { action clientCountryName }
-                    }
                 }
             }
         }
@@ -68,8 +64,6 @@ class CloudflareTrafficService
             'zoneTag'   => $site->cloudflare_zone_id,
             'since'     => $since,
             'until'     => $until,
-            'sinceTime' => $since . 'T00:00:00Z',
-            'untilTime' => $until . 'T23:59:59Z',
             'rows'      => $days + 1,
         ];
 
@@ -90,28 +84,14 @@ class CloudflareTrafficService
 
         $body = $response->json();
         $errors = is_array($body['errors'] ?? null) ? $body['errors'] : [];
-        $requiredErrors = array_values(array_filter($errors, static function ($error): bool {
-            if (! is_array($error)) {
-                return true;
-            }
-
-            $path = $error['path'] ?? null;
-
-            // Firewall event analytics need permissions that are not included
-            // in every Zone Analytics token. GraphQL still returns the useful
-            // HTTP request data alongside this field-level denial; keep the
-            // core traffic sync available and report an empty firewall list.
-            return ! is_array($path) || ! in_array('firewallEventsAdaptiveGroups', $path, true);
-        }));
-
-        if ($requiredErrors !== []) {
-            Log::warning('Cloudflare Traffic Insights GraphQL error', ['site_id' => $site->id, 'errors' => $requiredErrors]);
+        if ($errors !== []) {
+            Log::warning('Cloudflare Traffic Insights GraphQL error', ['site_id' => $site->id, 'errors' => $errors]);
             return null;
         }
 
         $zone = $body['data']['viewer']['zones'][0] ?? null;
-        if ($errors !== [] && (! is_array($zone) || ! array_key_exists('httpRequests1dGroups', $zone))) {
-            Log::warning('Cloudflare Traffic Insights returned no core data with optional field errors', ['site_id' => $site->id]);
+        if (! is_array($zone) || ! array_key_exists('httpRequests1dGroups', $zone)) {
+            Log::warning('Cloudflare Traffic Insights returned no core data', ['site_id' => $site->id]);
 
             return null;
         }

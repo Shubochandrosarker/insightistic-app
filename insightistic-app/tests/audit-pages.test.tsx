@@ -57,7 +57,7 @@ function list(rows: any[], cursor: string | null = null, hasMore = false) {
   return { data: rows, meta: { next_cursor: cursor, has_more: hasMore, total: rows.length } };
 }
 
-function mockApi(opts: { runs?: any[]; health?: any; pages?: any; links?: any; issues?: any } = {}) {
+function mockApi(opts: { runs?: any; health?: any; pages?: any; links?: any; issues?: any } = {}) {
   apiMocks.apiGet.mockImplementation((path: string) => {
     const p = String(path);
     if (p.includes("/crawl/runs")) return Promise.resolve(opts.runs ?? [doneRun]);
@@ -106,10 +106,35 @@ describe("Audit overview", () => {
     expect(await screen.findByText("A crawl is already running.")).toBeInTheDocument();
     expect(apiMocks.apiPost).toHaveBeenCalledWith("/sites/1/crawl/run", {});
   });
+
+  it("keeps the reserved crawl queued while the runs feed is temporarily empty", async () => {
+    mockApi({ runs: [] });
+    apiMocks.apiPost.mockResolvedValue({ dispatched: true, run_id: 99, max_pages: 500 });
+    const user = userEvent.setup();
+    render(<AuditOverviewPage />);
+
+    await user.click(await screen.findByRole("button", { name: "Run first crawl" }));
+    expect(await screen.findByText("Crawl dispatched — watching progress…")).toBeInTheDocument();
+    expect(await screen.findByText("Queued")).toBeInTheDocument();
+
+    await waitFor(() => expect(apiMocks.apiGet).toHaveBeenCalledTimes(2), { timeout: 5000 });
+    expect(screen.getByText("Queued")).toBeInTheDocument();
+    expect(screen.getByText("Crawl dispatched — watching progress…")).toBeInTheDocument();
+  });
 });
 
 describe("Crawled pages explorer", () => {
   beforeEach(() => vi.clearAllMocks());
+
+  it("reads the API runs envelope and shows the current crawl instead of the first-crawl state", async () => {
+    mockApi({ runs: { runs: [doneRun] } });
+    render(<AuditPagesPage />);
+
+    expect(await screen.findByText("Crawled pages")).toBeInTheDocument();
+    expect(await screen.findByText("Completed")).toBeInTheDocument();
+    expect(screen.getByText("310")).toBeInTheDocument();
+    expect(screen.queryByText("Run your first crawl")).not.toBeInTheDocument();
+  });
 
   it("renders rows with status tones and passes status=error when the filter changes", async () => {
     mockApi({

@@ -15,7 +15,7 @@ Provider → GET /api/auth/oauth/{provider}/callback   → app finds/creates the
            fragment, never sent to a server / never logged).
 ```
 
-New social users get the same 7-day trial + owner organization as a normal
+New social users get the same 14-day trial + owner organization as a normal
 signup. If a social email matches an existing account, the social identity is
 linked to it.
 

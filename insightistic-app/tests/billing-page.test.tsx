@@ -208,7 +208,9 @@ describe("Billing page checkout", () => {
     );
 
     render(<BillingPage />);
-    await userEvent.click(await screen.findByRole("button", { name: "Buy Tier 1 — $79" }));
+    // The tier's display name is Angel Solo (brand-assets handoff); the slug
+    // in the checkout envelope below is what actually pins founder_tier_1.
+    await userEvent.click(await screen.findByRole("button", { name: "Buy Angel Solo — $79" }));
 
     // One-time LTD purchase: same envelope, kind 'lifetime'.
     await waitFor(() =>

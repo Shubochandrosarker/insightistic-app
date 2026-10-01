@@ -124,7 +124,9 @@ function aivEngineRun(Site $site, AiVisibilityPrompt $prompt, array $overrides =
         'cost_units'      => 0.1,
         'brand_mentioned' => false,
         'checked_at'      => now()->subDay(),
-        'created_at'      => now()->subDay(),
+        // Clamp inside the current month — monthly quota windows read
+        // created_at >= startOfMonth (see AiVisibilityController::quota()).
+        'created_at'      => now()->subDay()->max(now()->startOfMonth()),
     ], $overrides));
 }
 

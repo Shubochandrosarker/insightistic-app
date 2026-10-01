@@ -15,6 +15,7 @@ use App\Models\Site;
 use App\Models\SyncLog;
 use App\Models\TrafficDaily;
 use App\Models\TrafficDimensionSnapshot;
+use App\Services\Integrations\CloudflareAnalytics;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -502,6 +503,89 @@ class SyncV2Controller extends Controller
         $this->log($site, $this->batchId($request), 'broken_links', 'success', count($rows));
 
         return response()->json(['status' => 'ok', 'received' => count($rows)]);
+    }
+
+    /**
+     * POST connector/v1/sync/cloudflare/daily — Cloudflare edge analytics the
+     * plugin pulls with the Zone ID + API token from its own Settings →
+     * Cloudflare fields (its BYO path), so the dashboard's edge page fills
+     * with no app-side Cloudflare connect. Rows land in the exact shape the
+     * nightly CloudflareAnalytics sync writes, and both paths converge on the
+     * same (site, date) upsert key — a site with both configured gets one
+     * converged row per day, never duplicates.
+     *
+     * Bot rows arrive as raw per-(date, user agent) groups; classification
+     * stays platform-side (CloudflareAnalytics::classify) so the crawler
+     * taxonomy exists in exactly one place, same as the nightly path.
+     */
+    public function cloudflareDaily(Request $request, CloudflareAnalytics $analytics)
+    {
+        $site = $this->site($request);
+
+        $data = $request->validate([
+            'days'                      => ['required', 'array', 'max:120'],
+            'days.*.date'               => ['required', 'date'],
+            'days.*.requests'           => ['nullable', 'integer', 'min:0'],
+            'days.*.bytes'              => ['nullable', 'integer', 'min:0'],
+            'days.*.cached_requests'    => ['nullable', 'integer', 'min:0'],
+            'days.*.cached_bytes'       => ['nullable', 'integer', 'min:0'],
+            'days.*.encrypted_requests' => ['nullable', 'integer', 'min:0'],
+            'days.*.pageviews'          => ['nullable', 'integer', 'min:0'],
+            'days.*.threats'            => ['nullable', 'integer', 'min:0'],
+            'days.*.client_4xx'         => ['nullable', 'integer', 'min:0'],
+            'days.*.client_5xx'         => ['nullable', 'integer', 'min:0'],
+            'days.*.countries'          => ['nullable', 'array', 'max:60'],
+            'days.*.countries.*'        => ['integer', 'min:0'],
+            'days.*.status_breakdown'   => ['nullable', 'array', 'max:80'],
+            'days.*.status_breakdown.*' => ['integer', 'min:0'],
+            'days.*.firewall'           => ['nullable', 'array', 'max:40'],
+            'days.*.firewall.*'         => ['integer', 'min:0'],
+            'bots_available'            => ['nullable', 'boolean'],
+            'bots'                      => ['nullable', 'array', 'max:400'],
+            'bots.*.date'               => ['required_with:bots', 'date'],
+            'bots.*.user_agent'         => ['required_with:bots', 'string', 'max:512'],
+            'bots.*.requests'           => ['nullable', 'integer', 'min:0'],
+        ]);
+
+        $rows = array_map(fn ($d) => [
+            'date'                  => $d['date'],
+            'requests'              => $d['requests'] ?? 0,
+            'bytes'                 => $d['bytes'] ?? 0,
+            'cached_requests'       => $d['cached_requests'] ?? 0,
+            'cached_bytes'          => $d['cached_bytes'] ?? 0,
+            'encrypted_requests'    => $d['encrypted_requests'] ?? 0,
+            'pageviews'             => $d['pageviews'] ?? 0,
+            'threats'               => $d['threats'] ?? 0,
+            'client_4xx'            => $d['client_4xx'] ?? 0,
+            'client_5xx'            => $d['client_5xx'] ?? 0,
+            'countries_json'        => $d['countries'] ?? null,
+            'status_breakdown_json' => $d['status_breakdown'] ?? null,
+            'firewall_json'         => $d['firewall'] ?? null,
+        ], $data['days']);
+
+        $bots = ['available' => (bool) ($data['bots_available'] ?? false), 'rows' => []];
+        if ($bots['available']) {
+            foreach ($data['bots'] ?? [] as $bot) {
+                $classification = $analytics->classify($bot['user_agent']);
+                if ($classification === null) {
+                    continue; // unrecognized UA — not bot intelligence
+                }
+                $bots['rows'][] = [
+                    'date'           => $bot['date'],
+                    'bot_name'       => mb_substr($bot['user_agent'], 0, 64),
+                    'classification' => $classification,
+                    'requests'       => (int) ($bot['requests'] ?? 0),
+                    'blocked'        => 0,
+                ];
+            }
+        }
+
+        $analytics->storeDaily($site, ['rows' => $rows, 'bots' => $bots]);
+
+        $this->recordSource($site, 'cloudflare', true);
+        $this->log($site, $this->batchId($request), 'cloudflare_daily', 'success', count($rows));
+
+        return response()->json(['status' => 'ok', 'received' => count($rows), 'bots_stored' => count($bots['rows'])]);
     }
 
     // --- helpers -------------------------------------------------------------

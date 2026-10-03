@@ -1,7 +1,11 @@
 "use client";
 import { useRouter } from "next/navigation";
+import { useState } from "react";
 import { AdminListPage } from "@/components/admin/AdminListPage";
+import { AdminDialog } from "@/components/admin/AdminDialog";
 import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
+import { Field } from "@/components/ui/Field";
 import { apiPatch, apiPost, getToken, setImpersonation } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { num, timeAgo, initials } from "@/lib/format";
@@ -9,6 +13,33 @@ import { num, timeAgo, initials } from "@/lib/format";
 const STATUS_TONE: Record<string, "green" | "amber" | "red" | "slate"> = {
   active: "green", disabled: "red", suspended: "amber", invited: "slate",
 };
+
+function CreateUser({ onCreated }: { onCreated: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+  const [form, setForm] = useState({ name: "", email: "", password: "", status: "active" });
+  function close() { setOpen(false); setMessage(null); }
+  async function submit() {
+    setBusy(true); setMessage(null);
+    try { await apiPost("/admin/users", form); close(); onCreated(); }
+    catch (e: any) { setMessage(e.message || "Couldn't create the user."); }
+    finally { setBusy(false); }
+  }
+  return <>
+    <Button onClick={() => setOpen(true)}>Add user</Button>
+    <AdminDialog open={open} title="Add user" description="Create an account that can own organizations or be invited to a team." onClose={close}>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <Field label="Full name" required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Jane Smith" />
+        <Field label="Email" type="email" required value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="jane@example.com" />
+        <Field label="Temporary password" type="password" required value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} placeholder="At least 12 characters" hint="Give the user a secure temporary password and ask them to change it." />
+        <label className="block"><span className="mb-1.5 block text-xs font-semibold text-fg">Initial status</span><select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })} className="w-full rounded-xl border border-line bg-card2 px-3 py-2 text-sm text-fg outline-none focus:border-brand"><option value="active">Active</option><option value="disabled">Disabled</option><option value="suspended">Suspended</option></select></label>
+      </div>
+      {message && <p className="mt-3 rounded-lg border border-bad/20 bg-bad/10 px-3 py-2 text-sm text-bad">{message}</p>}
+      <div className="mt-5 flex justify-end gap-2"><Button variant="ghost" onClick={close}>Cancel</Button><Button onClick={submit} disabled={busy || !form.name || !form.email || form.password.length < 12}>{busy ? "Creating…" : "Create user"}</Button></div>
+    </AdminDialog>
+  </>;
+}
 
 export default function AdminUsers() {
   const router = useRouter();
@@ -48,6 +79,7 @@ export default function AdminUsers() {
       rowKey={(u: any) => u.id}
       searchPlaceholder="Search name or email…"
       empty="No users found."
+      headerActions={(reload) => <CreateUser onCreated={reload} />}
       filters={[
         { key: "super_admin", label: "All users", options: [{ value: "1", label: "Super admins" }, { value: "0", label: "Standard" }] },
         { key: "status", label: "Any status", options: ["active", "disabled", "suspended"].map((s) => ({ value: s, label: s })) },

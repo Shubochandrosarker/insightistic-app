@@ -3,6 +3,7 @@
 use App\Http\Controllers\Api\Admin\AuditLogController as AdminAuditLogController;
 use App\Http\Controllers\Api\Admin\ImpersonationController as AdminImpersonationController;
 use App\Http\Controllers\Api\Admin\LicenseController as AdminLicenseController;
+use App\Http\Controllers\Api\Admin\ManagedLicenseController as AdminManagedLicenseController;
 use App\Http\Controllers\Api\Admin\OrganizationController as AdminOrganizationController;
 use App\Http\Controllers\Api\Admin\ObservabilityController as AdminObservabilityController;
 use App\Http\Controllers\Api\Admin\OverviewController as AdminOverviewController;
@@ -654,12 +655,14 @@ Route::prefix('admin')->middleware(['auth:sanctum', 'super_admin'])->group(funct
     Route::get('observability/queue', [AdminObservabilityController::class, 'queue']);
 
     Route::get('organizations', [AdminOrganizationController::class, 'index']);
+    Route::post('organizations', [AdminOrganizationController::class, 'store']);
     Route::get('organizations/{id}', [AdminOrganizationController::class, 'show']);
     Route::patch('organizations/{id}', [AdminOrganizationController::class, 'update']);
     Route::post('organizations/{id}/archive', [AdminOrganizationController::class, 'archive']);
     Route::post('organizations/{id}/restore', [AdminOrganizationController::class, 'restore']);
 
     Route::get('users', [AdminUserController::class, 'index']);
+    Route::post('users', [AdminUserController::class, 'store']);
     Route::get('users/{id}', [AdminUserController::class, 'show']);
     Route::patch('users/{id}', [AdminUserController::class, 'update']);
     // Super-admin promotion/demotion is the highest-privilege change in
@@ -670,12 +673,14 @@ Route::prefix('admin')->middleware(['auth:sanctum', 'super_admin'])->group(funct
     Route::post('users/{id}/restore', [AdminUserController::class, 'restore']);
 
     Route::get('sites', [AdminSiteController::class, 'index']);
+    Route::post('sites', [AdminSiteController::class, 'store']);
     Route::get('sites/{id}', [AdminSiteController::class, 'show']);
     Route::post('sites/{id}/disconnect', [AdminSiteController::class, 'disconnect']);
     Route::post('sites/{id}/archive', [AdminSiteController::class, 'archive']);
     Route::post('sites/{id}/restore', [AdminSiteController::class, 'restore']);
 
     Route::get('subscriptions', [AdminSubscriptionController::class, 'index']);
+    Route::post('subscriptions', [AdminSubscriptionController::class, 'store']);
     Route::get('subscriptions/{id}', [AdminSubscriptionController::class, 'show']);
     Route::post('subscriptions/{id}/change-plan', [AdminSubscriptionController::class, 'changePlan']);
     Route::post('subscriptions/{id}/cancel', [AdminSubscriptionController::class, 'cancel']);
@@ -711,6 +716,12 @@ Route::prefix('admin')->middleware(['auth:sanctum', 'super_admin'])->group(funct
     Route::post('licenses/{id}/disconnect-all', [AdminLicenseController::class, 'disconnectAll']);
     Route::patch('licenses/{id}/activation-limit', [AdminLicenseController::class, 'overrideActivationLimit']);
     Route::delete('activations/{id}', [AdminLicenseController::class, 'revokeActivation']);
+
+    // External/plugin/vendor entitlements are kept separate from the
+    // Insightistic license lifecycle, with encrypted key storage.
+    Route::get('managed-licenses', [AdminManagedLicenseController::class, 'index']);
+    Route::post('managed-licenses', [AdminManagedLicenseController::class, 'store']);
+    Route::patch('managed-licenses/{id}', [AdminManagedLicenseController::class, 'update']);
 
     // Plan / feature registry editor (spec §13.7).
     Route::get('plans', [AdminPlanController::class, 'index']);

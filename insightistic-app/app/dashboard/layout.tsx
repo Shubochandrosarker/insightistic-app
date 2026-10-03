@@ -22,6 +22,8 @@ import { NAV_GROUPS, type NavItem } from "@/lib/nav";
 import { DashboardProvider } from "@/lib/dashboard";
 import { useAuth } from "@/lib/auth";
 import { BrandLogo } from "@/components/BrandLogo";
+import { DashboardSubnav } from "@/components/dashboard/DashboardSubnav";
+import { PRIMARY_NAV } from "@/lib/nav";
 
 /** Icon ids are data in lib/nav.ts; the lucide mapping lives here. */
 const GROUP_ICONS: Record<string, LucideIcon> = {
@@ -49,54 +51,35 @@ const BOTTOM_NAV: { href: string; label: string; icon: LucideIcon }[] = [
 ];
 
 /**
- * Desktop sidebar (lg+): grouped target IA — section headers in small caps,
- * indented items, and "soon" rows that are deliberately non-interactive.
+ * Desktop sidebar (lg+): primary workspaces only. Child routes live in the
+ * context bar under the global header, keeping the rail calm and scannable.
  */
 function DesktopSidebar() {
   const path = usePathname();
   return (
-    <aside className="ins-scroll hidden w-60 shrink-0 flex-col overflow-y-auto border-r border-line bg-card lg:flex">
+    <aside className="ins-scroll hidden w-[228px] shrink-0 flex-col overflow-y-auto border-r border-line bg-card lg:flex">
       <div className="flex items-center gap-2 px-5 py-5">
         <BrandLogo size={32} />
       </div>
 
       <nav className="flex-1 px-3 pb-4" aria-label="Dashboard sections">
-        {NAV_GROUPS.map((group) => {
-          const GroupIcon = groupIcon(group.icon);
+        {PRIMARY_NAV.map((item) => {
+          const Icon = groupIcon(item.icon);
+          const active = path === item.href || (item.href !== "/dashboard" && path.startsWith(item.href));
           return (
-            <div key={group.label}>
-              <div className="flex items-center gap-2 px-3 pb-1 pt-4 text-[10px] font-semibold uppercase tracking-widest text-muted">
-                <GroupIcon size={13} className="shrink-0" /> {group.label}
-              </div>
-              {group.items.map((item) =>
-                item.soon ? (
-                  <div
-                    key={item.label}
-                    title={item.hint || `${item.label} — coming soon`}
-                    aria-disabled="true"
-                    className="mb-0.5 flex cursor-default items-center gap-2 rounded-xl py-1.5 pl-9 pr-3 text-[13px] text-muted/60"
-                  >
-                    <span className="truncate">{item.label}</span>
-                    <span className="shrink-0 rounded-full bg-black/[0.06] px-1.5 py-px text-[9px] font-semibold uppercase tracking-wide text-muted dark:bg-white/10">
-                      soon
-                    </span>
-                  </div>
-                ) : (
-                  <Link
-                    key={item.label}
-                    href={item.href as string}
-                    aria-current={navActive(path, item.href as string) ? "page" : undefined}
-                    className={`mb-0.5 flex items-center rounded-xl border py-2 pl-9 pr-3 text-sm transition ${
-                      navActive(path, item.href as string)
-                        ? "border-line bg-card font-semibold text-fg shadow-sm"
-                        : "border-transparent text-muted hover:bg-black/[0.04] hover:text-fg dark:hover:bg-white/5"
-                    }`}
-                  >
-                    <span className="truncate">{item.label}</span>
-                  </Link>
-                ),
-              )}
-            </div>
+            <Link
+              key={item.label}
+              href={item.href}
+              aria-current={active ? "page" : undefined}
+              className={`mb-1 flex items-center gap-3 rounded-xl border px-3 py-2.5 text-[13px] transition ${
+                active
+                  ? "border-line bg-card2 font-bold text-fg shadow-sm"
+                  : "border-transparent text-muted hover:bg-card2 hover:text-fg"
+              }`}
+            >
+              <Icon size={16} className={active ? "text-brand" : ""} />
+              <span className="truncate">{item.label}</span>
+            </Link>
           );
         })}
       </nav>
@@ -195,6 +178,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             <MobileTopbar>
               <DashboardMobileControls />
             </MobileTopbar>
+            <DashboardSubnav />
 
             <main className="ins-page ins-scroll flex-1 overflow-x-hidden px-4 py-5 pb-safe-nav lg:px-8 lg:py-7 lg:pb-10">
               <div className="mx-auto max-w-[1200px]">

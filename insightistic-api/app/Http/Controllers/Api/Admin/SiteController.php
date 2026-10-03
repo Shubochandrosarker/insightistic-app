@@ -9,6 +9,7 @@ use App\Models\WcCustomer;
 use App\Models\WcOrder;
 use App\Models\WcProduct;
 use App\Services\AuditLogger;
+use App\Support\DomainNormalizer;
 use Illuminate\Http\Request;
 
 class SiteController extends AdminController
@@ -39,6 +40,51 @@ class SiteController extends AdminController
         $this->applySort($query, $request, ['created_at', 'name', 'last_sync_at'], 'created_at');
 
         return response()->json($query->paginate($this->perPage($request)));
+    }
+
+    /** POST /admin/sites — register a site for a tenant without requiring a plugin handshake. */
+    public function store(Request $request)
+    {
+        $data = $request->validate([
+            'organization_id' => ['required', 'integer', 'exists:organizations,id'],
+            'name'            => ['nullable', 'string', 'max:120'],
+            'domain'          => ['required', 'string', 'max:190'],
+            'platform'        => ['nullable', 'string', 'max:32'],
+            'country'         => ['nullable', 'string', 'size:2'],
+            'language'        => ['nullable', 'string', 'max:12'],
+        ]);
+
+        try {
+            $parts = DomainNormalizer::parse($data['domain']);
+        } catch (\InvalidArgumentException $e) {
+            return response()->json(['message' => $e->getMessage(), 'code' => 'invalid_domain'], 422);
+        }
+
+        $existing = Site::withoutGlobalScope('organization')
+            ->where('organization_id', $data['organization_id'])
+            ->where('normalized_domain', $parts['host_key'])
+            ->whereNull('archived_at')
+            ->first();
+        if ($existing) {
+            return response()->json(['message' => 'This website is already registered for the organization.', 'code' => 'duplicate_site'], 409);
+        }
+
+        $site = Site::withoutGlobalScope('organization')->create([
+            'organization_id' => $data['organization_id'],
+            'name' => $data['name'] ?? $parts['host'],
+            'domain' => $parts['host'],
+            'normalized_domain' => $parts['host_key'],
+            'canonical_url' => $parts['canonical'],
+            'platform' => $data['platform'] ?: 'generic',
+            'country' => strtoupper($data['country'] ?? '') ?: null,
+            'language' => $data['language'] ?? null,
+            'status' => 'active',
+            'connection_status' => 'not_installed',
+        ]);
+
+        $this->audit->log($request, 'site.create', 'Site', $site->id, null, ['organization_id' => $site->organization_id, 'domain' => $site->domain, 'platform' => $site->platform]);
+
+        return response()->json(['site' => $site->fresh(['organization']), 'notice' => 'Site registered. The connector remains disconnected until the site owner connects it.'], 201);
     }
 
     public function show(int $id)

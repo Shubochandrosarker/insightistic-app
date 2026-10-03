@@ -4,18 +4,18 @@
 
 /* ---- Theme tokens -------------------------------------------------------- */
 :root {
-  --ins-bg: #eef4f1;
+  --ins-bg: #f7f8f5;
   --ins-card: #ffffff;
-  --ins-card-2: #f6faf8;
-  --ins-line: #e3ebe7;
-  --ins-fg: #0b1110;
-  --ins-muted: #5c6b66;
+  --ins-card-2: #f1f4f0;
+  --ins-line: #e1e7e1;
+  --ins-fg: #141a18;
+  --ins-muted: #65716c;
 
   --ins-brand: #00c04b;
   --ins-brand-2: #00d084;
   --ins-violet: #6c5ce7;
 
-  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --font-sans: "Manrope", "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
 }
 
 .dark {
@@ -201,6 +201,12 @@ body {
 
 /* fade/slide page-in (respects reduced-motion) */
 .ins-page { animation: ins-fade 0.28s ease both; }
+
+.dashboard-subnav__item:focus-visible,
+.dashboard-subnav a:focus-visible {
+  outline: 2px solid var(--ins-brand);
+  outline-offset: 2px;
+}
 
 /* tap feedback for touch targets */
 .ins-tap { transition: transform 0.08s ease, background-color 0.15s ease; }

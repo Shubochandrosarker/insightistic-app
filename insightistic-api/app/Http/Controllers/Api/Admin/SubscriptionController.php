@@ -3,6 +3,8 @@
 namespace App\Http\Controllers\Api\Admin;
 
 use App\Models\Plan;
+use App\Models\License;
+use App\Models\Organization;
 use App\Models\Subscription;
 use App\Services\AuditLogger;
 use App\Services\LicenseService;
@@ -54,6 +56,68 @@ class SubscriptionController extends AdminController
         $this->applySort($query, $request, ['created_at', 'current_period_end', 'status'], 'created_at');
 
         return response()->json($query->paginate($this->perPage($request)));
+    }
+
+    /** POST /admin/subscriptions — create a provider-neutral manual entitlement. */
+    public function store(Request $request)
+    {
+        $data = $request->validate([
+            'organization_id'          => ['required', 'integer', 'exists:organizations,id'],
+            'plan_id'                  => ['required', 'integer', 'exists:plans,id'],
+            'status'                   => ['required', 'in:active,trialing,past_due,canceled,incomplete,unpaid'],
+            'billing_provider'         => ['nullable', 'string', 'max:40'],
+            'provider_customer_id'     => ['nullable', 'string', 'max:190'],
+            'provider_subscription_id' => ['nullable', 'string', 'max:190', 'unique:subscriptions,provider_subscription_id'],
+            'provider_price_id'        => ['nullable', 'string', 'max:190'],
+            'provider_status'          => ['nullable', 'string', 'max:40'],
+            'current_period_start'     => ['nullable', 'date'],
+            'current_period_end'       => ['nullable', 'date'],
+            'trial_ends_at'            => ['required_if:status,trialing', 'nullable', 'date'],
+            'cancel_at_period_end'     => ['sometimes', 'boolean'],
+            'internal_override_active' => ['sometimes', 'boolean'],
+            'internal_override_reason' => ['required_if:internal_override_active,true', 'nullable', 'string', 'max:500'],
+        ]);
+
+        $org = Organization::findOrFail($data['organization_id']);
+        $plan = Plan::findOrFail($data['plan_id']);
+
+        $sub = Subscription::withoutGlobalScope('organization')->create([
+            'organization_id' => $org->id,
+            'plan_id' => $plan->id,
+            'status' => $data['status'],
+            'billing_provider' => $data['billing_provider'] ?? 'manual',
+            'provider_customer_id' => $data['provider_customer_id'] ?? null,
+            'provider_subscription_id' => $data['provider_subscription_id'] ?? null,
+            'provider_price_id' => $data['provider_price_id'] ?? null,
+            'provider_status' => $data['provider_status'] ?? $data['status'],
+            'current_period_start' => $data['current_period_start'] ?? null,
+            'current_period_end' => $data['current_period_end'] ?? null,
+            'cancel_at_period_end' => (bool) ($data['cancel_at_period_end'] ?? false),
+            'internal_override_active' => (bool) ($data['internal_override_active'] ?? false),
+            'internal_override_reason' => (bool) ($data['internal_override_active'] ?? false) ? $data['internal_override_reason'] : null,
+            'internal_override_by' => ($data['internal_override_active'] ?? false) ? $request->user()?->id : null,
+            'internal_override_at' => ($data['internal_override_active'] ?? false) ? now() : null,
+        ]);
+
+        $org->update([
+            'plan_id' => $plan->id,
+            'trial_ends_at' => $data['trial_ends_at'] ?? null,
+            'status' => match ($data['status']) {
+                'trialing' => 'trialing',
+                'past_due' => 'past_due',
+                'canceled' => 'canceled',
+                default => 'active',
+            },
+        ]);
+
+        $rawLicenseKey = null;
+        if (! License::withoutGlobalScope('organization')->where('organization_id', $org->id)->exists()) {
+            $rawLicenseKey = $this->licenses->issue($org->fresh('plan'));
+        }
+        $this->licenses->syncForOrganization($org->fresh('plan'));
+        $this->audit->log($request, 'subscription.create_manual', 'Subscription', $sub->id, null, ['organization_id' => $org->id, 'plan_id' => $plan->id, 'status' => $sub->status]);
+
+        return response()->json(['subscription' => $sub->fresh(['organization', 'plan']), 'license_key' => $rawLicenseKey], 201);
     }
 
     /**

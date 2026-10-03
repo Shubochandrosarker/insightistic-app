@@ -2,7 +2,8 @@
 import { useEffect, useRef, useState } from "react";
 import { useAuth } from "@/lib/auth";
 import { useDashboard, PERIODS } from "@/lib/dashboard";
-import { CalendarDays, ChevronDown, LogOut, Check } from "lucide-react";
+import { CalendarDays, ChevronDown, LogOut, Check, Sparkles } from "lucide-react";
+import Link from "next/link";
 import { ThemeToggle } from "./ThemeToggle";
 import { NotificationCenter } from "@/components/app-shell/NotificationCenter";
 import { initials, timeAgo } from "@/lib/format";
@@ -184,6 +185,12 @@ export function Topbar() {
       </div>
 
       <div className="ml-auto flex items-center gap-2.5">
+        <Link
+          href="/dashboard/agents"
+          className="hidden items-center gap-1.5 rounded-lg bg-fg px-3 py-2 text-xs font-bold text-card transition hover:-translate-y-0.5 sm:inline-flex"
+        >
+          <Sparkles size={13} className="text-[#f4c56a]" /> Analyze with AI
+        </Link>
         {active?.last_sync_at && (
           <span className="hidden items-center gap-1.5 rounded-full bg-good/12 px-2.5 py-1 text-xs font-semibold text-good sm:inline-flex">
             <span className="h-1.5 w-1.5 rounded-full bg-good" />

@@ -42,6 +42,28 @@ class UserController extends AdminController
         return response()->json($query->paginate($this->perPage($request)));
     }
 
+    /** POST /admin/users — create a manually provisioned account. */
+    public function store(Request $request)
+    {
+        $data = $request->validate([
+            'name'     => ['required', 'string', 'max:120'],
+            'email'    => ['required', 'email', 'max:190', 'unique:users,email'],
+            'password' => ['required', 'string', 'min:12', 'max:200'],
+            'status'   => ['sometimes', 'in:active,disabled,suspended'],
+        ]);
+
+        $user = User::create([
+            'name' => $data['name'],
+            'email' => strtolower(trim($data['email'])),
+            'password' => $data['password'],
+            'status' => $data['status'] ?? 'active',
+        ]);
+
+        $this->audit->log($request, 'user.create', 'User', $user->id, null, ['name' => $user->name, 'email' => $user->email, 'status' => $user->status]);
+
+        return response()->json(['user' => $user->only(['id', 'name', 'email', 'status', 'is_super_admin'])], 201);
+    }
+
     public function show(int $id)
     {
         $user = User::select(['id', 'name', 'email', 'status', 'is_super_admin', 'provider', 'avatar_url', 'last_login_at', 'email_verified_at', 'archived_at', 'created_at'])

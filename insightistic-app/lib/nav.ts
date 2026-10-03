@@ -34,9 +34,13 @@ export const NAV_GROUPS: NavGroup[] = [
     label: "AI Visibility",
     icon: "Sparkles",
     items: [
-      // Prompts/Mentions/Citations/Competitors live INSIDE the overview page
-      // as cards, so only Overview is a real route for now.
-      { label: "Overview", href: "/dashboard/visibility" },
+      { label: "AI Overview", href: "/dashboard/visibility" },
+      { label: "AI Insights", href: "/dashboard/insights" },
+      { label: "AI Copilot", href: "/dashboard/copilot" },
+      { label: "AI Knowledge Base", href: "/dashboard/knowledge" },
+      { label: "Deep Dives", href: "/dashboard/intelligence" },
+      { label: "Alerts", href: "/dashboard/alerts" },
+      { label: "Automations", href: "/dashboard/automation" },
     ],
   },
   {
@@ -47,10 +51,9 @@ export const NAV_GROUPS: NavGroup[] = [
       { label: "Pages", href: "/dashboard/audit/pages" },
       { label: "Links", href: "/dashboard/audit/links" },
       { label: "Issues", href: "/dashboard/audit/issues" },
-      // The connector health page keeps its /dashboard/site-health route —
-      // it reports plugin/sync reachability rather than crawl results, so it
-      // reads better renamed inside the audit group.
-      { label: "Connector health", href: "/dashboard/site-health" },
+      // The connector health page reports plugin/sync reachability alongside
+      // the site's crawl health, so it remains one clear destination here.
+      { label: "Connector & health", href: "/dashboard/site-health" },
       { label: "Changes", href: "/dashboard/audit/changes" },
     ],
   },
@@ -84,14 +87,7 @@ export const NAV_GROUPS: NavGroup[] = [
   {
     label: "Intelligence",
     icon: "Lightbulb",
-    items: [
-      { label: "Insights", href: "/dashboard/insights" },
-      { label: "Copilot", href: "/dashboard/copilot" },
-      { label: "Knowledge Bases", href: "/dashboard/knowledge" },
-      { label: "Deep Dives", href: "/dashboard/intelligence" },
-      { label: "Alerts", href: "/dashboard/alerts" },
-      { label: "Automations", href: "/dashboard/automation" },
-    ],
+    items: [{ label: "AI Workspace", href: "/dashboard/agents" }],
   },
   {
     label: "Reports",
@@ -126,3 +122,11 @@ export const NAV_GROUPS: NavGroup[] = [
 export const FLAT_ROUTES: string[] = NAV_GROUPS.flatMap((g) =>
   g.items.filter((i) => i.href && !i.soon).map((i) => i.href as string),
 );
+
+/** Primary destinations shown in the desktop rail. Child routes stay in the
+ * context bar so the rail remains scannable even as the product grows. */
+export const PRIMARY_NAV: { label: string; icon: string; href: string }[] = NAV_GROUPS.map((group) => ({
+  label: group.label,
+  icon: group.icon,
+  href: group.items.find((item) => item.href && !item.soon)?.href || "/dashboard",
+}));

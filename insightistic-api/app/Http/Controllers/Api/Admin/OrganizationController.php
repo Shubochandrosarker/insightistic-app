@@ -8,9 +8,12 @@ use App\Models\Organization;
 use App\Models\Plan;
 use App\Models\Site;
 use App\Models\SyncLog;
+use App\Models\UsageCounter;
 use App\Services\AuditLogger;
 use App\Services\LicenseService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 
 class OrganizationController extends AdminController
 {
@@ -47,6 +50,60 @@ class OrganizationController extends AdminController
         $this->applySort($query, $request, ['created_at', 'name', 'status'], 'created_at');
 
         return response()->json($query->paginate($this->perPage($request)));
+    }
+
+    /** POST /admin/organizations — provision a tenant around an existing user. */
+    public function store(Request $request)
+    {
+        $data = $request->validate([
+            'name'           => ['required', 'string', 'max:150'],
+            'owner_user_id'  => ['nullable', 'integer', 'exists:users,id'],
+            'owner_email'    => ['required_without:owner_user_id', 'nullable', 'email'],
+            'plan'           => ['nullable', 'string', 'exists:plans,slug'],
+            'status'         => ['nullable', 'in:trialing,active,past_due,suspended,canceled'],
+            'trial_ends_at'  => ['required_if:status,trialing', 'nullable', 'date'],
+            'internal_notes' => ['nullable', 'string', 'max:5000'],
+        ]);
+
+        $ownerId = $data['owner_user_id'] ?? \App\Models\User::where('email', strtolower(trim((string) $data['owner_email'])))->value('id');
+        abort_unless($ownerId, 422, 'Choose an existing user as the organization owner.');
+
+        $org = DB::transaction(function () use ($data, $ownerId) {
+            $planId = ! empty($data['plan']) ? Plan::where('slug', $data['plan'])->value('id') : null;
+            $base = Str::slug($data['name']) ?: 'organization';
+            $slug = $base;
+            $suffix = 1;
+            while (Organization::where('slug', $slug)->exists()) {
+                $slug = $base . '-' . $suffix++;
+            }
+
+            $org = Organization::create([
+                'name' => $data['name'],
+                'slug' => $slug,
+                'owner_user_id' => $ownerId,
+                'plan_id' => $planId,
+                'status' => $data['status'] ?? 'active',
+                'trial_ends_at' => $data['trial_ends_at'] ?? null,
+                'internal_notes' => $data['internal_notes'] ?? null,
+            ]);
+            $org->users()->attach($ownerId, ['role' => 'owner']);
+            UsageCounter::withoutGlobalScope('organization')->firstOrCreate(
+                ['organization_id' => $org->id, 'period' => now()->format('Y-m')],
+                ['sites_connected' => 0],
+            );
+
+            $licenseKey = $this->licenses->issue($org->fresh('plan'));
+            return [$org->fresh(['plan', 'owner']), $licenseKey];
+        });
+
+        [$org, $licenseKey] = $org;
+        $this->audit->log($request, 'organization.create', 'Organization', $org->id, null, ['name' => $org->name, 'owner_user_id' => $org->owner_user_id, 'plan_id' => $org->plan_id]);
+
+        return response()->json([
+            'organization' => $org,
+            'license_key' => $licenseKey,
+            'notice' => 'Organization created. The raw plugin license is shown once only.',
+        ], 201);
     }
 
     public function show(int $id)

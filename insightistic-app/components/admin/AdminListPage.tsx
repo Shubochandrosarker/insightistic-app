@@ -24,6 +24,7 @@ export function AdminListPage<T>({
   extract,
   empty = "Nothing here yet.",
   actions,
+  headerActions,
 }: {
   title: string;
   subtitle?: string;
@@ -35,6 +36,7 @@ export function AdminListPage<T>({
   extract?: (json: any) => { rows: T[]; meta: { current_page: number; last_page: number; total: number } };
   empty?: string;
   actions?: (row: T, reload: () => void) => ReactNode;
+  headerActions?: (reload: () => void) => ReactNode;
 }) {
   const [search, setSearch] = useState("");
   const [applied, setApplied] = useState("");
@@ -73,7 +75,7 @@ export function AdminListPage<T>({
 
   return (
     <div>
-      <PageHeader title={title} subtitle={subtitle} />
+      <PageHeader title={title} subtitle={subtitle} right={headerActions ? headerActions(reload) : undefined} />
 
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <div className="relative min-w-[200px] flex-1">

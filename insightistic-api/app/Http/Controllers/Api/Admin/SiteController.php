@@ -75,7 +75,7 @@ class SiteController extends AdminController
             'domain' => $parts['host'],
             'normalized_domain' => $parts['host_key'],
             'canonical_url' => $parts['canonical'],
-            'platform' => $data['platform'] ?: 'generic',
+            'platform' => $data['platform'] ?? 'generic',
             'country' => strtoupper($data['country'] ?? '') ?: null,
             'language' => $data['language'] ?? null,
             'status' => 'active',

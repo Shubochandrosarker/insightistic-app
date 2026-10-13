@@ -2,9 +2,16 @@
 import { useApi } from "@/lib/useApi";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
 import { PageHeader } from "@/components/dashboard/PageHeader";
 import { Spinner } from "@/components/ui/Spinner";
 
+/**
+ * System health (super admin). 2026-10-13 incident pin: the API 500s here
+ * used to fall into `loading || !data` and render the skeleton forever —
+ * an admin page must NEVER look like an infinite "Loading" when the call
+ * failed. Errors now render as an explicit error state with a retry.
+ */
 function Health({ title, ok, detail, warn = false }: { title: string; ok: boolean; detail: string; warn?: boolean }) {
   return (
     <Card>
@@ -18,10 +25,28 @@ function Health({ title, ok, detail, warn = false }: { title: string; ok: boolea
 }
 
 export default function AdminSystemHealth() {
-  const { data, loading } = useApi<any>("/admin/system-health");
+  const { data, loading, error, reload } = useApi<any>("/admin/system-health");
 
-  if (loading || !data) {
+  if (loading && !data) {
     return (<div><PageHeader title="System Health" subtitle="Platform infrastructure status." /><Spinner /></div>);
+  }
+
+  if (error && !data) {
+    return (
+      <div>
+        <PageHeader title="System Health" subtitle="Platform infrastructure status." />
+        <Card>
+          <div className="flex flex-col items-center gap-3 py-8 text-center">
+            <Badge tone="red" dot>API error</Badge>
+            <p className="max-w-md text-sm text-muted">{error}</p>
+            <p className="text-xs text-muted">
+              403 = your account is not a platform super admin. Anything else: retry, or check the API container logs.
+            </p>
+            <Button variant="ghost" onClick={reload}>Retry</Button>
+          </div>
+        </Card>
+      </div>
+    );
   }
 
   return (
@@ -33,6 +58,7 @@ export default function AdminSystemHealth() {
         <Health title="App" ok={data.app?.status === "ok"} detail={`${data.app?.env} · ${data.app?.url}`} />
         <Health title="Release" ok={data.release?.sha && data.release.sha !== "unknown"} warn={!data.release?.sha || data.release.sha === "unknown"} detail={`${data.release?.sha || "unknown"}${data.release?.built_at ? ` · built ${data.release.built_at}` : ""}`} />
         <Health title="Database" ok={data.database?.status === "ok"} detail={`Driver: ${data.database?.driver}`} />
+        <Health title="Cache" ok={data.cache?.ok !== false} warn={data.cache?.ok === false} detail={`Driver: ${data.cache?.driver || "—"}${data.cache?.ok === false ? " · write/read failed" : ""}`} />
         <Health title="Queue" ok={(data.queue?.failed ?? 0) === 0} warn={(data.queue?.failed ?? 0) > 0} detail={`${data.queue?.pending ?? 0} pending · ${data.queue?.failed ?? 0} failed · ${data.queue?.connection}`} />
         <Health title="Scheduler" ok detail={data.scheduler?.detail || "configured"} />
         <Health title="Storage" ok={!!data.storage?.writable} detail={`${data.storage?.writable ? "writable" : "not writable"} · disk: ${data.storage?.reports_disk}`} />

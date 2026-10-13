@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useApi } from "@/lib/useApi";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
 import { PageHeader } from "@/components/dashboard/PageHeader";
 import { Spinner } from "@/components/ui/Spinner";
 import { num, timeAgo } from "@/lib/format";
@@ -11,9 +12,29 @@ import { ArrowLeft } from "lucide-react";
 
 export default function AdminSiteDetail() {
   const { id } = useParams<{ id: string }>();
-  const { data, loading } = useApi<any>(`/admin/sites/${id}`);
+  const { data, loading, error, reload } = useApi<any>(`/admin/sites/${id}`);
 
-  if (loading || !data) return <Spinner />;
+  if (loading && !data) return <Spinner />;
+
+  // 2026-10-13 incident pin: errors must surface as an explicit state —
+  // an admin detail page must never spin forever on a 403/404/500.
+  if (error && !data) {
+    return (
+      <div>
+        <Link href="/admin/sites" className="mb-3 inline-flex items-center gap-1.5 text-sm text-muted hover:text-fg">
+          <ArrowLeft size={15} /> Sites
+        </Link>
+        <Card>
+          <div className="flex flex-col items-center gap-3 py-8 text-center">
+            <Badge tone="red" dot>API error</Badge>
+            <p className="max-w-md text-sm text-muted">{error}</p>
+            <Button variant="ghost" onClick={reload}>Retry</Button>
+          </div>
+        </Card>
+      </div>
+    );
+  }
+
   const s = data.site || {};
   const c = data.counts || {};
 

@@ -41,21 +41,24 @@ const API_ORIGIN = (process.env.NEXT_PUBLIC_API_URL || "").replace(/\/$/, "");
  * is locked down: no foreign script origins beyond the approved payment
  * provider, no framing, no plugins.
  *
- * Paddle.js (roadmap 22/22A) needs explicit allowances: its loader comes off
- * cdn.paddle.com and the overlay checkout renders inside an iframe served
- * from buy.paddle.com (sandbox-buy.paddle.com in the sandbox environment).
- * Without frame-src the default-src 'self' rule silently blocks the overlay.
+ * Paddle.js (roadmap 22/22A) needs explicit allowances. Verified against the
+ * live v2.10 loader (2026-10-13): it injects its stylesheet from cdn.paddle.com
+ * (style-src) and the Paddle Retain/ProfitWell retention script from
+ * public.profitwell.com (script-src). Without those the overlay renders
+ * unstyled and the console fills with violations. Checkout creation itself is
+ * delegated to the approved-domain iframe host (pay.insightistic.com via
+ * frame-src + CHECKOUT_HOST_URL in lib/paddle.ts).
  */
 const csp = [
   "default-src 'self'",
-  "script-src 'self' 'unsafe-inline' https://cdn.paddle.com",
-  "style-src 'self' 'unsafe-inline'",
+  "script-src 'self' 'unsafe-inline' https://cdn.paddle.com https://public.profitwell.com https://static.cloudflareinsights.com",
+  "style-src 'self' 'unsafe-inline' https://cdn.paddle.com",
   // data:/blob: for chart exports + inline SVG; https: for OAuth avatars and
   // white-label logos served from the API/storage origin.
   "img-src 'self' data: blob: https:",
   "font-src 'self' data:",
-  "frame-src https://buy.paddle.com https://sandbox-buy.paddle.com",
-  `connect-src 'self'${API_ORIGIN ? ` ${API_ORIGIN}` : ""} https://api.paddle.com https://sandbox-api.paddle.com`,
+  "frame-src https://buy.paddle.com https://sandbox-buy.paddle.com https://pay.insightistic.com",
+  `connect-src 'self'${API_ORIGIN ? ` ${API_ORIGIN}` : ""} https://api.paddle.com https://sandbox-api.paddle.com https://checkout-service.paddle.com`,
   "object-src 'none'",
   "base-uri 'self'",
   "form-action 'self'",

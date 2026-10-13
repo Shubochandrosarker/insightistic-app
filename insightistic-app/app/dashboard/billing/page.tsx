@@ -215,6 +215,11 @@ export default function BillingPage() {
           setBusy(false);
           setPhase("idle");
         },
+        onUnavailable: () => {
+          setMsg("Checkout could not be loaded — the secure payment host is unreachable. Check your connection and try again.");
+          setPhase("idle");
+          setBusy(false);
+        },
       });
     } catch (e: any) {
       setMsg(checkoutErrorMessage(e));
@@ -245,6 +250,11 @@ export default function BillingPage() {
           if (completed || paidRef.current) return;
           setBusy(false);
           setPhase("idle");
+        },
+        onUnavailable: () => {
+          setMsg("Checkout could not be loaded — the secure payment host is unreachable. Check your connection and try again.");
+          setPhase("idle");
+          setBusy(false);
         },
       });
     } catch (e: any) {
@@ -348,6 +358,18 @@ export default function BillingPage() {
           <div className="mt-5 flex flex-wrap gap-2">
             <Button onClick={() => document.getElementById("change-plan")?.scrollIntoView({ behavior: "smooth" })}>Upgrade</Button>
             <Button variant="ghost" onClick={portal} disabled={busy}>Manage in portal</Button>
+            {/* Paddle customer portal — the link of record. The button above
+                mints a fresh session for active Paddle subscriptions; this
+                link always reaches Paddle's portal (email lookup) even
+                without a subscription. */}
+            <a
+              href="https://customer-portal.paddle.com/cpl_01m1ycy6ry01sg09dgnyt31pd1"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex h-9 items-center rounded-xl px-4 text-sm font-medium text-brand-700 underline-offset-2 hover:underline"
+            >
+              Manage subscription ↗
+            </a>
             {hasSubscription && !cancelPending && (
               <Button variant="danger" onClick={cancelSub} disabled={busy}>Cancel subscription</Button>
             )}

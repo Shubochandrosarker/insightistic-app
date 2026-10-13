@@ -24,6 +24,7 @@ vi.mock("@/lib/dashboard", () => ({
 }));
 
 import BillingPage from "@/app/dashboard/billing/page";
+import { teardownMessageListenerForTest } from "@/lib/paddle";
 
 const freeOrg = {
   organization: { status: "trialing" },
@@ -61,7 +62,7 @@ function paddleStub() {
   return {
     Environment: { set: vi.fn() },
     Initialize: vi.fn(),
-    Checkout: { open: vi.fn(), on: vi.fn(), isCompleted: vi.fn(() => true) },
+    Checkout: { open: vi.fn() },
   };
 }
 
@@ -70,10 +71,22 @@ function resolvePaddleLoad() {
   document.getElementById("paddle-js")?.dispatchEvent(new Event("load"));
 }
 
+/** Simulate the pay-host iframe reporting payment completion. */
+function checkoutFrameReportsCompleted() {
+  window.dispatchEvent(
+    new MessageEvent("message", {
+      data: { type: "insightistic-checkout-completed" },
+      origin: "https://pay.insightistic.com",
+    }),
+  );
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   document.getElementById("paddle-js")?.remove();
+  document.getElementById("insightistic-checkout-frame")?.remove();
   delete (window as any).Paddle;
+  teardownMessageListenerForTest();
   apiMocks.apiGet.mockImplementation((path: string) =>
     path === "/billing/subscription"
       ? Promise.resolve(freeOrg)
@@ -127,7 +140,7 @@ describe("Billing page checkout", () => {
     );
   });
 
-  it("opens a Paddle overlay with the issued price/token and polls until the webhook projects it", async () => {
+  it("opens a checkout on the approved pay domain and polls until the webhook projects it", async () => {
     const P = paddleStub();
     (window as any).Paddle = P;
 
@@ -163,21 +176,18 @@ describe("Billing page checkout", () => {
     await waitFor(() => expect(P.Initialize).toHaveBeenCalledWith({ token: "test_client_token" }));
     expect(P.Environment.set).not.toHaveBeenCalled();
 
-    await waitFor(() => expect(P.Checkout.open).toHaveBeenCalled());
-    expect(P.Checkout.open).toHaveBeenCalledWith({
-      items: [{ priceId: "pri_test_growth", quantity: 1 }],
-      customer: { email: "owner@example.com" },
-      customData: { organization_id: 7, plan_slug: "growth" },
-      settings: {
-        displayMode: "overlay",
-        successUrl: `${window.location.origin}/dashboard/billing?checkout=success`,
-      },
-    });
+    // The transaction is created by the hosted pay-domain iframe (Paddle
+    // rejects checkout creation from app.insightistic.com — 403 blocked
+    // vendor). The dashboard only forwards the config into the frame.
+    await waitFor(() => expect(document.getElementById("insightistic-checkout-frame")).toBeTruthy());
+    const frame = document.querySelector<HTMLIFrameElement>("#insightistic-checkout-frame iframe");
+    const src = new URL(frame!.src);
+    expect(src.origin).toBe("https://pay.insightistic.com");
+    expect(src.searchParams.get("price")).toBe("pri_test_growth");
+    expect(JSON.parse(src.searchParams.get("data")!)).toEqual({ organization_id: 7, plan_slug: "growth" });
 
-    // The buyer pays inside the overlay: checkout.completed fires.
-    const completed = P.Checkout.on.mock.calls.find(([e]) => e === "checkout.completed")?.[1] as () => void;
-    expect(completed).toBeTruthy();
-    act(() => { completed(); });
+    // The buyer pays inside the frame; it reports completion over postMessage.
+    checkoutFrameReportsCompleted();
 
     expect(await screen.findByText("Finishing your subscription setup…")).toBeInTheDocument();
 
@@ -217,18 +227,16 @@ describe("Billing page checkout", () => {
       expect(apiMocks.apiPost).toHaveBeenCalledWith("/billing/checkout-config", { plan: "founder_tier_1", kind: "lifetime" }),
     );
 
-    // The loader/init are module-cached (an earlier test in this file already
-    // initialized Paddle with this token), so Initialize is NOT re-run — wait
-    // on the overlay open. The load dispatch only matters when this test runs
-    // in isolation and the CDN script genuinely needs resolving.
-    document.getElementById("paddle-js")?.dispatchEvent(new Event("load"));
-
-    await waitFor(() => expect(P.Checkout.open).toHaveBeenCalled());
-    expect(P.Checkout.open).toHaveBeenCalledWith(
-      expect.objectContaining({
-        items: [{ priceId: "pri_test_founder1", quantity: 1 }],
-        customData: { organization_id: 7, purchase_kind: "lifetime", plan_slug: "founder_tier_1" },
-      }),
-    );
+    // The hosted pay-domain iframe carries the checkout (Paddle only creates
+    // transactions on the approved domain).
+    await waitFor(() => expect(document.getElementById("insightistic-checkout-frame")).toBeTruthy());
+    const frame = document.querySelector<HTMLIFrameElement>("#insightistic-checkout-frame iframe");
+    const src = new URL(frame!.src);
+    expect(src.searchParams.get("price")).toBe("pri_test_founder1");
+    expect(JSON.parse(src.searchParams.get("data")!)).toEqual({
+      organization_id: 7,
+      purchase_kind: "lifetime",
+      plan_slug: "founder_tier_1",
+    });
   });
 });

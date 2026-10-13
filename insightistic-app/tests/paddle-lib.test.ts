@@ -1,13 +1,24 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { initPaddle, initializeWith, openPaddleCheckout } from "@/lib/paddle";
+import {
+  initPaddle,
+  initializeWith,
+  openPaddleCheckout,
+  teardownMessageListenerForTest,
+  CHECKOUT_HOST_URL,
+  MSG_OPEN,
+  MSG_COMPLETED,
+  MSG_CLOSED,
+} from "@/lib/paddle";
 import type { PaddleJs } from "@/lib/paddle";
 
 /**
  * The Paddle.js loader must behave like a singleton: one script tag no matter
- * how many times init runs, sandbox selected before Initialize, and checkout
- * events routed to whoever opened the latest checkout. Everything runs against
- * a fake Paddle global — the CDN script is never fetched in jsdom; the loader
- * is resolved by dispatching its load event.
+ * how many times init runs, sandbox selected before Initialize. Checkout
+ * itself is delegated to the hosted pay-domain iframe (Paddle rejects
+ * transaction creation from non-approved domains), so openPaddleCheckout is
+ * tested as an iframe + postMessage bridge, not against the Paddle global.
+ * Everything runs against a fake Paddle global — the CDN script is never
+ * fetched in jsdom; the loader is resolved by dispatching its load event.
  */
 
 function fakePaddle() {
@@ -16,8 +27,6 @@ function fakePaddle() {
     Initialize: vi.fn(),
     Checkout: {
       open: vi.fn(),
-      on: vi.fn(),
-      isCompleted: vi.fn(() => true),
     },
   };
 }
@@ -30,8 +39,15 @@ function resolveLoader() {
 beforeEach(() => {
   vi.clearAllMocks();
   document.getElementById("paddle-js")?.remove();
+  document.getElementById("insightistic-checkout-frame")?.remove();
   delete (window as any).Paddle;
+  teardownMessageListenerForTest();
 });
+
+/** Simulate a message arriving from the pay-host iframe. */
+function postFromCheckout(data: unknown) {
+  window.dispatchEvent(new MessageEvent("message", { data, origin: CHECKOUT_HOST_URL }));
+}
 
 describe("paddle lib", () => {
   it("injects the Paddle.js script exactly once, even when init runs twice", async () => {
@@ -103,60 +119,67 @@ describe("paddle lib", () => {
     expect(production.Environment.set).not.toHaveBeenCalled();
   });
 
-  it("opens an overlay checkout with the API-issued price and routes completion events", () => {
-    const P = fakePaddle();
-    (window as any).Paddle = P;
-    const onSuccess = vi.fn();
-    const onClose = vi.fn();
-
+  it("opens the checkout on the approved pay domain as a hosted iframe", () => {
     openPaddleCheckout({
       priceId: "pri_test_growth",
       email: "owner@example.com",
       customData: { organization_id: 7, plan_slug: "growth" },
-      onSuccess,
-      onClose,
+      onSuccess: vi.fn(),
+      onClose: vi.fn(),
     });
 
-    expect(P.Checkout.open).toHaveBeenCalledWith({
-      items: [{ priceId: "pri_test_growth", quantity: 1 }],
-      customer: { email: "owner@example.com" },
-      customData: { organization_id: 7, plan_slug: "growth" },
-      settings: {
-        displayMode: "overlay",
-        successUrl: `${window.location.origin}/dashboard/billing?checkout=success`,
-      },
-    });
+    const wrap = document.getElementById("insightistic-checkout-frame");
+    expect(wrap).toBeTruthy();
+    const frame = wrap!.querySelector("iframe");
+    expect(frame).toBeTruthy();
+    const src = new URL(frame!.getAttribute("src")!);
+    expect(src.origin).toBe(CHECKOUT_HOST_URL);
+    expect(src.searchParams.get("price")).toBe("pri_test_growth");
+    expect(src.searchParams.get("email")).toBe("owner@example.com");
+    expect(JSON.parse(src.searchParams.get("data")!)).toEqual({ organization_id: 7, plan_slug: "growth" });
+    expect((frame as HTMLIFrameElement).allow).toContain("payment");
+  });
 
-    const fire = (event: string) =>
-      P.Checkout.on.mock.calls.filter(([e]) => e === event).forEach(([, cb]) => (cb as () => void)());
+  it("routes completion + close messages from the pay host to the opener", () => {
+    const onSuccess = vi.fn();
+    const onClose = vi.fn();
+    openPaddleCheckout({ priceId: "pri_test_1", onSuccess, onClose });
 
-    fire("checkout.completed");
-    fire("checkout.closed");
+    // Foreign-origin messages are ignored (never trust other frames).
+    window.dispatchEvent(new MessageEvent("message", { data: { type: MSG_COMPLETED }, origin: "https://evil.example" }));
+    expect(onSuccess).not.toHaveBeenCalled();
 
+    postFromCheckout({ type: MSG_COMPLETED });
     expect(onSuccess).toHaveBeenCalledTimes(1);
+
+    // The paid close is still reported as completed.
+    postFromCheckout({ type: MSG_CLOSED, completed: false });
     expect(onClose).toHaveBeenCalledWith(true);
   });
 
   it("reports an abandoned checkout as not completed", () => {
-    const P = fakePaddle();
-    P.Checkout.isCompleted = vi.fn(() => false);
-    (window as any).Paddle = P;
     const onClose = vi.fn();
-
     openPaddleCheckout({ priceId: "pri_test_2", onSuccess: vi.fn(), onClose });
 
-    const closed = P.Checkout.on.mock.calls.find(([e]) => e === "checkout.closed")?.[1] as () => void;
-    closed();
-
+    postFromCheckout({ type: MSG_CLOSED, completed: false });
     expect(onClose).toHaveBeenCalledWith(false);
   });
 
-  it("omits the customer when no email is provided", () => {
-    const P = fakePaddle();
-    (window as any).Paddle = P;
+  it("drops stale callbacks after an abandoned checkout so a retry starts clean", () => {
+    const firstClose = vi.fn();
+    const secondSuccess = vi.fn();
+    openPaddleCheckout({ priceId: "pri_test_a", onSuccess: vi.fn(), onClose: firstClose });
+    postFromCheckout({ type: MSG_CLOSED, completed: false });
+    expect(firstClose).toHaveBeenCalledWith(false);
 
+    openPaddleCheckout({ priceId: "pri_test_b", onSuccess: secondSuccess, onClose: vi.fn() });
+    postFromCheckout({ type: MSG_COMPLETED });
+    expect(secondSuccess).toHaveBeenCalledTimes(1);
+  });
+
+  it("omits the email param when no email is provided", () => {
     openPaddleCheckout({ priceId: "pri_test_3", onSuccess: vi.fn(), onClose: vi.fn() });
-
-    expect(P.Checkout.open).toHaveBeenCalledWith(expect.objectContaining({ customer: undefined }));
+    const src = new URL(document.querySelector<HTMLIFrameElement>("iframe")!.src);
+    expect(src.searchParams.get("email")).toBeNull();
   });
 });

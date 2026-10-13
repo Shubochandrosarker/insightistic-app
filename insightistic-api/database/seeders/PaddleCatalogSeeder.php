@@ -103,7 +103,8 @@ class PaddleCatalogSeeder extends Seeder
             ->whereIn('slug', array_merge(['starter', 'growth', 'agency', 'agency_pro'], array_keys(self::HIDDEN_PLANS)))
             ->pluck('id', 'slug');
 
-        foreach (self::PRICES as $priceId => [$planSlug, $kind, $amount, $metadata, $variant]) {
+        foreach (self::PRICES as $priceId => $row) {
+            [$planSlug, $kind, $amount, $metadata, $variant] = array_pad($row, 5, null);
             $planId = $plans->get($planSlug);
 
             if (! $planId) {

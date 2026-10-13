@@ -108,6 +108,60 @@ class SiteController extends AdminController
     }
 
     /**
+     * PATCH /admin/sites/{id} — rename / activate-suspend a site from the
+     * platform-owner console. Domain is deliberately NOT editable here: it's
+     * the dedup + connector identity anchor, and silently rewriting it would
+     * detach the site from its synced data. (Archive + re-register covers
+     * genuine moves.)
+     */
+    public function update(Request $request, int $id)
+    {
+        $site = Site::withoutGlobalScope('organization')->findOrFail($id);
+        $before = $site->only(['name', 'status']);
+
+        $data = $request->validate([
+            'name'   => ['sometimes', 'string', 'max:120'],
+            'status' => ['sometimes', 'in:active,suspended'],
+        ]);
+
+        if (array_key_exists('name', $data) && trim($data['name']) !== '') {
+            $site->name = trim($data['name']);
+        }
+        if (! empty($data['status'])) {
+            $site->status = $data['status'];
+        }
+        $site->save();
+
+        if ($site->wasChanged()) {
+            $this->audit->log($request, 'site.update', 'Site', $site->id, $before, $site->only(['name', 'status']));
+        }
+
+        return response()->json(['site' => $site->only(['id', 'name', 'status', 'connection_status'])]);
+    }
+
+    /**
+     * POST /admin/sites/{id}/regenerate-key — rotate the site's connector
+     * HMAC key pair. Mirrors the tenant-side regenerate: the old pair dies
+     * instantly, the new token is shown once, and the site drops back to
+     * not_installed until the plugin reconnects with the fresh token.
+     */
+    public function regenerateKey(Request $request, int $id)
+    {
+        $site = Site::withoutGlobalScope('organization')->findOrFail($id);
+
+        $token = $site->issueConnectorToken();
+        $site->connection_status = 'not_installed';
+        $site->save();
+
+        $this->audit->log($request, 'site.connector_key_regenerated', 'Site', $site->id, null, ['connection_status' => 'not_installed']);
+
+        return response()->json([
+            'connector_token' => $token,
+            'notice'          => 'Old connector token is now invalid. Update the plugin with this new token.',
+        ]);
+    }
+
+    /**
      * POST /admin/sites/{id}/disconnect — revokes connector credentials and
      * deactivates any active license activation tied to this site, without
      * archiving it. The site row and its historical order/product/customer

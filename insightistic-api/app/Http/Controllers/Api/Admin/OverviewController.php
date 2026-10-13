@@ -5,10 +5,13 @@ namespace App\Http\Controllers\Api\Admin;
 use App\Models\AiInsight;
 use App\Models\ClientReport;
 use App\Models\Organization;
+use App\Models\Plan;
 use App\Models\Site;
 use App\Models\Subscription;
 use App\Models\SyncLog;
 use App\Models\User;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
@@ -46,12 +49,54 @@ class OverviewController extends AdminController
     }
 
     /** Lightweight platform health probes (no secrets). */
-    public function systemHealth()
+    public function systemHealth(): JsonResponse
     {
-        return response()->json($this->systemHealthPayload());
+        // Deliberately a JsonResponse (not the raw array): the frontend reads
+        // this payload directly and a bare array would double-wrap under the
+        // controller's implicit JSON handling (root cause of the stuck
+        // "Loading" state on /admin/system-health, 2026-10-13).
+        return response()->json($this->systemHealthArray());
     }
 
-    private function systemHealthPayload(): array
+    /**
+     * GET /admin/settings — read-mostly platform facts for the owner.
+     * Deliberately exposes NO secret values (only booleans/env-modes) —
+     * this endpoint sits behind super_admin but still follows the
+     * "health payloads carry status, not credentials" rule.
+     */
+    public function settings(): JsonResponse
+    {
+        $health = $this->systemHealthArray();
+
+        return response()->json([
+            'release' => $health['release'],
+            'app'     => [
+                'env'   => $health['app']['env'],
+                'url'   => $health['app']['url'],
+                'debug' => $health['app']['debug'],
+            ],
+            'database'  => ['status' => $health['database']['status'], 'driver' => $health['database']['driver']],
+            'queue'     => $health['queue'],
+            'cache'     => $health['cache'],
+            'storage'   => $health['storage'],
+            'scheduler' => $health['scheduler'],
+            'mail'      => $health['mail'],
+            // Paddle billing: configured flag + sandbox/production ONLY.
+            // Never key material, webhook secrets, or client-side tokens.
+            'paddle'    => $health['paddle'],
+            'stripe'    => $health['stripe'],
+            'ai'        => ['provider' => $health['ai']['provider'], 'configured' => $health['ai']['configured']],
+            'counts'    => [
+                'organizations' => Organization::count(),
+                'users'         => User::count(),
+                'sites'         => Site::withoutGlobalScope('organization')->count(),
+                'plans'         => Plan::count(),
+                'super_admins'  => User::where('is_super_admin', true)->count(),
+            ],
+        ]);
+    }
+
+    private function systemHealthArray(): array
     {
         try {
             DB::connection()->getPdo();
@@ -62,7 +107,7 @@ class OverviewController extends AdminController
 
         $stripeSecret = (string) config('insightistic.stripe.secret');
 
-        return response()->json([
+        return [
             'app'      => ['status' => 'ok', 'url' => config('insightistic.app_url'), 'env' => app()->environment(), 'debug' => (bool) config('app.debug')],
             'api'      => ['status' => 'ok', 'url' => config('app.url')],
             'release'  => ['sha' => config('insightistic.release.sha', 'unknown'), 'built_at' => config('insightistic.release.built_at')],
@@ -72,13 +117,14 @@ class OverviewController extends AdminController
             'storage'  => ['writable' => is_writable(storage_path()), 'reports_disk' => config('insightistic.reports.disk', 'public')],
             'mail'     => ['mailer' => config('mail.default'), 'configured' => ! empty(config('mail.mailers.smtp.host')) || config('mail.default') !== 'smtp'],
             'stripe'   => ['configured' => $stripeSecret !== '', 'mode' => Str::startsWith($stripeSecret, 'sk_live') ? 'live' : 'test'],
+            'cache'    => ['driver' => config('cache.default'), 'ok' => $this->cacheOk()],
             'paddle'   => ['configured' => ! empty(config('billing.paddle.api_key')) && ! empty(config('billing.paddle.webhook_secret')), 'environment' => config('billing.paddle.sandbox') ? 'sandbox' : 'production'],
             'ai'       => $this->aiHealth(),
             'recent_failed_jobs' => Schema::hasTable('failed_jobs')
                 ? DB::table('failed_jobs')->latest('id')->limit(5)->get(['id', 'queue', 'exception', 'failed_at'])
                     ->map(fn ($r) => ['id' => $r->id, 'queue' => $r->queue, 'failed_at' => $r->failed_at, 'error' => Str::limit((string) $r->exception, 160)])
                 : [],
-        ]);
+        ];
     }
 
     /** AI routing readiness and a no-generation OpenRouter credential probe. */
@@ -132,6 +178,19 @@ class OverviewController extends AdminController
             ->sum('plans.price_monthly');
 
         return round(((int) $cents) / 100, 2);
+    }
+
+    private function cacheOk(): bool
+    {
+        try {
+            $key = 'admin:health-probe';
+            $token = Str::random(8);
+            Cache::put($key, $token, 5);
+
+            return Cache::pull($key) === $token;
+        } catch (\Throwable) {
+            return false;
+        }
     }
 
     private function queueStatus(): array

@@ -40,6 +40,26 @@ const paddleOrg = {
   subscription: { billing_provider: "paddle", provider_subscription_id: "ctm_sub_1" },
 };
 
+/** Agency Pro subscriber — the top tier: no lower plan may be buyable. */
+const agencyProOrg = {
+  organization: { status: "active" },
+  plan: { name: "Agency Pro", slug: "agency_pro" },
+  usage: { ai_insights: { used: 2, limit: 3000 }, reports: { used: 1, limit: 300 } },
+  subscription: { billing_provider: "paddle", provider_subscription_id: "ctm_sub_9" },
+};
+
+/** Founder tier 3 (Angel Agency) lifetime owner. */
+const founderTier3Org = {
+  organization: { status: "active" },
+  plan: { name: "Founder Tier 3", slug: "founder_tier_3" },
+  usage: { ai_insights: { used: 0, limit: 0 }, reports: { used: 0, limit: 100 } },
+  subscription: {
+    billing_provider: "paddle",
+    provider_subscription_id: "ctm_sub_5",
+    lifetime_grant: { active: true, plan_slug: "founder_tier_3" },
+  },
+};
+
 const checkoutConfig = {
   provider: "paddle",
   price_id: "pri_test_growth",
@@ -222,7 +242,8 @@ describe("Billing page checkout", () => {
     // in the checkout envelope below is what actually pins founder_tier_1.
     await userEvent.click(await screen.findByRole("button", { name: "Buy Angel Solo — $79" }));
 
-    // One-time LTD purchase: same envelope, kind 'lifetime'.
+    // One-time LTD purchase: same envelope, kind 'lifetime'. Slugs already
+    // differ per tier, so no variant is sent.
     await waitFor(() =>
       expect(apiMocks.apiPost).toHaveBeenCalledWith("/billing/checkout-config", { plan: "founder_tier_1", kind: "lifetime" }),
     );
@@ -238,5 +259,155 @@ describe("Billing page checkout", () => {
       purchase_kind: "lifetime",
       plan_slug: "founder_tier_1",
     });
+  });
+
+  // Founder order #1/#2 (2026-10-13): every pack button used to fire the
+  // identical {plan: insight_credits, kind: credit_pack} — the backend's
+  // first() always resolved the same $15 price. Each button now carries its
+  // variant and must open ITS OWN price.
+  it("passes the pack variant so each credit pack opens its own checkout", async () => {
+    const P = paddleStub();
+    (window as any).Paddle = P;
+
+    const packPrices: Record<string, string> = {
+      credits_5000: "pri_01m2y7dxpgpp7sajjt9maky1j7",
+      credits_20000: "pri_01m2y7dymwecszpnpc511geb35",
+      credits_50000: "pri_01m2y7dzdf1j627w2tbmx0nr52",
+    };
+    apiMocks.apiPost.mockImplementation((path: string, body: any) =>
+      path === "/billing/checkout-config"
+        ? Promise.resolve({
+            ...checkoutConfig,
+            price_id: packPrices[body.variant],
+            custom_data: { organization_id: 7, purchase_kind: "credit_pack", plan_slug: "insight_credits", variant: body.variant },
+          })
+        : Promise.resolve({}),
+    );
+
+    render(<BillingPage />);
+
+    // Each button sends a DISTINCT variant — no shared plan+kind envelope.
+    await userEvent.click(await screen.findByRole("button", { name: "Buy 5,000 credits — $15" }));
+    await waitFor(() => expect(apiMocks.apiPost).toHaveBeenLastCalledWith("/billing/checkout-config", {
+      plan: "insight_credits", kind: "credit_pack", variant: "credits_5000",
+    }));
+    resolvePaddleLoad();
+    await waitFor(() => expect(document.querySelector<HTMLIFrameElement>("#insightistic-checkout-frame iframe")?.src).toContain(packPrices.credits_5000));
+
+    // Close the open overlay so the next button is clickable again (busy
+    // resets on an abandoned close).
+    await userEvent.click(screen.getByRole("button", { name: "Close checkout" }));
+
+    await userEvent.click(await screen.findByRole("button", { name: "Buy 20,000 credits — $49" }));
+    await waitFor(() => expect(apiMocks.apiPost).toHaveBeenLastCalledWith("/billing/checkout-config", {
+      plan: "insight_credits", kind: "credit_pack", variant: "credits_20000",
+    }));
+    resolvePaddleLoad();
+    await waitFor(() => expect(document.querySelector<HTMLIFrameElement>("#insightistic-checkout-frame iframe")?.src).toContain(packPrices.credits_20000));
+    await userEvent.click(screen.getByRole("button", { name: "Close checkout" }));
+
+    await userEvent.click(await screen.findByRole("button", { name: "Buy 50,000 credits — $99" }));
+    await waitFor(() => expect(apiMocks.apiPost).toHaveBeenLastCalledWith("/billing/checkout-config", {
+      plan: "insight_credits", kind: "credit_pack", variant: "credits_50000",
+    }));
+    resolvePaddleLoad();
+    await waitFor(() => expect(document.querySelector<HTMLIFrameElement>("#insightistic-checkout-frame iframe")?.src).toContain(packPrices.credits_50000));
+  });
+
+  // Founder order #3: each lifetime button opens ITS OWN tier checkout.
+  it("opens a distinct checkout per founder tier", async () => {
+    const P = paddleStub();
+    (window as any).Paddle = P;
+
+    const tierPrices: Record<string, string> = {
+      founder_tier_1: "pri_01m2y7dw3kd8162wzm54j6k7z3",
+      founder_tier_2: "pri_01m2y7dwmfewpennma8gjffm88",
+      founder_tier_3: "pri_01m2y7dx628b2ahgzf2vqafey4",
+    };
+    apiMocks.apiPost.mockImplementation((path: string, body: any) =>
+      path === "/billing/checkout-config"
+        ? Promise.resolve({
+            ...checkoutConfig,
+            price_id: tierPrices[body.plan],
+            custom_data: { organization_id: 7, purchase_kind: "lifetime", plan_slug: body.plan },
+          })
+        : Promise.resolve({}),
+    );
+
+    render(<BillingPage />);
+
+    await userEvent.click(await screen.findByRole("button", { name: "Buy Angel Studio — $149" }));
+    await waitFor(() => expect(apiMocks.apiPost).toHaveBeenLastCalledWith("/billing/checkout-config", { plan: "founder_tier_2", kind: "lifetime" }));
+    resolvePaddleLoad();
+    await waitFor(() => expect(document.querySelector<HTMLIFrameElement>("#insightistic-checkout-frame iframe")?.src).toContain(tierPrices.founder_tier_2));
+    await userEvent.click(screen.getByRole("button", { name: "Close checkout" }));
+
+    await userEvent.click(await screen.findByRole("button", { name: "Buy Angel Agency — $249" }));
+    await waitFor(() => expect(apiMocks.apiPost).toHaveBeenLastCalledWith("/billing/checkout-config", { plan: "founder_tier_3", kind: "lifetime" }));
+    resolvePaddleLoad();
+    await waitFor(() => expect(document.querySelector<HTMLIFrameElement>("#insightistic-checkout-frame iframe")?.src).toContain(tierPrices.founder_tier_3));
+  });
+
+  // Founder order #4: a paid user must not be shown lower-plan purchases.
+  it("hides lower plans from an Agency Pro subscriber (top tier)", async () => {
+    apiMocks.apiGet.mockImplementation((path: string) =>
+      path === "/billing/subscription"
+        ? Promise.resolve(agencyProOrg)
+        : path === "/public/plans"
+          ? Promise.resolve(livePlans)
+          : Promise.resolve({}),
+    );
+
+    render(<BillingPage />);
+
+    expect(await screen.findByText(/top plan/i)).toBeInTheDocument();
+    expect(screen.queryByLabelText("Plan")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Continue to checkout" })).not.toBeInTheDocument();
+    // Lifetime tiers sit at-or-below Agency Pro, so their buy buttons go too.
+    expect(screen.queryByRole("button", { name: /Buy Angel/ })).not.toBeInTheDocument();
+  });
+
+  it("shows an Agency subscriber only Agency Pro as an upgrade", async () => {
+    apiMocks.apiGet.mockImplementation((path: string) =>
+      path === "/billing/subscription"
+        ? Promise.resolve({
+            ...agencyProOrg,
+            plan: { name: "Agency", slug: "agency" },
+          })
+        : path === "/public/plans"
+          ? Promise.resolve(livePlans)
+          : Promise.resolve({}),
+    );
+
+    render(<BillingPage />);
+
+    // Only the tier above (Agency Pro) is selectable; Starter/Growth are gone.
+    const options = await screen.findAllByRole("option");
+    const names = options.map((o) => o.textContent);
+    expect(names).toContain("Agency Pro");
+    expect(names).not.toContain("Starter");
+    expect(names).not.toContain("Growth");
+    expect(names).not.toContain("Agency");
+    // No lifetime buy buttons at-or-below Agency (tiers 1-2).
+    expect(screen.queryByRole("button", { name: "Buy Angel Solo — $79" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Buy Angel Studio — $149" })).not.toBeInTheDocument();
+  });
+
+  it("shows a founder tier 3 owner no lower lifetime tiers", async () => {
+    apiMocks.apiGet.mockImplementation((path: string) =>
+      path === "/billing/subscription"
+        ? Promise.resolve(founderTier3Org)
+        : path === "/public/plans"
+          ? Promise.resolve(livePlans)
+          : Promise.resolve({}),
+    );
+
+    render(<BillingPage />);
+
+    expect(await screen.findByText(/Lifetime Tier 3 active/i)).toBeInTheDocument();
+    // The grant branch replaces the whole buy grid.
+    expect(screen.queryByRole("button", { name: /Buy Angel/ })).not.toBeInTheDocument();
+    // Credit packs remain purchasable for lifetime owners.
+    expect(await screen.findByRole("button", { name: "Buy 5,000 credits — $15" })).toBeInTheDocument();
   });
 });

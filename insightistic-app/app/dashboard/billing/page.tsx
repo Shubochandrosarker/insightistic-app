@@ -12,6 +12,15 @@ import { Spinner } from "@/components/ui/Spinner";
 import { initPaddle, openPaddleCheckout } from "@/lib/paddle";
 import type { PaddleEnvironment } from "@/lib/paddle";
 import { money0, num } from "@/lib/format";
+import {
+  buyableCreditPacks,
+  buyableFounderTiers,
+  buyablePlans,
+  grantTierLabel,
+  isTopPlan,
+  lifetimeGrantOf,
+  type BillingEntitlement,
+} from "@/lib/billing/tiers";
 
 // Fallback lineup — Growth is the featured "Best Value" plan. Live names and
 // featured flags come from /public/plans once loaded; this constant wins only
@@ -57,24 +66,19 @@ const FOUNDER_TIER_SLUGS = new Set(FOUNDER_TIERS.map((tier) => tier.slug));
 
 // Insight Credit packs: one-time purchases granted to the credit ledger by
 // the webhook (credits arrive in price metadata). Core syncs never consume
-// credits — see /terms for the fine print.
+// credits — see /terms for the fine print. `variant` selects the exact
+// Paddle price server-side (plan+kind alone is ambiguous across packs).
 const CREDIT_PACKS = [
-  { credits: 5000, price: 15 },
-  { credits: 20000, price: 49 },
-  { credits: 50000, price: 99 },
+  { credits: 5000, price: 15, variant: "credits_5000" },
+  { credits: 20000, price: 49, variant: "credits_20000" },
+  { credits: 50000, price: 99, variant: "credits_50000" },
 ];
 
-/** The lifetime grant rides on the subscription payload (or alongside it). */
-function lifetimeGrantOf(d: any): { active?: boolean; plan_slug?: string } | null {
-  const g = d?.lifetime_grant ?? d?.subscription?.lifetime_grant;
-  return g?.active && g?.plan_slug ? g : null;
-}
-
-/** Tier number from a grant's plan slug ("founder_tier_2" -> "Tier 2"). */
-function grantTierLabel(planSlug: string): string {
-  const m = planSlug.match(/founder_tier_(\d+)/);
-  return m ? `Tier ${m[1]}` : planSlug.replace(/_/g, " ");
-}
+/**
+ * Tier visibility rules live in lib/billing/tiers (unit-tested); this page
+ * derives the entitlement from the subscription payload and renders only
+ * what the buyer can actually purchase.
+ */
 
 function UsageBar({ label, used, limit }: { label: string; used: number; limit: number | null }) {
   const ratio = limit ? Math.min(100, Math.round((used / limit) * 100)) : 0;
@@ -234,10 +238,18 @@ export default function BillingPage() {
    * projecting a subscription — so the completion poll watches for the
    * lifetime grant appearing rather than billing_provider flipping.
    */
-  async function oneTimeCheckout(planSlug: string, kind: "lifetime" | "credit_pack") {
+  async function oneTimeCheckout(
+    planSlug: string,
+    kind: "lifetime" | "credit_pack",
+    variant?: string,
+  ) {
     setBusy(true); setMsg(null);
     try {
-      const cfg: any = await apiPost("/billing/checkout-config", { plan: planSlug, kind });
+      const cfg: any = await apiPost("/billing/checkout-config", {
+        plan: planSlug,
+        kind,
+        ...(variant ? { variant } : {}),
+      });
       const environment: PaddleEnvironment = cfg?.environment === "sandbox" ? "sandbox" : "production";
       await initPaddle(cfg.client_token, environment);
       paidRef.current = false;
@@ -332,6 +344,18 @@ export default function BillingPage() {
   const hasSubscription = !!data.subscription?.stripe_subscription_id || !!provider;
   const lifetimeGrant = lifetimeGrantOf(data);
 
+  // Tier-aware buy lists (founder order #4): only plans ABOVE what the org
+  // already owns stay purchasable — the top plan sees no lower tiers, and
+  // a lifetime owner is never shown buy buttons at-or-below their grant.
+  const entitlement: BillingEntitlement = {
+    planSlug: planObj?.slug ?? null,
+    organizationStatus: data.organization?.status ?? null,
+    lifetimeGrant,
+  };
+  const upgradePlans = buyablePlans(planOptions, entitlement);
+  const buyableTiers = buyableFounderTiers(FOUNDER_TIERS, entitlement);
+  const purchasablePacks = buyableCreditPacks(CREDIT_PACKS);
+
   return (
     <div>
       <PageHeader title="Billing" subtitle="Your plan, usage, and subscription." />
@@ -391,33 +415,44 @@ export default function BillingPage() {
 
       <Card id="change-plan" className="mt-5" title="Change plan">
         {msg && <p className="mb-3 text-sm text-warn">{msg}</p>}
-        <div className="grid gap-4 sm:grid-cols-2">
-          <label className="block">
-            <span className="mb-1.5 block text-xs font-semibold text-fg">Plan</span>
-            <select value={plan} onChange={(e) => setPlan(e.target.value)}
-              className="w-full rounded-xl border border-line bg-card2 px-3 py-2 text-sm text-fg outline-none focus:border-brand">
-              {planOptions.map((p) => <option key={p.slug} value={p.slug}>{p.name}</option>)}
-            </select>
-          </label>
-          <label className="block">
-            <span className="mb-1.5 block text-xs font-semibold text-fg">Billing interval</span>
-            <select value={interval} onChange={(e) => setIntervalSel(e.target.value)}
-              className="w-full rounded-xl border border-line bg-card2 px-3 py-2 text-sm text-fg outline-none focus:border-brand">
-              <option value="monthly">Monthly</option>
-              <option value="yearly">Yearly</option>
-            </select>
-          </label>
-        </div>
-        <div className="mt-4">
-          {phase === "processing" ? (
-            <Spinner label={finishLabel} />
-          ) : (
-            <>
-              <Button onClick={checkout} disabled={busy}>{busy ? "Opening checkout…" : "Continue to checkout"}</Button>
-              <p className="mt-2 text-xs text-muted">Secure checkout via {provider === "stripe" ? "Stripe" : "Paddle"}.</p>
-            </>
-          )}
-        </div>
+        {upgradePlans.length === 0 && isTopPlan(entitlement) ? (
+          <p className="text-sm text-muted">
+            You're on the top plan — everything we sell is already included. Insight credit packs below still
+            top up AI usage anytime.
+          </p>
+        ) : upgradePlans.length === 0 ? (
+          <p className="text-sm text-muted">No subscription upgrades available for your current plan.</p>
+        ) : (
+          <>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <label className="block">
+                <span className="mb-1.5 block text-xs font-semibold text-fg">Plan</span>
+                <select value={plan} onChange={(e) => setPlan(e.target.value)}
+                  className="w-full rounded-xl border border-line bg-card2 px-3 py-2 text-sm text-fg outline-none focus:border-brand">
+                  {upgradePlans.map((p) => <option key={p.slug} value={p.slug}>{p.name}</option>)}
+                </select>
+              </label>
+              <label className="block">
+                <span className="mb-1.5 block text-xs font-semibold text-fg">Billing interval</span>
+                <select value={interval} onChange={(e) => setIntervalSel(e.target.value)}
+                  className="w-full rounded-xl border border-line bg-card2 px-3 py-2 text-sm text-fg outline-none focus:border-brand">
+                  <option value="monthly">Monthly</option>
+                  <option value="yearly">Yearly</option>
+                </select>
+              </label>
+            </div>
+            <div className="mt-4">
+              {phase === "processing" ? (
+                <Spinner label={finishLabel} />
+              ) : (
+                <>
+                  <Button onClick={checkout} disabled={busy}>{busy ? "Opening checkout…" : "Continue to checkout"}</Button>
+                  <p className="mt-2 text-xs text-muted">Secure checkout via {provider === "stripe" ? "Stripe" : "Paddle"}.</p>
+                </>
+              )}
+            </div>
+          </>
+        )}
       </Card>
 
       <Card id="founder-lifetime" className="mt-5" title="Founder lifetime deals"
@@ -435,9 +470,14 @@ export default function BillingPage() {
               top up AI usage anytime.
             </p>
           </div>
+        ) : buyableTiers.length === 0 ? (
+          <p className="text-sm text-muted">
+            Your current plan already covers the lifetime tiers — nothing to buy here. Credit packs below top up
+            AI usage anytime.
+          </p>
         ) : (
           <div className="grid gap-4 sm:grid-cols-3">
-            {FOUNDER_TIERS.map((t) => (
+            {buyableTiers.map((t) => (
               <div
                 key={t.slug}
                 className={`flex flex-col rounded-xl border bg-card2 p-4 ${
@@ -472,7 +512,7 @@ export default function BillingPage() {
       <Card id="credit-packs" className="mt-5" title="Insight credit packs"
         subtitle="One-time top-ups — they don't expire while the service operates.">
         <div className="grid gap-4 sm:grid-cols-3">
-          {CREDIT_PACKS.map((p) => (
+          {purchasablePacks.map((p) => (
             <div key={p.credits} className="flex flex-col rounded-xl border border-line bg-card2 p-4">
               <div className="flex items-baseline justify-between">
                 <span className="text-sm font-semibold text-fg">{num(p.credits)} credits</span>
@@ -482,7 +522,7 @@ export default function BillingPage() {
                 variant="soft"
                 className="mt-3"
                 disabled={busy}
-                onClick={() => oneTimeCheckout("insight_credits", "credit_pack")}
+                onClick={() => oneTimeCheckout("insight_credits", "credit_pack", p.variant)}
               >
                 Buy {num(p.credits)} credits — ${p.price}
               </Button>

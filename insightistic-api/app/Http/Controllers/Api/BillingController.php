@@ -204,8 +204,9 @@ class BillingController extends Controller
         }
 
         $data = $request->validate([
-            'plan' => ['required', 'string', 'exists:plans,slug'],
-            'kind' => ['required', 'in:monthly,yearly,lifetime,credit_pack'],
+            'plan'    => ['required', 'string', 'exists:plans,slug'],
+            'kind'    => ['required', 'in:monthly,yearly,lifetime,credit_pack'],
+            'variant' => ['nullable', 'string', 'max:64'],
         ]);
 
         // Funnel event (spec §33): checkout OPENED — the verified purchase
@@ -216,7 +217,7 @@ class BillingController extends Controller
                 'checkout_started',
                 $this->tenancy->organization(),
                 $request->user(),
-                ['plan' => $data['plan'], 'checkout_kind' => $data['kind']],
+                ['plan' => $data['plan'], 'checkout_kind' => $data['kind'], 'variant' => $data['variant'] ?? null],
             );
         } catch (\Throwable) {
         }
@@ -226,6 +227,7 @@ class BillingController extends Controller
                 $this->tenancy->organization(),
                 $data['plan'],
                 $data['kind'],
+                $data['variant'] ?? null,
             ));
         } catch (BillingConfigurationException $e) {
             return response()->json(['message' => $e->getMessage(), 'code' => $e->errorCode], 422);

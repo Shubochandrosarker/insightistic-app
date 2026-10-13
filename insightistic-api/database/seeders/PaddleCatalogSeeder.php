@@ -22,8 +22,10 @@ class PaddleCatalogSeeder extends Seeder
     private const PROVIDER = 'paddle';
 
     /**
-     * Price id => [plan_slug, kind, amount_minor, metadata].
+     * Price id => [plan_slug, kind, amount_minor, metadata, variant].
      * Amounts are the source of truth for what was created in Paddle.
+     * `variant` discriminates sibling prices that share one plan+kind (the
+     * credit packs); regular rows keep null.
      */
     private const PRICES = [
         // Recurring (Paddle product "Insightistic SaaS — <Plan>")
@@ -42,10 +44,11 @@ class PaddleCatalogSeeder extends Seeder
         'pri_01m2y7dx628b2ahgzf2vqafey4' => ['founder_tier_3', 'lifetime', 24900, []],
 
         // Insight Credit packs (one-time => credit_ledger grant; credits in
-        // metadata drive fulfillment — see PaddleTransactionProjector)
-        'pri_01m2y7dxpgpp7sajjt9maky1j7' => ['insight_credits', 'credit_pack', 1500, ['credits' => 5000]],
-        'pri_01m2y7dymwecszpnpc511geb35' => ['insight_credits', 'credit_pack', 4900, ['credits' => 20000]],
-        'pri_01m2y7dzdf1j627w2tbmx0nr52' => ['insight_credits', 'credit_pack', 9900, ['credits' => 50000]],
+        // metadata drive fulfillment — see PaddleTransactionProjector). One
+        // plan+kind carries three prices, so each needs its checkout variant.
+        'pri_01m2y7dxpgpp7sajjt9maky1j7' => ['insight_credits', 'credit_pack', 1500, ['credits' => 5000], 'credits_5000'],
+        'pri_01m2y7dymwecszpnpc511geb35' => ['insight_credits', 'credit_pack', 4900, ['credits' => 20000], 'credits_20000'],
+        'pri_01m2y7dzdf1j627w2tbmx0nr52' => ['insight_credits', 'credit_pack', 9900, ['credits' => 50000], 'credits_50000'],
     ];
 
     /**
@@ -100,7 +103,7 @@ class PaddleCatalogSeeder extends Seeder
             ->whereIn('slug', array_merge(['starter', 'growth', 'agency', 'agency_pro'], array_keys(self::HIDDEN_PLANS)))
             ->pluck('id', 'slug');
 
-        foreach (self::PRICES as $priceId => [$planSlug, $kind, $amount, $metadata]) {
+        foreach (self::PRICES as $priceId => [$planSlug, $kind, $amount, $metadata, $variant]) {
             $planId = $plans->get($planSlug);
 
             if (! $planId) {
@@ -130,6 +133,7 @@ class PaddleCatalogSeeder extends Seeder
                 [
                     'plan_id'             => $planId,
                     'kind'                => $kind,
+                    'variant'             => $variant,
                     'currency'            => 'USD',
                     'amount_minor'        => $amount,
                     'billing_interval'    => $kind === 'monthly' ? 'month' : ($kind === 'yearly' ? 'year' : null),

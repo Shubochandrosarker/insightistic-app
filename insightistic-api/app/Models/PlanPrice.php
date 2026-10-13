@@ -8,7 +8,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 class PlanPrice extends Model
 {
     protected $fillable = [
-        'plan_id', 'provider', 'kind', 'provider_product_id',
+        'plan_id', 'provider', 'kind', 'variant', 'provider_product_id',
         'provider_price_id', 'currency', 'amount_minor', 'billing_interval',
         'is_active', 'metadata_json',
     ];

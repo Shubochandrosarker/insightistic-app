@@ -29,11 +29,18 @@ final class PaddleBillingService
      * its own price, and custom_data is a routing hint the server re-checks
      * on every webhook, never a source of truth.
      *
+     * A plan+kind may carry several active prices (the credit packs share
+     * plan "insight_credits" + kind "credit_pack"); `variant` picks the
+     * sibling ('credits_5000' | 'credits_20000' | 'credits_50000'). On the
+     * money path we fail loud instead of silently returning whatever row
+     * `first()` happens to find: an ambiguous plan+kind without a variant —
+     * or a variant that matches no active row — is rejected.
+     *
      * @return array{provider:string, price_id:string, currency:string,
      *               amount_minor:int, client_token:?string,
      *               customer:array{email:?string}, custom_data:array}
      */
-    public function checkoutConfig(Organization $org, string $planSlug, string $kind): array
+    public function checkoutConfig(Organization $org, string $planSlug, string $kind, ?string $variant = null): array
     {
         $plan = Plan::where('slug', $planSlug)->first();
 
@@ -47,13 +54,26 @@ final class PaddleBillingService
             throw new BillingConfigurationException('plan_not_available', 'This plan is not available.');
         }
 
-        $price = PlanPrice::query()
+        $query = PlanPrice::query()
             ->where('plan_id', $plan->id)
             ->where('provider', 'paddle')
             ->where('kind', $kind)
             ->where('currency', config('billing.paddle.default_currency', 'USD'))
             ->where('is_active', true)
-            ->first();
+            ->when($variant !== null, fn ($q) => $q->where('variant', $variant));
+
+        $prices = $query->orderBy('id')->get();
+
+        // A variant that matches nothing, or an unqualified lookup that is
+        // still ambiguous, must never resolve by row order — abort instead.
+        if ($prices->count() > 1 || ($variant !== null && $prices->isEmpty())) {
+            throw new BillingConfigurationException(
+                'price_variant_required',
+                'This purchase needs a specific variant — none or several matched.',
+            );
+        }
+
+        $price = $prices->first();
 
         if (! $price) {
             throw new BillingConfigurationException('price_not_configured', 'This plan/kind has no Paddle price configured yet.');
@@ -79,6 +99,7 @@ final class PaddleBillingService
                 'organization_id' => $org->id,
                 'purchase_kind'   => $kind,
                 'plan_slug'       => $plan->slug,
+                'variant'         => $price->variant,
             ],
         ];
     }

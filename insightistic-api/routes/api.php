@@ -644,6 +644,7 @@ Route::get('reports/{report}/html', [ReportController::class, 'downloadHtml'])
 Route::prefix('admin')->middleware(['auth:sanctum', 'super_admin'])->group(function () {
     Route::get('overview', [AdminOverviewController::class, 'overview']);
     Route::get('system-health', [AdminOverviewController::class, 'systemHealth']);
+    Route::get('settings', [AdminOverviewController::class, 'settings']);
 
     /*
      * Observability (spec Phase 2.3). Platform-wide, not tenant-scoped:
@@ -677,6 +678,11 @@ Route::prefix('admin')->middleware(['auth:sanctum', 'super_admin'])->group(funct
     Route::get('sites', [AdminSiteController::class, 'index']);
     Route::post('sites', [AdminSiteController::class, 'store']);
     Route::get('sites/{id}', [AdminSiteController::class, 'show']);
+    Route::patch('sites/{id}', [AdminSiteController::class, 'update']);
+    // Rotates the HMAC connector credential pair (Site::issueConnectorToken).
+    // The raw token appears ONCE in this response — exactly like the plugin
+    // handshake flow — and the old pair stops working immediately.
+    Route::post('sites/{id}/regenerate-key', [AdminSiteController::class, 'regenerateKey']);
     Route::post('sites/{id}/disconnect', [AdminSiteController::class, 'disconnect']);
     Route::post('sites/{id}/archive', [AdminSiteController::class, 'archive']);
     Route::post('sites/{id}/restore', [AdminSiteController::class, 'restore']);

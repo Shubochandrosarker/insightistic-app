@@ -13,6 +13,7 @@ use App\Models\Organization;
 use App\Models\Site;
 use App\Services\Crawler\ChangeDetection;
 use App\Services\Crawler\CrawlHealthScore;
+use App\Services\UsageService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -67,7 +68,6 @@ class CrawlController extends Controller
                 ->whereKey($site->organization_id)
                 ->lockForUpdate()
                 ->firstOrFail();
-            $org->load('plan');
             $site->setRelation('organization', $org);
 
             $inFlight = CrawlRun::where('site_id', $site->id)
@@ -83,7 +83,7 @@ class CrawlController extends Controller
                 ], 409);
             }
 
-            $limit = (int) ($org->plan?->limit('crawl_pages_monthly') ?? 0);
+            $limit = app(UsageService::class)->limit($org, 'http_crawl_pages_monthly');
             $maxPages = min(
                 (int) ($validated['max_pages'] ?? self::MAX_PAGES_PER_RUN),
                 self::MAX_PAGES_PER_RUN,

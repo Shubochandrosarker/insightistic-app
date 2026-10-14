@@ -13,12 +13,12 @@ class UsageService
 {
     public function insightLimit(Organization $org): int
     {
-        return (int) ($org->plan?->ai_insight_limit ?? 0);
+        return (int) ($this->resolved($org)['limits']['standard_ai_requests_monthly'] ?? $org->plan?->ai_insight_limit ?? 0);
     }
 
     public function reportLimit(Organization $org): int
     {
-        return (int) ($org->plan?->report_limit ?? 0);
+        return (int) ($this->resolved($org)['limits']['client_ready_reports_monthly'] ?? $org->plan?->report_limit ?? 0);
     }
 
     public function counter(Organization $org): UsageCounter
@@ -65,7 +65,45 @@ class UsageService
     /** Resolve a limits_json entitlement for an org (code defaults backstop). */
     public function limit(Organization $org, string $key): int
     {
-        return $org->plan?->limit($key) ?? (int) (\App\Models\Plan::LIMIT_DEFAULTS[$key] ?? 0);
+        $limits = $this->resolved($org)['limits'];
+        $aliases = [
+            'connected_websites'       => 'sites',
+            'team_seats'               => 'users',
+            'http_crawl_pages_monthly' => 'crawl_pages_monthly',
+        ];
+        $legacyColumns = [
+            'connected_websites' => 'site_limit',
+            'team_seats'         => 'user_limit',
+        ];
+
+        if (array_key_exists($key, $limits)) {
+            return (int) $limits[$key];
+        }
+
+        $legacyKey = $aliases[$key] ?? null;
+        if ($legacyKey !== null && array_key_exists($legacyKey, $limits)) {
+            return (int) $limits[$legacyKey];
+        }
+
+        $plan = $org->plan;
+        if ($plan) {
+            $value = $plan->limit($key);
+            if ($value <= 0 && $legacyKey !== null) {
+                $value = $plan->limit($legacyKey);
+            }
+            if ($value <= 0 && isset($legacyColumns[$key])) {
+                $value = (int) $plan->{$legacyColumns[$key]};
+            }
+
+            return (int) $value;
+        }
+
+        return (int) (\App\Models\Plan::LIMIT_DEFAULTS[$key] ?? 0);
+    }
+
+    private function resolved(Organization $org): array
+    {
+        return app(\App\Domain\Billing\EntitlementResolver::class)->resolve($org);
     }
 
     /**

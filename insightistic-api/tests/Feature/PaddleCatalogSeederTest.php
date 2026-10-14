@@ -80,3 +80,23 @@ it('never silently repoints a price id at a different plan', function () {
     expect($price->fresh()->plan->slug)->toBe('growth')
         ->and(PlanPrice::query()->where('provider', 'paddle')->count())->toBe(14);
 });
+
+it('maps configured Angel Paddle IDs to the new lifetime plans', function () {
+    $this->seed(PlanSeeder::class);
+    putenv('PADDLE_PRICE_ANGEL_SOLO=pri_test_angel_solo');
+    putenv('PADDLE_PRICE_ANGEL_STUDIO=pri_test_angel_studio');
+    putenv('PADDLE_PRICE_ANGEL_AGENCY=pri_test_angel_agency');
+
+    try {
+        $this->seed(PaddleCatalogSeeder::class);
+
+        expect(PlanPrice::where('provider_price_id', 'pri_test_angel_solo')->first()->plan->slug)->toBe('angel_solo')
+            ->and(PlanPrice::where('provider_price_id', 'pri_test_angel_studio')->first()->plan->slug)->toBe('angel_studio')
+            ->and(PlanPrice::where('provider_price_id', 'pri_test_angel_agency')->first()->plan->slug)->toBe('angel_agency')
+            ->and(PlanPrice::where('provider_price_id', 'pri_test_angel_agency')->first()->kind)->toBe('lifetime');
+    } finally {
+        putenv('PADDLE_PRICE_ANGEL_SOLO');
+        putenv('PADDLE_PRICE_ANGEL_STUDIO');
+        putenv('PADDLE_PRICE_ANGEL_AGENCY');
+    }
+});

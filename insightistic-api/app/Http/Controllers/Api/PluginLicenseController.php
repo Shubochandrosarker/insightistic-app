@@ -77,15 +77,18 @@ class PluginLicenseController extends Controller
 
         $isNew = ! $activation || $activation->status !== 'active';
 
+        $resolved = app(\App\Domain\Billing\EntitlementResolver::class)->resolve($org);
+        $effectiveActivationLimit = (int) ($resolved['limits']['connected_websites'] ?? $resolved['limits']['sites'] ?? $license->activation_limit);
+
         if ($isNew && $environment === 'production') {
             $used = $license->countedActivations();
-            if ($used >= $license->activation_limit) {
+            if ($used >= $effectiveActivationLimit) {
                 PluginEvent::record($license, $activation, 'limit_reached', ['site' => $normalized]);
                 $this->mailer->send($org, 'license_limit_reached', [], now()->format('Y-m'));
 
                 return $this->error(
                     'activation_limit_reached',
-                    "Your plan allows {$license->activation_limit} connected website(s) and all slots are in use.",
+                    "Your plan allows {$effectiveActivationLimit} connected website(s) and all slots are in use.",
                     402,
                     ['upgrade_url' => rtrim(config('insightistic.app_url'), '/').'/dashboard/billing'],
                 );

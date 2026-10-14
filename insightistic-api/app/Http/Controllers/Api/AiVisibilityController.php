@@ -9,6 +9,7 @@ use App\Models\AiVisibilityPrompt;
 use App\Models\AiVisibilityRun;
 use App\Models\Site;
 use App\Services\AiVisibility\VisibilityMetrics;
+use App\Services\UsageService;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -386,7 +387,7 @@ class AiVisibilityController extends Controller
                 ->where('site_id', $site->id)
                 ->where('created_at', '>=', now()->startOfMonth())
                 ->count(),
-            'limit' => (int) ($org?->plan?->limit('ai_prompt_runs_monthly') ?? 0),
+            'limit' => $org ? app(UsageService::class)->limit($org, 'ai_prompt_runs_monthly') : 0,
         ];
     }
 

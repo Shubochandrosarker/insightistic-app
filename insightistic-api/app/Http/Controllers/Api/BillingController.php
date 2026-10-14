@@ -5,6 +5,8 @@ namespace App\Http\Controllers\Api;
 use App\Domain\Billing\Exceptions\BillingConfigurationException;
 use App\Domain\Billing\Exceptions\PaddleApiException;
 use App\Domain\Billing\PaddleBillingService;
+use App\Domain\Billing\CreditWallet;
+use App\Domain\Billing\EntitlementResolver;
 use App\Http\Controllers\Controller;
 use App\Models\EntitlementGrant;
 use App\Models\Plan;
@@ -28,25 +30,49 @@ class BillingController extends Controller
         private LifecycleMailer $mailer,
         private StripeWebhookProcessor $processor,
         private PaddleBillingService $paddleBilling,
+        private CreditWallet $creditWallet,
+        private EntitlementResolver $entitlements,
     ) {}
 
     /** Current subscription + plan + this month's usage. */
     public function subscription()
     {
         $org = $this->tenancy->organization()->load(['plan', 'subscription', 'currentUsage']);
+        $resolved = $this->entitlements->resolve($org);
+        $effectivePlan = $org->plan;
+        if (($resolved['plan']['id'] ?? null) && (! $effectivePlan || $effectivePlan->id !== $resolved['plan']['id'])) {
+            $effectivePlan = Plan::find($resolved['plan']['id']);
+        }
 
         return response()->json([
             'organization' => $org->only(['id', 'name', 'status', 'trial_ends_at']),
-            'plan'         => $org->plan,
+            'plan'         => $effectivePlan ? array_merge($effectivePlan->toArray(), [
+                'effective_source' => $resolved['source'], 'effective_status' => $resolved['status'],
+                'features' => $resolved['features'], 'limits' => $resolved['limits'],
+            ]) : ['slug' => $resolved['plan']['slug'], 'name' => $resolved['plan']['name'], 'limits' => $resolved['limits'], 'features' => $resolved['features']],
             // Additive extension (roadmap 23-STRIPE-TO-PADDLE-MIGRATION): the
             // provider-neutral columns ride along on the serialized model —
             // null for legacy Stripe rows — and `lifetime_grant` reports an
             // active one-time Paddle purchase. No existing key removed.
             'subscription' => $this->subscriptionPayload($org),
             'usage'        => [
-                'ai_insights' => ['used' => $org->currentUsage->ai_insights_used ?? 0, 'limit' => $org->plan?->ai_insight_limit],
-                'reports'     => ['used' => $org->currentUsage->reports_generated ?? 0, 'limit' => $org->plan?->report_limit],
+                'ai_insights' => ['used' => $org->currentUsage->ai_insights_used ?? 0, 'limit' => $resolved['limits']['standard_ai_requests_monthly'] ?? $effectivePlan?->ai_insight_limit],
+                'reports'     => ['used' => $org->currentUsage->reports_generated ?? 0, 'limit' => $resolved['limits']['client_ready_reports_monthly'] ?? $effectivePlan?->report_limit],
             ],
+            'credits' => $this->creditWallet->summary($org),
+        ]);
+    }
+
+    /** Dedicated wallet endpoint used by the app and WordPress connector. */
+    public function credits()
+    {
+        $org = $this->tenancy->organization();
+
+        return response()->json([
+            'wallet' => $this->creditWallet->summary($org),
+            'transactions' => $this->creditWallet->transactions($org),
+            'action_costs' => config('commercial.ai_action_costs'),
+            'credit_packs' => config('commercial.credit_packs'),
         ]);
     }
 
@@ -206,6 +232,7 @@ class BillingController extends Controller
         $data = $request->validate([
             'plan' => ['required', 'string', 'exists:plans,slug'],
             'kind' => ['required', 'in:monthly,yearly,lifetime,credit_pack'],
+            'credit_pack' => ['required_if:kind,credit_pack', 'nullable', 'in:credits_5000,credits_20000,credits_50000'],
         ]);
 
         // Funnel event (spec §33): checkout OPENED — the verified purchase
@@ -216,7 +243,7 @@ class BillingController extends Controller
                 'checkout_started',
                 $this->tenancy->organization(),
                 $request->user(),
-                ['plan' => $data['plan'], 'checkout_kind' => $data['kind']],
+                ['plan' => $data['plan'], 'checkout_kind' => $data['kind'], 'credit_pack' => $data['credit_pack'] ?? null],
             );
         } catch (\Throwable) {
         }
@@ -226,6 +253,7 @@ class BillingController extends Controller
                 $this->tenancy->organization(),
                 $data['plan'],
                 $data['kind'],
+                $data['credit_pack'] ?? null,
             ));
         } catch (BillingConfigurationException $e) {
             return response()->json(['message' => $e->getMessage(), 'code' => $e->errorCode], 422);

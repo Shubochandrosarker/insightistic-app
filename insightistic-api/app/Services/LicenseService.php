@@ -34,6 +34,7 @@ class LicenseService
         'woocommerce_analytics', 'engagement_analytics', 'ai_insights', 'ai_copilot',
         'advanced_reports', 'scheduled_reports', 'alerts', 'data_export',
         'multi_site', 'team_access', 'agency_white_label', 'custom_domain', 'api_access',
+        'white_label_reports', 'white_label_dashboard', 'priority_support',
         // legacy — see docblock above.
         'seo_analysis', 'email_audit_automation',
     ];
@@ -44,15 +45,21 @@ class LicenseService
     public function issue(Organization $org): string
     {
         $raw = $this->generateKey();
+        $resolved = app(\App\Domain\Billing\EntitlementResolver::class)->resolve($org);
+        $effectivePlanId = $resolved['plan']['id'] ?? $org->plan_id;
+        $activationLimit = (int) ($resolved['limits']['connected_websites']
+            ?? $resolved['limits']['sites']
+            ?? $org->plan?->site_limit
+            ?? 1);
 
         License::withoutGlobalScope('organization')->create([
             'organization_id'   => $org->id,
-            'plan_id'           => $org->plan_id,
+            'plan_id'           => $effectivePlanId,
             'subscription_id'   => $org->subscription()->first()?->id,
             'license_key_hash'  => $this->hash($raw),
             'license_key_last4' => substr($raw, -4),
             'status'            => $this->computeStatus($org),
-            'activation_limit'  => (int) ($org->plan?->site_limit ?? 1),
+            'activation_limit'  => $activationLimit,
         ]);
 
         return $raw;
@@ -138,15 +145,22 @@ class LicenseService
     /** Re-project and persist status + plan-derived fields for all of an org's licenses. */
     public function syncForOrganization(Organization $org): void
     {
+        $resolved = app(\App\Domain\Billing\EntitlementResolver::class)->resolve($org);
+        $effectivePlanId = $resolved['plan']['id'] ?? $org->plan_id;
+        $activationLimit = (int) ($resolved['limits']['connected_websites']
+            ?? $resolved['limits']['sites']
+            ?? $org->plan?->site_limit
+            ?? 1);
+
         $licenses = License::withoutGlobalScope('organization')
             ->where('organization_id', $org->id)
             ->get();
 
         foreach ($licenses as $license) {
             $license->status           = $this->computeStatus($org, $license);
-            $license->plan_id          = $org->plan_id;
+            $license->plan_id          = $effectivePlanId;
             $license->subscription_id  = $org->subscription()->first()?->id;
-            $license->activation_limit = (int) ($org->plan?->site_limit ?? 1);
+            $license->activation_limit = $activationLimit;
             $license->save();
         }
     }
@@ -242,11 +256,12 @@ class LicenseService
     public function entitlements(License $license): array
     {
         $org  = Organization::find($license->organization_id);
-        $plan = $license->plan;
+        $resolved = $org ? app(\App\Domain\Billing\EntitlementResolver::class)->resolve($org) : [];
+        $plan = ($resolved['plan']['id'] ?? null) ? \App\Models\Plan::find($resolved['plan']['id']) : $license->plan;
 
         $features = ['basic_analytics'];
-        if ($license->isEntitled() && $plan) {
-            $planFeatures = $plan->features_json ?? [];
+        if ($license->isEntitled()) {
+            $planFeatures = $resolved['features'] ?? ($plan?->features_json ?? []);
             $features = array_values(array_unique(array_merge($features, $planFeatures)));
         }
 
@@ -257,10 +272,16 @@ class LicenseService
             'trial_ends_at'     => $org?->trial_ends_at?->toIso8601String(),
             'expires_at'        => $license->expires_at?->toIso8601String(),
             'features'          => $features,
-            'activation_limit'  => (int) $license->activation_limit,
+            'activation_limit'  => (int) ($resolved['limits']['connected_websites'] ?? $resolved['limits']['sites'] ?? $license->activation_limit),
             'activations_used'  => $license->countedActivations(),
             'validate_interval' => (int) config('insightistic.license.validate_interval', 86400),
             'grace_hours'       => (int) config('insightistic.license.grace_hours', 72),
+            'effective_source'  => $resolved['source'] ?? 'none',
+            'limits'            => $resolved['limits'] ?? [],
+            'monthly_ai_credits' => (int) ($resolved['limits']['monthly_ai_credits'] ?? $plan?->limit('monthly_ai_credits') ?? 0),
+            'standard_ai_requests_monthly' => (int) ($resolved['limits']['standard_ai_requests_monthly'] ?? $plan?->limit('standard_ai_requests_monthly') ?? $plan?->ai_insight_limit ?? 0),
+            'credits'           => $org ? app(\App\Domain\Billing\CreditWallet::class)->summary($org) : null,
+            'upgrade_url'       => rtrim(config('insightistic.app_url'), '/') . '/dashboard/billing',
         ];
     }
 

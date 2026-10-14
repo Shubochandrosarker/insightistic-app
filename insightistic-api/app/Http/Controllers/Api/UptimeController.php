@@ -78,7 +78,10 @@ class UptimeController extends Controller
 
         if (array_key_exists('interval_minutes', $data)) {
             // Plan floor: clamp up, never down (doc 16 — intervals are the plan throttle).
-            $floor = max(1, $site->organization?->plan?->limit('uptime_interval_minutes') ?: 1);
+            $floor = max(1, app(\App\Services\UsageService::class)->limit(
+                $site->organization,
+                'uptime_interval_minutes',
+            ) ?: 1);
             $data['interval_minutes'] = max($floor, (int) $data['interval_minutes']);
         }
 

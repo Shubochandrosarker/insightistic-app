@@ -5,118 +5,80 @@ namespace Database\Seeders;
 use App\Models\Plan;
 use Illuminate\Database\Seeder;
 
+/** Seeds the versioned commercial catalog without deleting historical plans. */
 class PlanSeeder extends Seeder
 {
     public function run(): void
     {
-        // Feature slugs are the single vocabulary shared by the API, the
-        // dashboard, and the WordPress plugin's feature gate.
-        $features = [
-            // Free forever — no card, no trial expiration. This is what the
-            // WordPress plugin actually promises ("Create a free account —
-            // no card, free forever") for AI Insights and email automation;
-            // every paid plan below is an upgrade from here, not a
-            // replacement for it. See AccountProvisioner for signup wiring.
-            'free' => [
-                'basic_analytics', 'ai_insights', 'email_audit_automation',
-            ],
-            'starter' => [
-                'basic_analytics', 'seo_analysis', 'ai_insights',
-            ],
-            'growth' => [
-                'basic_analytics', 'woocommerce_analytics', 'seo_analysis',
-                'email_audit_automation', 'ai_insights', 'advanced_reports',
-                'scheduled_reports', 'multi_site',
-            ],
-            'business' => [
-                'basic_analytics', 'woocommerce_analytics', 'seo_analysis',
-                'email_audit_automation', 'ai_insights', 'advanced_reports',
-                'scheduled_reports', 'multi_site',
-            ],
-            'agency' => [
-                'basic_analytics', 'woocommerce_analytics', 'seo_analysis',
-                'email_audit_automation', 'ai_insights', 'advanced_reports',
-                'scheduled_reports', 'multi_site', 'agency_white_label', 'team_access',
-            ],
-            'agency_pro' => [
-                'basic_analytics', 'woocommerce_analytics', 'seo_analysis',
-                'email_audit_automation', 'ai_insights', 'advanced_reports',
-                'scheduled_reports', 'multi_site', 'agency_white_label', 'team_access',
-            ],
+        $catalog = config('commercial');
+
+        foreach ($catalog['regular_plans'] as $slug => $plan) {
+            $this->upsertPlan($slug, $plan, $plan['monthly'], $plan['yearly'], $plan['active'], $plan['featured']);
+        }
+
+        foreach ($catalog['angel_plans'] as $slug => $plan) {
+            $this->upsertPlan($slug, $plan, $plan['price'] * 100, 0, false, false, 'lifetime');
+        }
+
+        // Historical rows remain readable for old subscriptions and webhook
+        // replays, but can never appear as new offers.
+        $legacy = [
+            'business' => ['name' => 'Business (legacy)', 'monthly' => 7900, 'yearly' => 79000],
+            'founder_tier_1' => ['name' => 'Founder Tier 1 (legacy)', 'monthly' => 7900, 'yearly' => 0],
+            'founder_tier_2' => ['name' => 'Founder Tier 2 (legacy)', 'monthly' => 14900, 'yearly' => 0],
+            'founder_tier_3' => ['name' => 'Founder Tier 3 (legacy)', 'monthly' => 24900, 'yearly' => 0],
+            'insight_credits' => ['name' => 'Insight Credits', 'monthly' => 0, 'yearly' => 0],
         ];
 
-        // Public lineup (roadmap-2026 doc 24, the locked commercial model):
-        // Starter $29 / Growth $69 / Agency $149 / Agency Pro $299, annual
-        // = 10x monthly. Sites 3/10/30/100, team 1/3/10/30, crawl pages
-        // 10k/50k/200k/1M, tracked keywords 150/750/3k/10k, AI prompt runs
-        // 15/75/250/1k. business + agency_pro stay seeded but hidden so
-        // historical Stripe price ids and FKs survive. 'free' is likewise
-        // not a pricing-page card (is_active=false) — it's the automatic
-        // signup state every organization starts on (AccountProvisioner),
-        // not something anyone picks or upgrades away from a trial into.
-        // Prices in cents.
-        $plans = [
-            //  slug          name          $m     $y      sites users ai    rpts  wl     cd     active featured
-            ['free',       'Free',       0,     0,      3,   1,   10,   0,    false, false, false, false],
-            ['starter',    'Starter',    2900,  29000,  3,   1,   20,   4,    false, false, true,  false],
-            ['growth',     'Growth',     6900,  69000,  10,  3,   100,  20,   false, false, true,  true],
-            ['business',   'Business',   7900,  79000,  10,  10,  300,  100,  false, false, false, false],
-            ['agency',     'Agency',     14900, 149000, 30,  10,  1000, 100,  true,  false, true,  false],
-            ['agency_pro', 'Agency Pro', 29900, 299000, 100, 30,  3000, 300,  true,  true,  true,  false],
-        ];
-
-        // Knowledge base + Copilot entitlements (spec Phase 8), plus the
-        // roadmap-era usage keys (docs 24/26): crawl pages, tracked
-        // keywords, AI visibility prompt runs — and, since Phase 7 (doc 12),
-        // the crawl cadence: crawl_frequency_days (7 = weekly on
-        // free/starter, 1 = daily on the paid tiers). Phase 10 (doc 13)
-        // adds rank_checks_monthly: SERP checks are variable provider cost
-        // and must be metered, never "unlimited" (doc 13, quotas).
-        // Database configuration, not frontend hardcoding — the admin plan
-        // editor can override any of these per plan.
-        $limits = [
-        //  slug          kbs  srcs  mb    chunks  embeds   msgs  schedRpts retDays | crawl  perRun kw    prompts  freqDays checks/mo
-            'free'       => [1,   5,    25,   1000,   2000,    25,   0,    180,      500,    50,    0,     0,       7,        0],
-            'starter'    => [1,   10,   50,   2000,   5000,    50,   4,    365,      10000,  200,   150,   15,      7,        300],
-            'growth'     => [3,   50,   250,  10000,  25000,   300,  20,   730,      50000,  500,   750,   75,      1,        1500],
-            'business'   => [10,  150,  1000, 50000,  100000,  1000, 100,  1095,     100000, 1000,  1500,  150,     1,        5000],
-            'agency'     => [30,  500,  5000, 200000, 400000,  3000, 300,  1095,     200000, 2000,  3000,  250,     1,        15000],
-            'agency_pro' => [100, 2000, 20000, 800000, 1500000, 10000, 1000, 1825,    1000000, 5000, 10000, 1000,    1,        50000],
-        ];
-
-        foreach ($plans as [$slug, $name, $m, $y, $sites, $users, $ai, $reports, $wl, $cd, $active, $featured]) {
-            [$kbs, $srcs, $mb, $chunks, $embeds, $msgs, $schedRpts, $retDays, $crawl, $perRun, $kw, $prompts, $freqDays, $rankChecks] = $limits[$slug];
-
+        foreach ($legacy as $slug => $plan) {
             Plan::updateOrCreate(['slug' => $slug], [
-                'name'                  => $name,
-                'price_monthly'         => $m,
-                'price_yearly'          => $y,
-                'site_limit'            => $sites,
-                'user_limit'            => $users,
-                'ai_insight_limit'      => $ai,
-                'report_limit'          => $reports,
-                'white_label_enabled'   => $wl,
-                'custom_domain_enabled' => $cd,
-                'features_json'         => $features[$slug],
-                'limits_json'           => [
-                    'knowledge_bases'          => $kbs,
-                    'knowledge_sources'        => $srcs,
-                    'storage_mb'               => $mb,
-                    'indexed_chunks'           => $chunks,
-                    'monthly_embeddings'       => $embeds,
-                    'monthly_ai_messages'      => $msgs,
-                    'scheduled_reports'        => $schedRpts,
-                    'data_retention_days'      => $retDays,
-                    'crawl_pages_monthly'      => $crawl,
-                    'crawl_pages_per_run'      => $perRun,
-                    'tracked_keywords'         => $kw,
-                    'ai_prompt_runs_monthly'   => $prompts,
-                    'crawl_frequency_days'     => $freqDays,
-                    'rank_checks_monthly'      => $rankChecks,
-                ],
-                'is_active'             => $active,
-                'is_featured'           => $featured,
+                'name' => $plan['name'], 'price_monthly' => $plan['monthly'],
+                'price_yearly' => $plan['yearly'], 'is_active' => false, 'is_featured' => false,
             ]);
         }
+    }
+
+    private function upsertPlan(
+        string $slug, array $plan, int $monthly, int $yearly,
+        bool $active, bool $featured, string $billingModel = 'subscription'
+    ): void {
+        $limits = [
+            'billing_model' => $billingModel,
+            'connected_websites' => (int) $plan['sites'],
+            'team_seats' => (int) $plan['seats'],
+            'http_crawl_pages_monthly' => (int) ($plan['crawl_pages'] ?? 0),
+            // Historical crawler callers use this shorter key. Keep the
+            // alias while the canonical commercial vocabulary remains the
+            // explicit http_crawl_pages_monthly name above.
+            'crawl_pages_monthly' => (int) ($plan['crawl_pages'] ?? 0),
+            'browser_rendering_minutes_monthly' => (int) ($plan['browser_minutes'] ?? 0),
+            'tracked_keywords' => (int) ($plan['keywords'] ?? 0),
+            'standard_ai_requests_monthly' => (int) ($plan['standard_ai_requests'] ?? 0),
+            'monthly_ai_credits' => (int) ($plan['monthly_credits'] ?? 0),
+            'client_ready_reports_monthly' => (int) ($plan['reports'] ?? 0),
+            'crawl_pages_per_run' => min(5000, max(50, (int) ($plan['crawl_pages'] ?? 50))),
+            'ai_prompt_runs_monthly' => (int) ($plan['standard_ai_requests'] ?? 0),
+            'knowledge_bases' => in_array($slug, ['free', 'starter', 'angel_solo'], true) ? 1 : 3,
+            'knowledge_sources' => $slug === 'free' ? 5 : 50,
+            'storage_mb' => $slug === 'free' ? 25 : 250,
+            'monthly_ai_messages' => $slug === 'free' ? 25 : 300,
+            'scheduled_reports' => in_array($slug, ['growth', 'agency', 'agency_pro', 'angel_studio', 'angel_agency'], true) ? 1 : 0,
+            'data_retention_days' => $billingModel === 'lifetime' ? 1825 : 730,
+        ];
+
+        Plan::updateOrCreate(['slug' => $slug], [
+            'name' => $plan['name'], 'price_monthly' => $monthly, 'price_yearly' => $yearly,
+            'site_limit' => (int) $plan['sites'], 'user_limit' => (int) $plan['seats'],
+            'ai_insight_limit' => (int) ($plan['standard_ai_requests'] ?? 0),
+            'report_limit' => (int) ($plan['reports'] ?? 0),
+            'white_label_enabled' => in_array('agency_white_label', $plan['features'] ?? [], true),
+            'custom_domain_enabled' => in_array('custom_domain', $plan['features'] ?? [], true),
+            'features_json' => $plan['features'] ?? [], 'limits_json' => $limits,
+            'is_active' => $active, 'is_featured' => $featured,
+            'sort_order' => match ($slug) {
+                'free' => 0, 'starter' => 10, 'growth' => 20, 'agency' => 30, 'agency_pro' => 40,
+                default => 100,
+            },
+        ]);
     }
 }

@@ -3,6 +3,8 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Domain\Billing\AiCreditService;
+use App\Domain\Billing\Exceptions\InsufficientCreditsException;
 use App\Mail\ClientReportMail;
 use App\Models\ClientReport;
 use App\Models\Site;
@@ -19,6 +21,7 @@ class ReportController extends Controller
         private ReportBuilder $builder,
         private UsageService $usage,
         private Tenancy $tenancy,
+        private AiCreditService $credits,
     ) {}
 
     /** GET /sites/{site}/reports — site.access middleware applied. */
@@ -53,7 +56,41 @@ class ReportController extends Controller
             ], 402);
         }
 
-        $report = $this->builder->generate($site, $data['type']);
+        $creditModel = $this->credits->walletEnabled($org);
+        $action = 'advanced_multi_source_ai_report';
+        $includeAi = ! $creditModel || $this->credits->entitledForAction($org, $action);
+
+        if ($creditModel && $includeAi && ! $this->credits->canCharge($org, $action)) {
+            return response()->json([
+                'message' => 'This report needs more Insight Credits. Buy a credit pack or upgrade your plan.',
+                'code'    => 'insufficient_credits',
+                'action'  => $action,
+                'cost'    => $this->credits->cost($action),
+                'available' => $this->credits->walletSummary($org)['total_usable'],
+            ], 402);
+        }
+
+        $report = $this->builder->generate($site, $data['type'], $includeAi);
+
+        if ($creditModel && $this->builder->aiSummaryGenerated()) {
+            try {
+                $operationId = $request->header('Idempotency-Key')
+                    ?? $request->header('X-Insightistic-Operation-Id')
+                    ?? ('report:' . $report->id);
+                $this->credits->charge($org, $action, $operationId, false);
+            } catch (InsufficientCreditsException $e) {
+                $this->builder->discard($report);
+
+                return response()->json([
+                    'message' => 'This report needs more Insight Credits. Buy a credit pack or upgrade your plan.',
+                    'code'    => 'insufficient_credits',
+                    'action'  => $action,
+                    'cost'    => $this->credits->cost($action),
+                    'available' => $e->available,
+                ], 402);
+            }
+        }
+
         $this->usage->recordReport($org);
 
         return response()->json([

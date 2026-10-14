@@ -8,6 +8,7 @@ use App\Models\Site;
 use App\Models\SiteUserAccess;
 use App\Models\User;
 use App\Support\Tenancy;
+use App\Services\UsageService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
@@ -43,7 +44,7 @@ class TeamController extends Controller
         return response()->json(['members' => $members]);
     }
 
-    public function invite(Request $request)
+    public function invite(Request $request, UsageService $usage)
     {
         $org   = $this->tenancy->organization();
         $actor = $request->user();
@@ -71,7 +72,10 @@ class TeamController extends Controller
         }
 
         // Enforce plan user limit.
-        $limit = $org->plan?->user_limit ?? 1;
+        $limit = $usage->limit($org, 'team_seats');
+        if ($limit <= 0) {
+            $limit = 1;
+        }
         if ($org->users()->count() >= $limit) {
             return response()->json(['message' => "User limit reached for your plan ({$limit}).", 'code' => 'user_limit_reached'], 402);
         }

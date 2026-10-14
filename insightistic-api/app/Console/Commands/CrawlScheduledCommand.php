@@ -5,6 +5,7 @@ namespace App\Console\Commands;
 use App\Jobs\CrawlSiteJob;
 use App\Models\CrawlRun;
 use App\Models\Site;
+use App\Services\UsageService;
 use Illuminate\Console\Command;
 
 /**
@@ -61,15 +62,15 @@ class CrawlScheduledCommand extends Command
                         continue;
                     }
 
-                    $plan = $org->plan;
-                    $limit = (int) ($plan?->limit('crawl_pages_monthly') ?? 0);
+                    $usage = app(UsageService::class);
+                    $limit = $usage->limit($org, 'http_crawl_pages_monthly');
 
                     if ($limit <= 0) {
                         $skipped++;
                         continue;
                     }
 
-                    $frequency = max(1, (int) ($plan->limit('crawl_frequency_days') ?: self::DEFAULT_FREQUENCY_DAYS));
+                    $frequency = max(1, (int) ($usage->limit($org, 'crawl_frequency_days') ?: self::DEFAULT_FREQUENCY_DAYS));
 
                     if ($this->hasRunInFlight($site->id) || ! $this->isDue($site->id, $frequency)) {
                         $skipped++;

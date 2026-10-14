@@ -5,7 +5,10 @@ namespace App\Console\Commands;
 use App\Models\ClientReport;
 use App\Models\ReportSchedule;
 use App\Mail\ClientReportMail;
+use App\Domain\Billing\AiCreditService;
+use App\Domain\Billing\Exceptions\InsufficientCreditsException;
 use App\Services\ReportBuilder;
+use App\Services\UsageService;
 use Illuminate\Console\Command;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Mail;
@@ -30,7 +33,7 @@ class DeliverScheduledReports extends Command
 
     protected $description = 'Send scheduled weekly/monthly reports that are due right now.';
 
-    public function handle(ReportBuilder $builder): int
+    public function handle(ReportBuilder $builder, UsageService $usage, AiCreditService $credits): int
     {
         $query = ReportSchedule::where('is_active', true)->with('site');
         if ($id = $this->option('schedule')) {
@@ -55,8 +58,33 @@ class DeliverScheduledReports extends Command
                 continue;
             }
 
-            $report = $builder->generate($schedule->site, $schedule->frequency);
             $org = $schedule->site->organization;
+            if (! $usage->canGenerateReport($org)) {
+                $this->warn("Schedule {$schedule->id}: monthly report allowance exhausted, skipping.");
+                continue;
+            }
+
+            $creditModel = $credits->walletEnabled($org);
+            $action = 'advanced_multi_source_ai_report';
+            $includeAi = ! $creditModel || $credits->entitledForAction($org, $action);
+            if ($creditModel && $includeAi && ! $credits->canCharge($org, $action)) {
+                $this->warn("Schedule {$schedule->id}: insufficient Insight Credits, skipping.");
+                continue;
+            }
+
+            $report = $builder->generate($schedule->site, $schedule->frequency, $includeAi);
+            if ($creditModel && $builder->aiSummaryGenerated()) {
+                try {
+                    $operationId = 'scheduled_report:' . $schedule->id . ':' . $schedule->frequency . ':' . now()->format('Y-m');
+                    $credits->charge($org, $action, $operationId, false);
+                } catch (InsufficientCreditsException) {
+                    $builder->discard($report);
+                    $this->warn("Schedule {$schedule->id}: wallet changed during generation, skipping.");
+                    continue;
+                }
+            }
+            $usage->recordReport($org);
+
             $brand = [
                 'name'            => $org->name,
                 'email_from_name' => $org->brandSettings->email_from_name ?? null,

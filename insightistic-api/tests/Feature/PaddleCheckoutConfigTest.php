@@ -157,3 +157,50 @@ it('sells lifetime and credit-pack kinds from hidden (is_active=false) plans', f
         ->assertStatus(422)
         ->assertJson(['code' => 'plan_not_available']);
 });
+
+it('selects the requested credit pack instead of silently taking the first price', function () {
+    config()->set('feature-flags.paddle', true);
+    config()->set('billing.paddle.client_token', 'tok_credit_pack');
+
+    [, $org, $token] = paddleConfigOwner('paddle-credit-pack@example.com');
+    $plan = Plan::create([
+        'name' => 'Insight Credits',
+        'slug' => 'insight_credits',
+        'is_active' => false,
+    ]);
+
+    foreach ([
+        ['slug' => 'credits_5000', 'amount' => 1500, 'credits' => 5000],
+        ['slug' => 'credits_20000', 'amount' => 4900, 'credits' => 20000],
+    ] as $pack) {
+        PlanPrice::create([
+            'plan_id' => $plan->id,
+            'provider' => 'paddle',
+            'kind' => 'credit_pack',
+            'provider_price_id' => 'pri_' . $pack['slug'],
+            'currency' => 'USD',
+            'amount_minor' => $pack['amount'],
+            'is_active' => true,
+            'metadata_json' => ['credits' => $pack['credits']],
+        ]);
+    }
+
+    $this->withToken($token)
+        ->postJson('/api/billing/checkout-config', [
+            'plan' => $plan->slug,
+            'kind' => 'credit_pack',
+            'credit_pack' => 'credits_20000',
+        ])
+        ->assertOk()
+        ->assertJson([
+            'price_id' => 'pri_credits_20000',
+            'amount_minor' => 4900,
+            'custom_data' => [
+                'organization_id' => $org->id,
+                'purchase_kind' => 'credit_pack',
+                'plan_slug' => 'insight_credits',
+                'credit_pack' => 'credits_20000',
+                'credit_amount' => 20000,
+            ],
+        ]);
+});

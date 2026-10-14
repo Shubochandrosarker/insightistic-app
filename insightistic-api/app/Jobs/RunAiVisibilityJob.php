@@ -6,6 +6,7 @@ use App\Models\AiVisibilityPrompt;
 use App\Models\AiVisibilityRun;
 use App\Models\Site;
 use App\Services\AiVisibility\PromptRunner;
+use App\Services\UsageService;
 use Carbon\Carbon;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
@@ -61,9 +62,9 @@ class RunAiVisibilityJob implements ShouldQueue
             return;
         }
 
-        $limit = (int) ($org->plan?->limit('ai_prompt_runs_monthly') ?? 0);
+        $limit = app(UsageService::class)->limit($org, 'ai_prompt_runs_monthly');
         $used = $this->runsThisMonth($site->id);
-        $credits = app(\App\Domain\Billing\CreditLedger::class);
+        $credits = app(\App\Domain\Billing\CreditWallet::class);
 
         if ($limit <= 0) {
             Log::info('AI visibility skipped: plan has no ai_prompt_runs_monthly allowance.', [
@@ -75,7 +76,7 @@ class RunAiVisibilityJob implements ShouldQueue
 
         $overQuota = $used >= $limit;
 
-        if ($overQuota && $credits->balance($org) < 1) {
+        if ($overQuota && $credits->summary($org)['total_usable'] < 1) {
             Log::info('AI visibility skipped: monthly prompt-run quota reached and no Insight Credits left.', [
                 'site_id' => $site->id,
                 'limit'   => $limit,
@@ -91,7 +92,7 @@ class RunAiVisibilityJob implements ShouldQueue
                 // "credits power AI visibility runs"). One credit per run;
                 // stop when the balance runs dry. A failed run still costs
                 // the credit, matching the quota rule that failures count.
-                if ($credits->balance($org) < 1) {
+                if ($credits->summary($org)['total_usable'] < 1) {
                     Log::info('AI visibility stopped mid-batch: out of credits.', [
                         'site_id'   => $site->id,
                         'prompt_id' => $prompt->id,
@@ -101,10 +102,7 @@ class RunAiVisibilityJob implements ShouldQueue
                 }
 
                 $run = $runner->run($prompt, $site);
-                $credits->consume(
-                    $org, 1, 'ai_prompt_run_over_quota',
-                    'ai_visibility_run', (string) $run->id,
-                );
+                $credits->consume($org, 1, 'ai_prompt_run_over_quota', 'ai_visibility_run:' . $run->id);
 
                 continue;
             }

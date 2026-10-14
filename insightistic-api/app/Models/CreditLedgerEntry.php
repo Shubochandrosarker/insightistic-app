@@ -14,7 +14,8 @@ class CreditLedgerEntry extends Model
 
     protected $fillable = [
         'organization_id', 'amount_signed', 'reason',
-        'source_type', 'source_reference', 'balance_after',
+        'source_type', 'source_reference', 'balance_after', 'bucket',
+        'period_key', 'expires_at', 'metadata_json',
     ];
 
     protected function casts(): array
@@ -22,6 +23,8 @@ class CreditLedgerEntry extends Model
         return [
             'amount_signed' => 'integer',
             'balance_after' => 'integer',
+            'expires_at' => 'datetime',
+            'metadata_json' => 'array',
         ];
     }
 }

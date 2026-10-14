@@ -248,7 +248,7 @@ class RankController extends Controller
         ));
 
         $org = $site->organization;
-        $limit = (int) ($org->plan?->limit('tracked_keywords') ?? 0);
+        $limit = app(\App\Services\UsageService::class)->limit($org, 'tracked_keywords');
         $used = RankKeyword::where('site_id', $site->id)->where('active', true)->count();
 
         if ($used + count($fresh) > $limit) {

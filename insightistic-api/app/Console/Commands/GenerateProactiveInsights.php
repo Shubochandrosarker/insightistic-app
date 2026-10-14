@@ -2,6 +2,8 @@
 
 namespace App\Console\Commands;
 
+use App\Domain\Billing\AiCreditService;
+use App\Domain\Billing\Exceptions\InsufficientCreditsException;
 use App\Models\AiInsight;
 use App\Models\Organization;
 use App\Models\Site;
@@ -53,6 +55,7 @@ class GenerateProactiveInsights extends Command
         InsightGenerator $generator,
         UsageService $usage,
         Tenancy $tenancy,
+        AiCreditService $credits,
     ): int {
         $types = $this->option('type') ?: self::PROACTIVE_TYPES;
 
@@ -73,7 +76,7 @@ class GenerateProactiveInsights extends Command
             ->whereNull('archived_at')
             ->where('connection_status', 'connected')
             ->with('organization')
-            ->chunkById(50, function ($sites) use ($contexts, $generator, $usage, $tenancy, $types, $dry, &$generated, &$skipped) {
+            ->chunkById(50, function ($sites) use ($contexts, $generator, $usage, $tenancy, $credits, $types, $dry, &$generated, &$skipped) {
                 foreach ($sites as $site) {
                     $org = $site->organization;
 
@@ -85,7 +88,21 @@ class GenerateProactiveInsights extends Command
                     $tenancy->setOrganization($org);
 
                     foreach ($types as $type) {
-                        if (! $usage->canGenerateInsight($org)) {
+                        $creditModel = $credits->walletEnabled($org);
+                        $action = $credits->actionForInsightType($type);
+                        $eligibleForStandard = $credits->standardEligible($org, $action);
+
+                        if ($creditModel && ! $credits->entitledForAction($org, $action)) {
+                            $skipped++;
+                            continue;
+                        }
+
+                        if ($creditModel && ! $credits->canCharge($org, $action, $eligibleForStandard)) {
+                            $this->line("org {$org->id}: Insight Credits exhausted, skipping remaining types");
+                            break;
+                        }
+
+                        if (! $creditModel && ! $usage->canGenerateInsight($org)) {
                             $this->line("org {$org->id}: AI insight limit reached, skipping remaining types");
                             break;
                         }
@@ -108,8 +125,19 @@ class GenerateProactiveInsights extends Command
                             continue;
                         }
 
-                        if ($generator->generateContextual($site, $type, $context)) {
-                            $usage->recordInsight($org);
+                        $insight = $generator->generateContextual($site, $type, $context);
+                        if ($insight) {
+                            if ($creditModel) {
+                                try {
+                                    $credits->charge($org, $action, 'proactive_insight:' . $site->id . ':' . $type . ':' . now()->format('Y-m'), $eligibleForStandard);
+                                } catch (InsufficientCreditsException) {
+                                    $insight->delete();
+                                    $this->line("org {$org->id}: concurrent credit spend prevented {$type}");
+                                    continue;
+                                }
+                            } else {
+                                $usage->recordInsight($org);
+                            }
                             $generated++;
                         }
                     }

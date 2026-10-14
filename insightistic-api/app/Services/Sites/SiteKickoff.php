@@ -8,6 +8,7 @@ use App\Jobs\ProbeUptimeJob;
 use App\Jobs\RunPageSpeedTest;
 use App\Models\Site;
 use App\Models\UptimeMonitor;
+use App\Services\UsageService;
 
 /**
  * What happens the moment a site exists (2026-09-23 milestone): the user
@@ -21,6 +22,8 @@ use App\Models\UptimeMonitor;
  */
 class SiteKickoff
 {
+    public function __construct(private UsageService $usage) {}
+
     /** @return string[] the kickoff steps that were queued/created */
     public function start(Site $site): array
     {
@@ -29,7 +32,10 @@ class SiteKickoff
         $started[] = 'platform_detect';
         DetectPlatformJob::dispatch($site->id);
 
-        $maxPages = (int) ($site->organization?->plan?->limit('crawl_pages_per_run') ?: 50);
+        $maxPages = (int) ($site->organization
+            ? $this->usage->limit($site->organization, 'crawl_pages_per_run')
+            : 50);
+        $maxPages = $maxPages > 0 ? $maxPages : 50;
         $started[] = 'crawler';
         CrawlSiteJob::dispatch($site->id, $maxPages, 'initial');
 

@@ -17,7 +17,7 @@ export function KpiCard({
   const up = delta != null && delta > 0;
   const down = delta != null && delta < 0;
   return (
-    <div className="rounded-2xl border border-line bg-card p-4 shadow-card">
+    <div className="ins-card ins-kpi-card rounded-2xl border border-line bg-card p-4 shadow-card">
       <div className="flex items-start justify-between">
         <span className="text-xs font-medium text-muted">{label}</span>
         {delta !== undefined && delta !== null && (

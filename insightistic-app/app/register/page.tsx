@@ -7,10 +7,14 @@ import { AuthShell } from "@/components/auth/AuthShell";
 import { OAuthButtons } from "@/components/auth/OAuthButtons";
 
 const PLAN_LABELS: Record<string, string> = {
+  free: "Free Connected",
   starter: "Starter",
   growth: "Growth",
   agency: "Agency",
   agency_pro: "Agency Pro",
+  angel_solo: "Angel Solo lifetime",
+  angel_studio: "Angel Studio lifetime",
+  angel_agency: "Angel Agency lifetime",
   founder_tier_1: "Angel Solo lifetime",
   founder_tier_2: "Angel Studio lifetime",
   founder_tier_3: "Angel Agency lifetime",
@@ -21,6 +25,7 @@ export default function Register() {
   const router = useRouter();
   const [f, setF] = useState({ name: "", email: "", password: "", organization_name: "" });
   const [plan, setPlan] = useState<string | null>(null);
+  const [interval, setInterval] = useState<"monthly" | "yearly">("monthly");
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const up = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement>) =>
@@ -34,6 +39,8 @@ export default function Register() {
   useEffect(() => {
     const p = new URLSearchParams(window.location.search).get("plan");
     if (p && PLAN_LABELS[p]) setPlan(p);
+    const selectedInterval = new URLSearchParams(window.location.search).get("interval");
+    if (selectedInterval === "yearly") setInterval("yearly");
   }, []);
 
   function validate(): string | null {
@@ -54,7 +61,11 @@ export default function Register() {
     try {
       await register({ ...f, name: f.name.trim(), email: f.email.trim() });
       // Land on Licenses first: the one-time key card is the first onboarding step.
-      router.push(plan ? `/dashboard/billing?plan=${plan}` : "/dashboard/licenses");
+      if (!plan || plan === "free") {
+        router.push("/dashboard/licenses");
+      } else {
+        router.push(`/dashboard/billing?plan=${plan}&interval=${interval}`);
+      }
     } catch (e: any) {
       setErr(e.message || "Sign up failed");
       setBusy(false);

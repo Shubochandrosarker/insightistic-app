@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Site;
 use App\Models\WcOrder;
 use App\Services\Sites\SiteKickoff;
+use App\Services\UsageService;
 use App\Support\DomainNormalizer;
 use App\Support\Tenancy;
 use Illuminate\Http\Request;
@@ -23,13 +24,15 @@ class SiteController extends Controller
         ]);
     }
 
-    public function store(Request $request, Tenancy $tenancy)
+    public function store(Request $request, Tenancy $tenancy, UsageService $usage)
     {
         $org = $tenancy->organization();
-        $plan = $org->plan;
 
         // Enforce plan site limit (spec Mistake #3 / plan limits).
-        $limit = $plan?->site_limit ?? 1;
+        $limit = $usage->limit($org, 'connected_websites');
+        if ($limit <= 0) {
+            $limit = 1;
+        }
         if (Site::query()->count() >= $limit) {
             return response()->json([
                 'message' => "Site limit reached for your plan ({$limit}). Upgrade to add more.",

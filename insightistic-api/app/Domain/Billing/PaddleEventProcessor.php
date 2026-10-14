@@ -53,6 +53,11 @@ final class PaddleEventProcessor
                 $this->transactions->project($data, 'failed');
                 break;
 
+            case 'adjustment.created':
+            case 'adjustment.updated':
+                $this->transactions->processAdjustment($data);
+                break;
+
             case 'customer.created':
             case 'customer.updated':
                 // Customer profile lives at the provider; nothing to project.

@@ -17,13 +17,19 @@ const apiMocks = vi.hoisted(() => ({
   apiPost: vi.fn(),
 }));
 
+const paddleMocks = vi.hoisted(() => ({
+  initializePaddle: vi.fn(),
+}));
+
 vi.mock("@/lib/api", () => apiMocks);
+vi.mock("@paddle/paddle-js", () => paddleMocks);
 
 vi.mock("@/lib/dashboard", () => ({
   useDashboard: () => ({ sites: [{ id: 1, name: "Test Shop" }] }),
 }));
 
 import BillingPage from "@/app/dashboard/billing/page";
+import { resetPaddleForTests } from "@/lib/paddle";
 
 const freeOrg = {
   organization: { status: "trialing" },
@@ -59,21 +65,15 @@ const livePlans = {
 
 function paddleStub() {
   return {
+    Checkout: { open: vi.fn(), close: vi.fn() },
     Environment: { set: vi.fn() },
-    Initialize: vi.fn(),
-    Checkout: { open: vi.fn(), on: vi.fn(), isCompleted: vi.fn(() => true) },
+    Initialized: true,
   };
-}
-
-/** The CDN never loads in jsdom — fire the load event the loader listens for. */
-function resolvePaddleLoad() {
-  document.getElementById("paddle-js")?.dispatchEvent(new Event("load"));
 }
 
 beforeEach(() => {
   vi.clearAllMocks();
-  document.getElementById("paddle-js")?.remove();
-  delete (window as any).Paddle;
+  resetPaddleForTests();
   apiMocks.apiGet.mockImplementation((path: string) =>
     path === "/billing/subscription"
       ? Promise.resolve(freeOrg)
@@ -129,7 +129,7 @@ describe("Billing page checkout", () => {
 
   it("opens a Paddle overlay with the issued price/token and polls until the webhook projects it", async () => {
     const P = paddleStub();
-    (window as any).Paddle = P;
+    paddleMocks.initializePaddle.mockResolvedValue(P);
 
     apiMocks.apiPost.mockImplementation((path: string) =>
       path === "/billing/checkout-config" ? Promise.resolve(checkoutConfig) : Promise.resolve({}),
@@ -154,14 +154,11 @@ describe("Billing page checkout", () => {
     render(<BillingPage />);
     await userEvent.click(await screen.findByRole("button", { name: "Continue to checkout" }));
 
-    // Loader injects the CDN script; jsdom resolves it by event.
-    await waitFor(() => expect(document.getElementById("paddle-js")).toBeTruthy());
-    resolvePaddleLoad();
-
-    // Initialize takes only the token — passing `environment` throws
-    // "[PADDLE] Unknown option parameter 'environment'" in Paddle.js v2.
-    await waitFor(() => expect(P.Initialize).toHaveBeenCalledWith({ token: "test_client_token" }));
-    expect(P.Environment.set).not.toHaveBeenCalled();
+    await waitFor(() => expect(paddleMocks.initializePaddle).toHaveBeenCalledWith({
+      token: "test_client_token",
+      environment: "production",
+      eventCallback: expect.any(Function),
+    }));
 
     await waitFor(() => expect(P.Checkout.open).toHaveBeenCalled());
     expect(P.Checkout.open).toHaveBeenCalledWith({
@@ -170,14 +167,14 @@ describe("Billing page checkout", () => {
       customData: { organization_id: 7, plan_slug: "growth" },
       settings: {
         displayMode: "overlay",
+        variant: "one-page",
         successUrl: `${window.location.origin}/dashboard/billing?checkout=success`,
       },
     });
 
-    // The buyer pays inside the overlay: checkout.completed fires.
-    const completed = P.Checkout.on.mock.calls.find(([e]) => e === "checkout.completed")?.[1] as () => void;
-    expect(completed).toBeTruthy();
-    act(() => { completed(); });
+    // The buyer pays inside the overlay: the SDK event callback fires.
+    const eventCallback = paddleMocks.initializePaddle.mock.calls[0][0].eventCallback;
+    act(() => { eventCallback({ name: "checkout.completed" }); });
 
     expect(await screen.findByText("Finishing your subscription setup…")).toBeInTheDocument();
 
@@ -193,42 +190,65 @@ describe("Billing page checkout", () => {
     expect(screen.getByRole("option", { name: "Agency Pro" })).toBeInTheDocument();
   });
 
-  it("opens the founder lifetime checkout via checkout-config {plan: founder_tier_1, kind: lifetime}", async () => {
+  it("opens the Angel Solo lifetime checkout via checkout-config {plan: angel_solo, kind: lifetime}", async () => {
     const P = paddleStub();
-    (window as any).Paddle = P;
+    paddleMocks.initializePaddle.mockResolvedValue(P);
 
     apiMocks.apiPost.mockImplementation((path: string) =>
       path === "/billing/checkout-config"
         ? Promise.resolve({
             ...checkoutConfig,
-            price_id: "pri_test_founder1",
-            custom_data: { organization_id: 7, purchase_kind: "lifetime", plan_slug: "founder_tier_1" },
+            price_id: "pri_test_angel_solo",
+            custom_data: { organization_id: 7, purchase_kind: "lifetime", plan_slug: "angel_solo" },
           })
         : Promise.resolve({}),
     );
 
     render(<BillingPage />);
     // The tier's display name is Angel Solo (brand-assets handoff); the slug
-    // in the checkout envelope below is what actually pins founder_tier_1.
-    await userEvent.click(await screen.findByRole("button", { name: "Buy Angel Solo — $79" }));
+    // in the checkout envelope below is what actually pins angel_solo.
+    await userEvent.click(await screen.findByRole("button", { name: "Buy Angel Solo — $149" }));
 
     // One-time LTD purchase: same envelope, kind 'lifetime'.
     await waitFor(() =>
-      expect(apiMocks.apiPost).toHaveBeenCalledWith("/billing/checkout-config", { plan: "founder_tier_1", kind: "lifetime" }),
+      expect(apiMocks.apiPost).toHaveBeenCalledWith("/billing/checkout-config", { plan: "angel_solo", kind: "lifetime" }),
     );
-
-    // The loader/init are module-cached (an earlier test in this file already
-    // initialized Paddle with this token), so Initialize is NOT re-run — wait
-    // on the overlay open. The load dispatch only matters when this test runs
-    // in isolation and the CDN script genuinely needs resolving.
-    document.getElementById("paddle-js")?.dispatchEvent(new Event("load"));
 
     await waitFor(() => expect(P.Checkout.open).toHaveBeenCalled());
     expect(P.Checkout.open).toHaveBeenCalledWith(
       expect.objectContaining({
-        items: [{ priceId: "pri_test_founder1", quantity: 1 }],
-        customData: { organization_id: 7, purchase_kind: "lifetime", plan_slug: "founder_tier_1" },
+      items: [{ priceId: "pri_test_angel_solo", quantity: 1 }],
+      customData: { organization_id: 7, purchase_kind: "lifetime", plan_slug: "angel_solo" },
       }),
     );
+  });
+
+  it("sends the selected credit pack to the server before opening the popup", async () => {
+    const P = paddleStub();
+    paddleMocks.initializePaddle.mockResolvedValue(P);
+
+    apiMocks.apiPost.mockImplementation((path: string) =>
+      path === "/billing/checkout-config"
+        ? Promise.resolve({
+            ...checkoutConfig,
+            price_id: "pri_test_credits_20000",
+            custom_data: { organization_id: 7, purchase_kind: "credit_pack", plan_slug: "insight_credits", credit_pack: "credits_20000" },
+          })
+        : Promise.resolve({}),
+    );
+
+    render(<BillingPage />);
+    await userEvent.click(await screen.findByRole("button", { name: "Buy 20,000 credits — $49" }));
+
+    await waitFor(() =>
+      expect(apiMocks.apiPost).toHaveBeenCalledWith("/billing/checkout-config", {
+        plan: "insight_credits",
+        kind: "credit_pack",
+        credit_pack: "credits_20000",
+      }),
+    );
+    await waitFor(() => expect(P.Checkout.open).toHaveBeenCalledWith(expect.objectContaining({
+      items: [{ priceId: "pri_test_credits_20000", quantity: 1 }],
+    })));
   });
 });

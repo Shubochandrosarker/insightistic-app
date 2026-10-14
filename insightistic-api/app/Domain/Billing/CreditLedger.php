@@ -25,15 +25,28 @@ final class CreditLedger
     {
         return (int) CreditLedgerEntry::withoutGlobalScope('organization')
             ->where('organization_id', $organization->id)
+            ->where(function ($query) {
+                $query->where('bucket', 'purchased')->orWhereNull('bucket');
+            })
             ->sum('amount_signed');
     }
 
     /** Add credits. A duplicate (source_type, source_reference) returns the original entry, no double credit. */
-    public function grant(Organization $organization, int $amount, string $reason, string $sourceType, string $sourceReference): CreditLedgerEntry
+    public function grant(
+        Organization $organization,
+        int $amount,
+        string $reason,
+        string $sourceType,
+        string $sourceReference,
+        string $bucket = 'purchased',
+        ?string $periodKey = null,
+        $expiresAt = null,
+        ?array $metadata = null,
+    ): CreditLedgerEntry
     {
         $this->assertPositive($amount);
 
-        return DB::transaction(function () use ($organization, $amount, $reason, $sourceType, $sourceReference) {
+        return DB::transaction(function () use ($organization, $amount, $reason, $sourceType, $sourceReference, $bucket, $periodKey, $expiresAt, $metadata) {
             $balance = $this->lockedBalance($organization);
 
             return CreditLedgerEntry::withoutGlobalScope('organization')->firstOrCreate(
@@ -46,6 +59,10 @@ final class CreditLedger
                     'amount_signed' => $amount,
                     'reason'        => $reason,
                     'balance_after' => $balance + $amount,
+                    'bucket'        => $bucket,
+                    'period_key'    => $periodKey,
+                    'expires_at'    => $expiresAt,
+                    'metadata_json' => $metadata,
                 ],
             );
         });
@@ -79,6 +96,59 @@ final class CreditLedger
                 'source_type'      => $sourceType,
                 'source_reference' => $sourceReference,
                 'balance_after'    => $balance - $amount,
+            ]);
+        });
+    }
+
+    /** Balance for one non-expiring or period-scoped bucket. */
+    public function bucketBalance(Organization $organization, string $bucket, ?string $periodKey = null): int
+    {
+        return (int) CreditLedgerEntry::withoutGlobalScope('organization')
+            ->where('organization_id', $organization->id)
+            ->where('bucket', $bucket)
+            ->when($periodKey !== null, fn ($q) => $q->where('period_key', $periodKey))
+            ->when($periodKey === null, fn ($q) => $q->whereNull('period_key'))
+            ->where(fn ($q) => $q->whereNull('expires_at')->orWhere('expires_at', '>', now()))
+            ->sum('amount_signed');
+    }
+
+    /** Idempotent deduction restricted to a single credit bucket. */
+    public function consumeBucket(
+        Organization $organization,
+        int $amount,
+        string $reason,
+        string $sourceType,
+        string $sourceReference,
+        string $bucket,
+        ?string $periodKey = null,
+    ): CreditLedgerEntry {
+        $this->assertPositive($amount);
+
+        return DB::transaction(function () use ($organization, $amount, $reason, $sourceType, $sourceReference, $bucket, $periodKey) {
+            Organization::whereKey($organization->id)->lockForUpdate()->first();
+            $existing = CreditLedgerEntry::withoutGlobalScope('organization')
+                ->where('organization_id', $organization->id)
+                ->where('source_type', $sourceType)
+                ->where('source_reference', $sourceReference)
+                ->first();
+            if ($existing) {
+                return $existing;
+            }
+
+            $balance = $this->bucketBalance($organization, $bucket, $periodKey);
+            if ($balance < $amount) {
+                throw new InsufficientCreditsException($amount, $balance);
+            }
+
+            return CreditLedgerEntry::withoutGlobalScope('organization')->create([
+                'organization_id' => $organization->id,
+                'amount_signed' => -$amount,
+                'reason' => $reason,
+                'source_type' => $sourceType,
+                'source_reference' => $sourceReference,
+                'balance_after' => $balance - $amount,
+                'bucket' => $bucket,
+                'period_key' => $periodKey,
             ]);
         });
     }

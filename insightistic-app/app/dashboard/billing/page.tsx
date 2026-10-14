@@ -29,39 +29,39 @@ type Phase = "idle" | "processing";
 const POLL_TRIES = 15;
 const POLL_INTERVAL_MS = 2000;
 
-// Founder LTD (roadmap doc 24): one-time Paddle prices mapped to a permanent
+// Founding Angel LTD: one-time Paddle prices mapped to a permanent
 // entitlement grant — the webhook fulfills it, the checkout never creates a
-// subscription. Prices mirror the seeded Paddle catalog ($79/$149/$249).
-const FOUNDER_TIERS = [
+// subscription. The campaign cap is read from the backend catalog response.
+const FOUNDER_TIER_FALLBACK = [
   {
-    slug: "founder_tier_1",
+    slug: "angel_solo",
     name: "Angel Solo",
-    price: 79,
-    limits: "3 sites · 10k crawl pages/mo · 150 keywords · 10 AI prompts/mo · basic reports",
-  },
-  {
-    slug: "founder_tier_2",
-    name: "Angel Studio",
     price: 149,
-    limits: "10 sites · 40k crawl pages/mo · 500 keywords · 40 AI prompts/mo · scheduled reports",
+    limits: "3 sites · 10k crawl pages/mo · 15 browser minutes · 150 keywords · 3,000 monthly credits",
   },
   {
-    slug: "founder_tier_3",
+    slug: "angel_studio",
+    name: "Angel Studio",
+    price: 299,
+    limits: "7 sites · 40k crawl pages/mo · 60 browser minutes · 500 keywords · 8,000 monthly credits",
+  },
+  {
+    slug: "angel_agency",
     name: "Angel Agency",
-    price: 249,
-    limits: "30 sites · 100k crawl pages/mo · 1,500 keywords · 100 AI prompts/mo · white-label reports · 5 team members",
+    price: 699,
+    limits: "15 sites · 100k crawl pages/mo · 180 browser minutes · 1,500 keywords · 20,000 monthly credits",
   },
 ];
 
-const FOUNDER_TIER_SLUGS = new Set(FOUNDER_TIERS.map((tier) => tier.slug));
+const FOUNDER_TIER_SLUGS = new Set(FOUNDER_TIER_FALLBACK.map((tier) => tier.slug));
 
 // Insight Credit packs: one-time purchases granted to the credit ledger by
 // the webhook (credits arrive in price metadata). Core syncs never consume
 // credits — see /terms for the fine print.
-const CREDIT_PACKS = [
-  { credits: 5000, price: 15 },
-  { credits: 20000, price: 49 },
-  { credits: 50000, price: 99 },
+const CREDIT_PACK_FALLBACK = [
+    { slug: "credits_5000", credits: 5000, price: 15 },
+    { slug: "credits_20000", credits: 20000, price: 49 },
+    { slug: "credits_50000", credits: 50000, price: 99 },
 ];
 
 /** The lifetime grant rides on the subscription payload (or alongside it). */
@@ -72,8 +72,9 @@ function lifetimeGrantOf(d: any): { active?: boolean; plan_slug?: string } | nul
 
 /** Tier number from a grant's plan slug ("founder_tier_2" -> "Tier 2"). */
 function grantTierLabel(planSlug: string): string {
-  const m = planSlug.match(/founder_tier_(\d+)/);
-  return m ? `Tier ${m[1]}` : planSlug.replace(/_/g, " ");
+  const legacy = planSlug.match(/^founder_tier_(\d+)$/);
+  if (legacy) return `Founder Tier ${legacy[1]}`;
+  return planSlug.replace(/^angel_/, "Angel ").replace(/_/g, " ");
 }
 
 function UsageBar({ label, used, limit }: { label: string; used: number; limit: number | null }) {
@@ -127,6 +128,8 @@ export default function BillingPage() {
   // Preselect the plan passed from the marketing-site CTA (?plan=).
   useEffect(() => {
     const p = new URLSearchParams(window.location.search).get("plan");
+    const selectedInterval = new URLSearchParams(window.location.search).get("interval");
+    if (selectedInterval === "yearly" || selectedInterval === "monthly") setIntervalSel(selectedInterval);
     if (!p) return;
 
     if (PLANS.some((x) => x.slug === p)) {
@@ -148,7 +151,7 @@ export default function BillingPage() {
     const live = plansData?.plans;
     if (!Array.isArray(live) || live.length === 0) return PLANS;
     return live
-      .filter((p: any) => p?.slug)
+      .filter((p: any) => p?.slug && p?.is_purchasable !== false)
       .map((p: any) => {
         const name = String(p.name ?? p.slug);
         return {
@@ -229,10 +232,11 @@ export default function BillingPage() {
    * projecting a subscription — so the completion poll watches for the
    * lifetime grant appearing rather than billing_provider flipping.
    */
-  async function oneTimeCheckout(planSlug: string, kind: "lifetime" | "credit_pack") {
+  async function oneTimeCheckout(planSlug: string, kind: "lifetime" | "credit_pack", creditPack?: string) {
     setBusy(true); setMsg(null);
     try {
-      const cfg: any = await apiPost("/billing/checkout-config", { plan: planSlug, kind });
+      const payload = { plan: planSlug, kind, ...(creditPack ? { credit_pack: creditPack } : {}) };
+      const cfg: any = await apiPost("/billing/checkout-config", payload);
       const environment: PaddleEnvironment = cfg?.environment === "sandbox" ? "sandbox" : "production";
       await initPaddle(cfg.client_token, environment);
       paidRef.current = false;
@@ -273,7 +277,7 @@ export default function BillingPage() {
       const d = await apiGet("/billing/subscription").catch(() => null);
       const grant = lifetimeGrantOf(d);
       if (grant) {
-        setMsg(`Lifetime ${grantTierLabel(grant.plan_slug!)} is active — welcome, founder.`);
+        setMsg(`Lifetime ${grantTierLabel(grant.plan_slug!)} is active — welcome to the Founding Angels.`);
         setPhase("idle");
         setBusy(false);
         reload();
@@ -321,6 +325,26 @@ export default function BillingPage() {
         : null;
   const hasSubscription = !!data.subscription?.stripe_subscription_id || !!provider;
   const lifetimeGrant = lifetimeGrantOf(data);
+  const campaign = plansData?.ltd?.campaign;
+  const soldOut = campaign?.sold_out === true;
+  const founderTiers = Array.isArray(plansData?.ltd?.plans) && plansData.ltd.plans.length
+    ? plansData.ltd.plans.map((tier: any) => {
+        const limits = tier.limits ?? {};
+        return {
+          slug: String(tier.slug),
+          name: String(tier.name),
+          price: Number(tier.price),
+          limits: `${Number(tier.sites).toLocaleString()} sites · ${Number(limits.crawl_pages_monthly ?? 0).toLocaleString()} crawl pages/mo · ${Number(limits.browser_rendering_minutes_monthly ?? 0)} browser minutes · ${Number(limits.tracked_keywords ?? 0).toLocaleString()} keywords · ${Number(tier.monthly_ai_credits).toLocaleString()} monthly credits`,
+        };
+      })
+    : FOUNDER_TIER_FALLBACK;
+  const creditPacks = Array.isArray(plansData?.credit_packs) && plansData.credit_packs.length
+    ? plansData.credit_packs.map((pack: any) => ({
+        slug: String(pack.slug),
+        credits: Number(pack.credits),
+        price: Number(pack.price_minor) / 100,
+      }))
+    : CREDIT_PACK_FALLBACK;
 
   return (
     <div>
@@ -367,6 +391,15 @@ export default function BillingPage() {
         </Card>
       </div>
 
+      <Card className="mt-5" title="Insight Credits" subtitle="Monthly included credits refresh automatically; purchased credits do not expire.">
+        <div className="grid gap-4 sm:grid-cols-3">
+          <div><div className="text-xs text-muted">Monthly included remaining</div><div className="mt-1 text-2xl font-bold text-fg">{num(data.credits?.monthly_included?.remaining ?? 0)}</div></div>
+          <div><div className="text-xs text-muted">Purchased remaining</div><div className="mt-1 text-2xl font-bold text-fg">{num(data.credits?.purchased?.remaining ?? 0)}</div></div>
+          <div><div className="text-xs text-muted">Total usable</div><div className="mt-1 text-2xl font-bold text-fg">{num(data.credits?.total_usable ?? 0)}</div></div>
+        </div>
+        <p className="mt-3 text-xs text-muted">Next monthly reset: {data.credits?.next_reset_at ? new Date(data.credits.next_reset_at).toLocaleDateString() : "—"}. AI actions use included credits before purchased credits.</p>
+      </Card>
+
       <Card id="change-plan" className="mt-5" title="Change plan">
         {msg && <p className="mb-3 text-sm text-warn">{msg}</p>}
         <div className="grid gap-4 sm:grid-cols-2">
@@ -398,24 +431,25 @@ export default function BillingPage() {
         </div>
       </Card>
 
-      <Card id="founder-lifetime" className="mt-5" title="Founder lifetime deals"
-        subtitle="One-time purchase — the tier's features and published monthly allowances for as long as Insightistic operates.">
+      <Card id="founder-lifetime" className="mt-5" title="Founding Angel Plans"
+        subtitle="One payment. Lifetime core access. Only 100 total licenses across all Angel tiers.">
+        {soldOut && <p className="mb-3 rounded-lg border border-line bg-card2 px-3 py-2 text-sm text-muted">Founding Angel Plans — Sold Out. Our first 100 Founding Angel licenses have been claimed. You can still choose a regular subscription or buy Insight Credits.</p>}
         {selectedFounderTier && !lifetimeGrant && (
           <p className="mb-3 rounded-lg border border-brand/30 bg-brand/10 px-3 py-2 text-sm font-medium text-brand-700">
-            {FOUNDER_TIERS.find((tier) => tier.slug === selectedFounderTier)?.name ?? "Lifetime tier"} selected from the lifetime deal page.
+            {founderTiers.find((tier: { slug: string; name: string }) => tier.slug === selectedFounderTier)?.name ?? "Lifetime tier"} selected from the lifetime deal page.
           </p>
         )}
         {lifetimeGrant ? (
           <div>
             <Badge tone="green" dot>Lifetime {grantTierLabel(lifetimeGrant.plan_slug!)} active</Badge>
             <p className="mt-3 text-sm text-muted">
-              Your founder tier is a permanent entitlement — no further purchase needed. Credit packs below still
+              Your Founding Angel tier is a permanent entitlement — no further purchase needed. Credit packs below still
               top up AI usage anytime.
             </p>
           </div>
         ) : (
           <div className="grid gap-4 sm:grid-cols-3">
-            {FOUNDER_TIERS.map((t) => (
+            {founderTiers.map((t: { slug: string; name: string; price: number; limits: string }) => (
               <div
                 key={t.slug}
                 className={`flex flex-col rounded-xl border bg-card2 p-4 ${
@@ -432,7 +466,7 @@ export default function BillingPage() {
                 <Button
                   variant="soft"
                   className="mt-3"
-                  disabled={busy}
+                  disabled={busy || soldOut}
                   onClick={() => oneTimeCheckout(t.slug, "lifetime")}
                 >
                   Buy {t.name} — ${t.price}
@@ -442,15 +476,14 @@ export default function BillingPage() {
           </div>
         )}
         <p className="mt-3 text-xs text-muted">
-          Lifetime = the tier's features for as long as Insightistic operates, with the published monthly
-          allowances. No surprise meters. See <Link href="/terms" className="underline hover:text-fg">the terms</Link> for details.
+          Lifetime access applies to the purchased core plan and feature family while Insightistic operates. Monthly allowances are shared across connected sites and do not roll over. See <Link href="/terms" className="underline hover:text-fg">the terms</Link> for details.
         </p>
       </Card>
 
       <Card id="credit-packs" className="mt-5" title="Insight credit packs"
         subtitle="One-time top-ups — they don't expire while the service operates.">
         <div className="grid gap-4 sm:grid-cols-3">
-          {CREDIT_PACKS.map((p) => (
+          {creditPacks.map((p: { slug: string; credits: number; price: number }) => (
             <div key={p.credits} className="flex flex-col rounded-xl border border-line bg-card2 p-4">
               <div className="flex items-baseline justify-between">
                 <span className="text-sm font-semibold text-fg">{num(p.credits)} credits</span>
@@ -460,7 +493,7 @@ export default function BillingPage() {
                 variant="soft"
                 className="mt-3"
                 disabled={busy}
-                onClick={() => oneTimeCheckout("insight_credits", "credit_pack")}
+                onClick={() => oneTimeCheckout("insight_credits", "credit_pack", p.slug)}
               >
                 Buy {num(p.credits)} credits — ${p.price}
               </Button>

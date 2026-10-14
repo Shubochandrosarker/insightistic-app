@@ -7,6 +7,7 @@ use App\Http\Controllers\Api\Admin\ManagedLicenseController as AdminManagedLicen
 use App\Http\Controllers\Api\Admin\OrganizationController as AdminOrganizationController;
 use App\Http\Controllers\Api\Admin\ObservabilityController as AdminObservabilityController;
 use App\Http\Controllers\Api\Admin\OverviewController as AdminOverviewController;
+use App\Http\Controllers\Api\Admin\BillingController as AdminBillingController;
 use App\Http\Controllers\Api\Admin\PlanController as AdminPlanController;
 use App\Http\Controllers\Api\Admin\ReportController as AdminReportController;
 use App\Http\Controllers\Api\Admin\SiteController as AdminSiteController;
@@ -197,6 +198,7 @@ Route::middleware(['auth:sanctum', 'tenant', 'restrict.impersonation'])->group(f
 
     // Billing (Week 5) — owner manages payment; owner/admin can view status.
     Route::get('billing/subscription', [BillingController::class, 'subscription'])->middleware('role:owner,admin');
+    Route::get('billing/credits', [BillingController::class, 'credits'])->middleware('role:owner,admin');
     Route::post('billing/checkout', [BillingController::class, 'checkout'])->middleware(['role:owner', 'reauth']);
     Route::post('billing/portal', [BillingController::class, 'portal'])->middleware('role:owner');
     Route::post('billing/cancel', [BillingController::class, 'cancel'])->middleware(['role:owner', 'reauth']);
@@ -693,6 +695,9 @@ Route::prefix('admin')->middleware(['auth:sanctum', 'super_admin'])->group(funct
     Route::get('sync-logs', [AdminSyncLogController::class, 'index']);
     Route::get('reports', [AdminReportController::class, 'index']);
     Route::get('usage', [AdminUsageController::class, 'index']);
+    Route::get('billing/ltd-campaign', [AdminBillingController::class, 'campaign']);
+    Route::get('billing/organizations/{organizationId}/credits', [AdminBillingController::class, 'organizationCredits']);
+    Route::post('billing/organizations/{organizationId}/credits/adjust', [AdminBillingController::class, 'adjustCredits'])->middleware('reauth');
     Route::get('audit-logs', [AdminAuditLogController::class, 'index']);
 
     // Impersonation / support mode (spec §13.9). `reason` is required by

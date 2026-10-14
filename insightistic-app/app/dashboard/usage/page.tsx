@@ -49,7 +49,7 @@ function usageLabel(key: string): string {
 /** Tier number from a grant's plan slug ("founder_tier_2" -> 2). */
 function grantTierLabel(planSlug: string): string {
   const m = planSlug.match(/founder_tier_(\d+)/);
-  return m ? `Founder Tier ${m[1]}` : planSlug.replace(/_/g, " ");
+  return m ? "Founder Tier " + m[1] : planSlug.replace(/^angel_/, "Angel ").replace(/_/g, " ");
 }
 
 function UsageBar({ label, used, limit }: { label: string; used: number; limit: number | null }) {
@@ -131,7 +131,7 @@ export default function UsagePage() {
             <span className="text-sm font-semibold text-fg">{grantTierLabel(grant.plan_slug!)} lifetime</span>
           </div>
           <p className="mt-2 text-sm text-muted">
-            Your founder tier is a permanent entitlement — its features and published monthly allowances apply
+            Your Founding Angel entitlement is permanent — its features and published monthly allowances apply
             for as long as Insightistic operates, independent of any subscription.
           </p>
         </Card>

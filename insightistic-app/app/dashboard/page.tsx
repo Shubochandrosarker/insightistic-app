@@ -16,6 +16,7 @@ import { Spinner } from "@/components/ui/Spinner";
 import { ErrorState, StaleBadge, SourceFreshness } from "@/components/dashboard/states";
 import { money0, money, num, timeAgo } from "@/lib/format";
 import { Sparkles, Package, AlertTriangle, Lightbulb } from "lucide-react";
+import { SignalGraphic } from "@/components/dashboard/SignalGraphic";
 
 const PERIOD_LABEL: Record<string, string> = {
   today: "Today", yesterday: "Yesterday", last_7_days: "Last 7 days",
@@ -185,10 +186,18 @@ export default function Overview() {
   return (
     <div>
       <OnboardingChecklist />
-      <PageHeader
-        title="Overview"
-        subtitle={`${site?.name || ""} · ${periodLabel}${site?.last_sync_at ? ` · last synced ${timeAgo(site.last_sync_at)}` : ""}`}
-      />
+      <section className="ins-overview-intro">
+        <div className="grid gap-5 lg:grid-cols-[1fr_360px] lg:items-end">
+          <div>
+            <span className="ins-eyebrow">Workspace signal</span>
+            <PageHeader
+              title="Overview"
+              subtitle={`${site?.name || ""} · ${periodLabel}${site?.last_sync_at ? ` · last synced ${timeAgo(site.last_sync_at)}` : ""}`}
+            />
+          </div>
+          <SignalGraphic />
+        </div>
+      </section>
 
       {/* 1. KPI row — cross-source health at a glance */}
       <div className="grid grid-cols-2 gap-3.5 sm:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-7">

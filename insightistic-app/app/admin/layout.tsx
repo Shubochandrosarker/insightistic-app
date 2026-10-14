@@ -17,6 +17,7 @@ const NAV: NavItem[] = [
   { href: "/admin/users", label: "Users", icon: Users },
   { href: "/admin/sites", label: "Sites", icon: Globe },
   { href: "/admin/plans", label: "Plans", icon: Tag },
+  { href: "/admin/billing", label: "Billing Ops", icon: CreditCard },
   { href: "/admin/subscriptions", label: "Subscriptions", icon: CreditCard },
   { href: "/admin/licenses", label: "Licenses", icon: KeyRound },
   { href: "/admin/sync-logs", label: "Sync Logs", icon: RefreshCw },
@@ -36,6 +37,7 @@ const BOTTOM_NAV: NavItem[] = [
 
 const MORE: NavItem[] = [
   { href: "/admin/plans", label: "Plans", icon: Tag },
+  { href: "/admin/billing", label: "Billing Ops", icon: CreditCard },
   { href: "/admin/subscriptions", label: "Subscriptions", icon: CreditCard },
   { href: "/admin/licenses", label: "Licenses", icon: KeyRound },
   { href: "/admin/sync-logs", label: "Sync Logs", icon: RefreshCw },

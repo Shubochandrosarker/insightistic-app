@@ -3,6 +3,7 @@
 namespace App\Services\Privacy;
 
 use App\Models\Organization;
+use App\Domain\Billing\EntitlementResolver;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -82,8 +83,12 @@ class RetentionPurger
      */
     public function retentionDays(Organization $org): ?int
     {
-        $limits = $org->plan?->limits_json ?? [];
-        $days = $limits['data_retention_days'] ?? null;
+        $resolved = app(EntitlementResolver::class)->resolve($org);
+        $days = $resolved['limits']['data_retention_days'] ?? null;
+
+        if ($days === null && $org->plan) {
+            $days = $org->plan->limit('data_retention_days');
+        }
 
         return $days === null ? null : (int) $days;
     }

@@ -19,6 +19,8 @@ const config: Config = {
         line: "var(--ins-line)",
         fg: "var(--ins-fg)",
         muted: "var(--ins-muted)",
+        accent: "var(--ins-accent)",
+        "accent-soft": "var(--ins-accent-soft)",
 
         // fixed brand palette
         ink: "#0B1110",
@@ -39,6 +41,7 @@ const config: Config = {
       },
       boxShadow: {
         card: "0 1px 2px rgba(11,17,16,0.04), 0 8px 24px -12px rgba(11,17,16,0.10)",
+        warm: "0 1px 2px rgba(20,23,28,0.05), 0 18px 44px -28px rgba(20,23,28,0.38), inset 0 -3px 0 rgba(244,197,106,0.45)",
       },
       fontFamily: {
         sans: ["var(--font-sans)", "ui-sans-serif", "system-ui", "-apple-system", "Segoe UI", "Roboto", "Helvetica", "Arial", "sans-serif"],

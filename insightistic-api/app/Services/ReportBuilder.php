@@ -10,6 +10,8 @@ use Illuminate\Support\Str;
 
 class ReportBuilder
 {
+    private bool $lastAiSummaryGenerated = false;
+
     public function __construct(
         private MetricsAssembler $metrics,
         private InsightGenerator $insights,
@@ -21,14 +23,16 @@ class ReportBuilder
      * The AI executive summary is generated inline (not metered as a separate
      * insight — the report itself is the metered unit).
      */
-    public function generate(Site $site, string $type): ClientReport
+    public function generate(Site $site, string $type, bool $includeAi = true): ClientReport
     {
+        $this->lastAiSummaryGenerated = false;
         $range = $this->rangeForType($type, $site);
         $org   = $site->organization;
 
         $bundle = $this->metrics->bundle($site, $range);
         $series = $this->metrics->dailySeries($site->id, $range);
-        $ai     = $this->insights->summarize($site, $range); // may be null
+        $ai     = $includeAi ? $this->insights->summarize($site, $range) : null;
+        $this->lastAiSummaryGenerated = is_array($ai);
 
         $brand = $this->brand($org);
         $currency = $site->currency ?: 'USD';
@@ -65,6 +69,23 @@ class ReportBuilder
             'html_url'     => "{$base}.html", // stored as relative path; URL via accessor
             'pdf_url'      => "{$base}.pdf",
         ]);
+    }
+
+    /** Whether the most recent build actually included a provider summary. */
+    public function aiSummaryGenerated(): bool
+    {
+        return $this->lastAiSummaryGenerated;
+    }
+
+    /** Remove an unbillable report after a concurrent wallet settlement fails. */
+    public function discard(ClientReport $report): void
+    {
+        $disk = config('insightistic.reports.disk', 'public');
+        Storage::disk($disk)->delete(array_values(array_filter([
+            $report->getRawOriginal('html_url'),
+            $report->getRawOriginal('pdf_url'),
+        ])));
+        $report->delete();
     }
 
     private function rangeForType(string $type, Site $site): DateRange

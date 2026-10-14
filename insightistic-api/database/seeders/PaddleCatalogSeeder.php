@@ -97,10 +97,17 @@ class PaddleCatalogSeeder extends Seeder
         }
 
         $plans = Plan::query()
-            ->whereIn('slug', array_merge(['starter', 'growth', 'agency', 'agency_pro'], array_keys(self::HIDDEN_PLANS)))
+            ->whereIn('slug', array_merge(
+                ['starter', 'growth', 'agency', 'agency_pro', 'angel_solo', 'angel_studio', 'angel_agency'],
+                array_keys(self::HIDDEN_PLANS),
+            ))
             ->pluck('id', 'slug');
 
-        foreach (self::PRICES as $priceId => [$planSlug, $kind, $amount, $metadata]) {
+        // New Paddle IDs are deployment inputs, never guessed in source. The
+        // seeder remains useful before catalog creation: regular and historical
+        // mappings are installed now, and Angel mappings appear as soon as the
+        // operator supplies the verified IDs in server environment config.
+        foreach (array_merge(self::PRICES, $this->configuredPrices()) as $priceId => [$planSlug, $kind, $amount, $metadata]) {
             $planId = $plans->get($planSlug);
 
             if (! $planId) {
@@ -138,5 +145,25 @@ class PaddleCatalogSeeder extends Seeder
                 ],
             );
         }
+    }
+
+    /** @return array<string, array{string,string,int,array}> */
+    private function configuredPrices(): array
+    {
+        $prices = [];
+        $env = [
+            'PADDLE_PRICE_ANGEL_SOLO' => ['angel_solo', 14900],
+            'PADDLE_PRICE_ANGEL_STUDIO' => ['angel_studio', 29900],
+            'PADDLE_PRICE_ANGEL_AGENCY' => ['angel_agency', 69900],
+        ];
+
+        foreach ($env as $key => [$plan, $amount]) {
+            $id = trim((string) env($key, ''));
+            if ($id !== '') {
+                $prices[$id] = [$plan, 'lifetime', $amount, ['campaign' => 'founding-angel-2026']];
+            }
+        }
+
+        return $prices;
     }
 }

@@ -8,6 +8,7 @@ use App\Models\Plan;
 use App\Models\PlanPrice;
 use App\Models\Subscription;
 use App\Services\Billing\PaddleClient;
+use Illuminate\Support\Str;
 
 /**
  * Tenant-facing Paddle operations (roadmap 23-STRIPE-TO-PADDLE-MIGRATION):
@@ -21,6 +22,7 @@ final class PaddleBillingService
     public function __construct(
         private PaddleClient $client,
         private PaddleSubscriptionProjector $subscriptions,
+        private LtdCampaignService $ltdCampaign,
     ) {}
 
     /**
@@ -33,11 +35,12 @@ final class PaddleBillingService
      *               amount_minor:int, client_token:?string,
      *               customer:array{email:?string}, custom_data:array}
      */
-    public function checkoutConfig(Organization $org, string $planSlug, string $kind): array
+    public function checkoutConfig(Organization $org, string $planSlug, string $kind, ?string $creditPack = null): array
     {
         $plan = Plan::where('slug', $planSlug)->first();
+        $reservation = null;
 
-        // Hidden plans (founder LTD tiers, credit packs) are seeded
+        // Hidden plans (Angel LTD tiers, credit packs) are seeded
         // is_active=false so they never appear as subscribable plans — their
         // purchasability is the ACTIVE PADDLE PRICE below, not the plan flag.
         // Recurring kinds still require an active plan.
@@ -47,20 +50,45 @@ final class PaddleBillingService
             throw new BillingConfigurationException('plan_not_available', 'This plan is not available.');
         }
 
-        $price = PlanPrice::query()
+        if ($kind === 'lifetime' && str_starts_with($planSlug, 'angel_')) {
+            $reservation = $this->ltdCampaign->reserve($org, $planSlug, (string) Str::uuid());
+        }
+
+        if ($kind === 'credit_pack' && $planSlug !== 'insight_credits') {
+            throw new BillingConfigurationException('invalid_credit_pack', 'This is not a credit-pack purchase.');
+        }
+
+        $pack = null;
+        if ($kind === 'credit_pack') {
+            $pack = collect(config('commercial.credit_packs'))
+                ->first(fn (array $candidate): bool => $candidate['slug'] === $creditPack);
+            if (! $pack) {
+                throw new BillingConfigurationException('invalid_credit_pack', 'Choose a valid Insight Credit pack.');
+            }
+        }
+
+        $priceQuery = PlanPrice::query()
             ->where('plan_id', $plan->id)
             ->where('provider', 'paddle')
             ->where('kind', $kind)
             ->where('currency', config('billing.paddle.default_currency', 'USD'))
-            ->where('is_active', true)
-            ->first();
+            ->where('is_active', true);
+
+        // Keep the selector portable across the supported database drivers;
+        // metadata_json is already a tiny, bounded credit-pack catalog.
+        $prices = $priceQuery->get();
+        $price = $pack
+            ? $prices->first(fn (PlanPrice $candidate): bool => (int) ($candidate->metadata_json['credits'] ?? 0) === (int) $pack['credits'])
+            : $prices->first();
 
         if (! $price) {
+            $this->ltdCampaign->release($reservation);
             throw new BillingConfigurationException('price_not_configured', 'This plan/kind has no Paddle price configured yet.');
         }
 
         $clientToken = config('billing.paddle.client_token');
         if (! is_string($clientToken) || trim($clientToken) === '') {
+            $this->ltdCampaign->release($reservation);
             throw new BillingConfigurationException(
                 'paddle_not_configured',
                 'Paddle checkout is not configured yet. Please try again later.'
@@ -79,6 +107,11 @@ final class PaddleBillingService
                 'organization_id' => $org->id,
                 'purchase_kind'   => $kind,
                 'plan_slug'       => $plan->slug,
+                ...($pack ? ['credit_pack' => $pack['slug'], 'credit_amount' => $pack['credits']] : []),
+                ...($reservation ? [
+                    'ltd_reservation_id' => $reservation->id,
+                    'ltd_campaign_id' => $reservation->campaign_id,
+                ] : []),
             ],
         ];
     }

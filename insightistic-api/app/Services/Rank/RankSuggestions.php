@@ -5,6 +5,7 @@ namespace App\Services\Rank;
 use App\Models\RankKeyword;
 use App\Models\SeoQueryDaily;
 use App\Models\Site;
+use App\Services\UsageService;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -22,6 +23,8 @@ use Illuminate\Support\Facades\DB;
  */
 class RankSuggestions
 {
+    public function __construct(private UsageService $usage) {}
+
     /** The suggestion window: a 28-day GSC lookback ending today. */
     public const WINDOW_DAYS = 28;
 
@@ -103,7 +106,7 @@ class RankSuggestions
     public function confirm(Site $site, array $queries): int
     {
         $org = $site->organization;
-        $limit = (int) ($org->plan?->limit('tracked_keywords') ?? 0);
+        $limit = $this->usage->limit($org, 'tracked_keywords');
         $used = RankKeyword::where('site_id', $site->id)->where('active', true)->count();
         $budget = max(0, $limit - $used);
 

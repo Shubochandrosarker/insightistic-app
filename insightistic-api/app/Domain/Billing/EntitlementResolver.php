@@ -61,6 +61,26 @@ final class EntitlementResolver
             $source = $plan ? 'subscription' : 'none';
         }
 
+        // New accounts are intentionally provisioned with the explicit Free
+        // plan and no subscription. Treat that persisted plan as the default
+        // entitlement source so the resolver remains authoritative for Free
+        // Connected accounts too. Do not use an org plan as a fallback when a
+        // subscription row exists: a cancelled/expired paid subscription
+        // must fall back to Free (or an active lifetime grant), not retain a
+        // stale paid plan_id from a historical billing projection.
+        if (! $plan && ! $subscription && $organization->plan_id) {
+            $organizationPlan = $organization->relationLoaded('plan')
+                ? $organization->getRelation('plan')
+                : Plan::find($organization->plan_id);
+
+            if ($organizationPlan?->slug === 'free') {
+                $plan = $organizationPlan;
+                $source = 'free';
+                $features = $this->strings($plan->features_json);
+                $limits = $this->planLimits($plan);
+            }
+        }
+
         $features = $plan ? $this->strings($plan->features_json) : [];
         $limits = $plan ? $this->planLimits($plan) : [];
 

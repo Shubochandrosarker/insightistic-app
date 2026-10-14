@@ -3,6 +3,8 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Domain\Billing\AiCreditService;
+use App\Domain\Billing\Exceptions\InsufficientCreditsException;
 use App\Models\AiInsight;
 use App\Models\Site;
 use App\Services\ContextAssembler;
@@ -22,6 +24,7 @@ class InsightController extends Controller
         private ContextAssembler $contexts,
         private UsageService $usage,
         private Tenancy $tenancy,
+        private AiCreditService $credits,
     ) {}
 
     public function index(Request $request)
@@ -194,7 +197,29 @@ class InsightController extends Controller
             ]);
         }
 
-        if (! $this->usage->canGenerateInsight($org)) {
+        $creditModel = $this->credits->walletEnabled($org);
+        $action = $this->credits->actionForInsightType($data['type']);
+        $eligibleForStandard = $this->credits->standardEligible($org, $action);
+
+        if ($creditModel && ! $this->credits->entitledForAction($org, $action)) {
+            return response()->json([
+                'message' => 'This AI analysis is not included in your current plan.',
+                'code'    => 'feature_not_in_plan',
+                'action'  => $action,
+            ], 403);
+        }
+
+        if ($creditModel && ! $this->credits->canCharge($org, $action, $eligibleForStandard)) {
+            return response()->json([
+                'message' => 'This action needs more Insight Credits. Buy a credit pack or upgrade your plan.',
+                'code'    => 'insufficient_credits',
+                'action'  => $action,
+                'cost'    => $this->credits->cost($action),
+                'available' => $this->credits->walletSummary($org)['total_usable'],
+            ], 402);
+        }
+
+        if (! $creditModel && ! $this->usage->canGenerateInsight($org)) {
             return response()->json([
                 'message' => 'AI insight limit reached for this month. Upgrade your plan for more.',
                 'code'    => 'ai_limit_reached',
@@ -212,7 +237,25 @@ class InsightController extends Controller
             ], 502);
         }
 
-        $this->usage->recordInsight($org);
+        if ($creditModel) {
+            try {
+                $this->credits->charge($org, $action, 'ai_insight:' . $insight->id, $eligibleForStandard);
+            } catch (InsufficientCreditsException $e) {
+                // A concurrent request may have consumed the balance after the
+                // preflight check. Do not retain an unpaid insight.
+                $insight->delete();
+
+                return response()->json([
+                    'message' => 'This action needs more Insight Credits. Buy a credit pack or upgrade your plan.',
+                    'code'    => 'insufficient_credits',
+                    'action'  => $action,
+                    'cost'    => $this->credits->cost($action),
+                    'available' => $e->available,
+                ], 402);
+            }
+        } else {
+            $this->usage->recordInsight($org);
+        }
 
         return response()->json([
             'insight'   => $insight,

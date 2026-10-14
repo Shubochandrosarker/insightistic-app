@@ -168,7 +168,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   return (
     <Protected>
       <DashboardProvider>
-        <div className="flex min-h-screen bg-bg text-fg">
+        <div className="ins-dashboard-shell flex min-h-screen bg-bg text-fg">
           <DesktopSidebar />
 
           <div className="flex min-w-0 flex-1 flex-col">

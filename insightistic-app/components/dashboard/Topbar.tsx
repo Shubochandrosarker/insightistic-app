@@ -75,7 +75,7 @@ export function Topbar() {
         <button
           onClick={() => { setPeriodMenu(false); setSiteMenu((m) => !m); }}
           aria-expanded={siteMenu}
-          className="flex items-center gap-2.5 rounded-xl border border-line bg-card px-2.5 py-1.5 text-left shadow-sm"
+          className="ins-tap flex items-center gap-2.5 rounded-[10px] border border-line bg-card px-2.5 py-1.5 text-left shadow-sm"
         >
           <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-brand text-xs font-bold text-white">
             {initials(active?.name)}
@@ -111,7 +111,7 @@ export function Topbar() {
           onClick={() => { setSiteMenu(false); setPeriodMenu((m) => !m); }}
           aria-label="Date period"
           aria-expanded={periodMenu}
-          className="flex items-center gap-2 rounded-xl border border-line bg-card px-3 py-1.5 text-xs font-medium text-fg shadow-sm hover:text-brand"
+          className="ins-tap flex items-center gap-2 rounded-[10px] border border-line bg-card px-3 py-1.5 text-xs font-medium text-fg shadow-sm hover:text-brand"
         >
           <CalendarDays size={14} className="text-muted" />
           {periodLabel}
@@ -187,9 +187,9 @@ export function Topbar() {
       <div className="ml-auto flex items-center gap-2.5">
         <Link
           href="/dashboard/agents"
-          className="hidden items-center gap-1.5 rounded-lg bg-fg px-3 py-2 text-xs font-bold text-card transition hover:-translate-y-0.5 sm:inline-flex"
+          className="hidden items-center gap-1.5 rounded-[8px] bg-accent px-3 py-2 text-xs font-extrabold text-[#14171c] transition hover:-translate-y-0.5 hover:bg-[#d09210] sm:inline-flex"
         >
-          <Sparkles size={13} className="text-[#f4c56a]" /> Analyze with AI
+          <Sparkles size={13} /> Analyze with AI
         </Link>
         {active?.last_sync_at && (
           <span className="hidden items-center gap-1.5 rounded-full bg-good/12 px-2.5 py-1 text-xs font-semibold text-good sm:inline-flex">

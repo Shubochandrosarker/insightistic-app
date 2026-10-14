@@ -23,7 +23,7 @@ export default function Terms() {
           Payments are processed by Paddle.com as Merchant of Record. Paddle is the seller of
           record for your purchase — taxes are collected and remitted by Paddle, and your payment
           details are handled by Paddle, never by Insightistic. Plan limits apply per the selected
-          plan and are enforced server-side. Founder lifetime deals and Insight Credit packs are
+          plan and are enforced server-side. Founding Angel lifetime plans and Insight Credit packs are
           covered in section 5.
         </p>
 
@@ -48,24 +48,25 @@ export default function Terms() {
           Subscriptions can be cancelled at any time from your billing page; access continues to
           the end of the paid period. Refunds are available within 14 days of purchase via the
           Paddle checkout or by contacting support. One-time purchases (lifetime deals, credit
-          packs) are refundable within the same 14-day window if unused beyond trial allowances.
+          packs) are refundable within 30 days of purchase under the applicable provider and support review.
         </p>
 
-        <h2 className="mt-8 text-lg font-semibold text-slate-900">6. Insightistic Founder Lifetime Deal terms</h2>
+        <h2 className="mt-8 text-lg font-semibold text-slate-900">6. Insightistic Founding Angel lifetime terms</h2>
         <p className="mt-2">
-          A Founder lifetime deal is a one-time purchase. &ldquo;Lifetime&rdquo; means the purchased tier&rsquo;s
+          A Founding Angel plan is a one-time purchase. &ldquo;Lifetime&rdquo; means the purchased tier&rsquo;s
           features and its published monthly allowances, for as long as Insightistic operates the service — it is
           not a promise of every future product or premium module.
         </p>
         <ul className="mt-3 list-disc space-y-1.5 pl-5">
           <li>
-            Recurring allowances are fixed and published per tier: Tier&nbsp;1 ($79) — 3 sites, 10k crawl
-            pages/month, 150 tracked keywords, 10 AI prompts/month, basic reports; Tier&nbsp;2 ($149) — 10 sites,
-            40k crawl pages/month, 500 tracked keywords, 40 AI prompts/month, scheduled reports; Tier&nbsp;3
-            ($249) — 30 sites, 100k crawl pages/month, 1,500 tracked keywords, 100 AI prompts/month, white-label
-            reports, 5 team members.
+            There are three published tiers: Angel Solo ($149) — 3 sites and 3,000 monthly Insight Credits;
+            Angel Studio ($299) — 7 sites and 8,000 monthly Insight Credits; and Angel Agency ($699) — 15 sites
+            and 20,000 monthly Insight Credits. Each tier also has its published crawl, browser, keyword, team,
+            report and standard-request allowances.
           </li>
+          <li>Only 100 qualifying Angel licenses may be sold across all three tiers combined. Sale closure is permanent.</li>
           <li>Allowances reset each month and do not roll over.</li>
+          <li>Monthly included credits expire at reset; purchased credits are separate, non-expiring credits.</li>
           <li>
             Insight Credit packs (5,000 / 20,000 / 50,000 credits) are one-time purchases that do not expire while
             the service operates. Credits power AI visibility runs beyond your plan&rsquo;s monthly allowance and

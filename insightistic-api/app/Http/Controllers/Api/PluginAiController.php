@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Domain\Billing\AiCreditService;
+use App\Domain\Billing\Exceptions\InsufficientCreditsException;
 use App\Http\Controllers\Controller;
 use App\Models\Organization;
 use App\Services\Ai\AiProvider;
@@ -32,6 +34,7 @@ class PluginAiController extends Controller
         private UsageService $usage,
         private AiProvider $provider,
         private ProviderResolver $providerResolver,
+        private AiCreditService $credits,
     ) {}
 
     public function generate(Request $request)
@@ -41,6 +44,7 @@ class PluginAiController extends Controller
             'skill_profile' => ['nullable', 'string', 'in:basic,seo_expert,commerce_expert'],
             'system_prompt' => ['required', 'string', 'max:8000'],
             'prompt'        => ['required', 'string', 'max:40000'],
+            'operation_id'  => ['sometimes', 'nullable', 'string', 'max:120'],
         ]);
 
         [$license] = $this->licenses->resolveFromConnector($request);
@@ -79,7 +83,19 @@ class PluginAiController extends Controller
             );
         }
 
-        if (! $this->usage->canGenerateInsight($org)) {
+        $creditModel = $this->credits->walletEnabled($org);
+        $action = 'basic_wordpress_dashboard_insight';
+        $eligibleForStandard = $this->credits->standardEligible($org, $action);
+
+        if ($creditModel && ! $this->credits->canCharge($org, $action, $eligibleForStandard)) {
+            return $this->error(
+                'insufficient_credits',
+                'This AI action needs more Insight Credits. Buy a credit pack or upgrade your plan.',
+                402,
+            );
+        }
+
+        if (! $creditModel && ! $this->usage->canGenerateInsight($org)) {
             return $this->error(
                 'quota_exceeded',
                 "You have used this period's free Insightistic Cloud AI quota. It resets automatically next month.",
@@ -108,7 +124,28 @@ class PluginAiController extends Controller
             );
         }
 
-        $this->usage->recordInsight($org);
+        if ($creditModel) {
+            try {
+                $operationId = $data['operation_id']
+                    ?? $request->header('Idempotency-Key')
+                    ?? $request->header('X-Insightistic-Operation-Id');
+                $operationReference = $operationId
+                    ? 'plugin_ai:' . $request->attributes->get('connector_site')?->id . ':' . $operationId
+                    : 'plugin_ai:' . $request->attributes->get('connector_site')?->id . ':' . sha1(json_encode([
+                        $data['model'], $data['skill_profile'] ?? 'basic', $data['system_prompt'], $data['prompt'],
+                    ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
+
+                $this->credits->charge($org, $action, $operationReference, $eligibleForStandard);
+            } catch (InsufficientCreditsException) {
+                return $this->error(
+                    'insufficient_credits',
+                    'This AI action needs more Insight Credits. Buy a credit pack or upgrade your plan.',
+                    402,
+                );
+            }
+        } else {
+            $this->usage->recordInsight($org);
+        }
 
         return response()->json(['content' => json_encode($result)]);
     }

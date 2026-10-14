@@ -4,13 +4,14 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\BrandSettings;
+use App\Domain\Billing\EntitlementResolver;
 use App\Support\Tenancy;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 
 class BrandSettingsController extends Controller
 {
-    public function __construct(private Tenancy $tenancy) {}
+    public function __construct(private Tenancy $tenancy, private EntitlementResolver $entitlements) {}
 
     public function show()
     {
@@ -67,7 +68,11 @@ class BrandSettingsController extends Controller
 
     private function whiteLabelAllowed(): bool
     {
-        return (bool) ($this->tenancy->organization()->plan?->white_label_enabled);
+        $org = $this->tenancy->organization();
+
+        return $this->entitlements->hasFeature($org, 'agency_white_label')
+            || $this->entitlements->hasFeature($org, 'white_label_reports')
+            || $this->entitlements->hasFeature($org, 'white_label_dashboard');
     }
 
     private function upgradeRequired()

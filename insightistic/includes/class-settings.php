@@ -33,6 +33,9 @@ class Settings
             'expires_at'        => '',
             'validate_interval' => 86400,
             'grace_hours'       => 72,
+            'monthly_ai_credits' => 0,
+            'standard_ai_requests_monthly' => 0,
+            'credits'           => [],
             'last_validated'    => '',
 
             // Per-site HMAC connector credentials, issued by /api/plugin/activate.

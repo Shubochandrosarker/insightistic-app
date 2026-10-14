@@ -156,6 +156,9 @@ class License
             'expires_at'        => $lic['expires_at'] ?? '',
             'validate_interval' => (int) ($lic['validate_interval'] ?? 86400),
             'grace_hours'       => (int) ($lic['grace_hours'] ?? 72),
+            'monthly_ai_credits' => (int) ($lic['monthly_ai_credits'] ?? 0),
+            'standard_ai_requests_monthly' => (int) ($lic['standard_ai_requests_monthly'] ?? 0),
+            'credits'           => is_array($lic['credits'] ?? null) ? $lic['credits'] : [],
         ]);
     }
 }

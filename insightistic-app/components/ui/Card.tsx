@@ -18,7 +18,7 @@ export function Card({
   bodyClassName?: string;
 }) {
   return (
-    <div id={id} className={`rounded-2xl border border-line bg-card p-5 shadow-card ${className}`}>
+    <div id={id} className={`ins-card rounded-2xl border border-line bg-card p-5 shadow-card ${className}`}>
       {(title || right) && (
         <div className="mb-4 flex items-start justify-between gap-3">
           <div>

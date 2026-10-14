@@ -10,6 +10,7 @@ use App\Models\ProviderAccount;
 use App\Models\Site;
 use App\Services\Analytics\AttributionService;
 use App\Services\Sites\SiteKickoff;
+use App\Services\UsageService;
 use App\Support\DomainNormalizer;
 use Illuminate\Support\Facades\Queue;
 
@@ -30,6 +31,7 @@ class GscImportService
         private readonly GscClient $gsc,
         private readonly ProviderAccountManager $accounts,
         private readonly SiteKickoff $kickoff,
+        private readonly UsageService $usage,
     ) {}
 
     /**
@@ -88,7 +90,10 @@ class GscImportService
             ->get()
             ->keyBy(fn (Site $s) => $s->normalized_domain);
 
-        $limit = $org->plan?->site_limit ?? 1;
+        $limit = $this->usage->limit($org, 'connected_websites');
+        if ($limit <= 0) {
+            $limit = 1;
+        }
         $used = Site::withoutGlobalScope('organization')->where('organization_id', $org->id)->count();
 
         $created = $attached = $skipped = [];

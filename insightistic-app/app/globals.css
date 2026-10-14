@@ -4,12 +4,17 @@
 
 /* ---- Theme tokens -------------------------------------------------------- */
 :root {
-  --ins-bg: #f7f8f5;
-  --ins-card: #ffffff;
-  --ins-card-2: #f1f4f0;
-  --ins-line: #e1e7e1;
-  --ins-fg: #141a18;
-  --ins-muted: #65716c;
+  /* Insightistic keeps its green signal, with a warmer editorial canvas
+     inspired by the supplied RecurPost reference. */
+  --ins-bg: #f7f4ec;
+  --ins-card: #fffdf8;
+  --ins-card-2: #f1ede3;
+  --ins-line: #e2dccf;
+  --ins-fg: #14171c;
+  --ins-muted: #6d706d;
+  --ins-ink: #14171c;
+  --ins-accent: #b47a00;
+  --ins-accent-soft: #fff0c8;
 
   --ins-brand: #00c04b;
   --ins-brand-2: #00d084;
@@ -25,6 +30,9 @@
   --ins-line: rgba(255, 255, 255, 0.1);
   --ins-fg: #f4f8f6;
   --ins-muted: #9fb4ad;
+  --ins-ink: #f4f8f6;
+  --ins-accent: #f4c56a;
+  --ins-accent-soft: rgba(244, 197, 106, 0.12);
 }
 
 html,
@@ -39,6 +47,187 @@ body {
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
+}
+
+/* The app canvas has a little more depth than a flat admin panel, while the
+   data surfaces remain intentionally quiet and readable. */
+.ins-dashboard-shell {
+  background:
+    radial-gradient(circle at 86% 2%, rgba(255, 214, 111, 0.12), transparent 24rem),
+    radial-gradient(circle at 18% 18%, rgba(0, 192, 75, 0.045), transparent 25rem),
+    var(--ins-bg);
+}
+
+.ins-card {
+  transition: transform 180ms cubic-bezier(0.79, 0.14, 0.15, 0.86),
+    box-shadow 180ms cubic-bezier(0.79, 0.14, 0.15, 0.86),
+    border-color 180ms ease;
+}
+
+.ins-card:hover {
+  transform: translateY(-1px);
+  border-color: color-mix(in srgb, var(--ins-accent) 32%, var(--ins-line));
+  box-shadow: 0 1px 2px rgba(20, 23, 28, 0.04), 0 14px 30px -20px rgba(20, 23, 28, 0.34);
+}
+
+.ins-kpi-card {
+  position: relative;
+  overflow: hidden;
+}
+
+.ins-kpi-card::after {
+  content: "";
+  position: absolute;
+  inset: auto 0 0;
+  height: 3px;
+  background: linear-gradient(90deg, var(--ins-brand), var(--ins-accent));
+  opacity: 0.72;
+}
+
+.ins-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  color: var(--ins-accent);
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.ins-eyebrow::before {
+  content: "";
+  width: 1.35rem;
+  height: 2px;
+  border-radius: 999px;
+  background: currentColor;
+}
+
+.ins-overview-intro {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  margin-bottom: 1.5rem;
+  padding: 1.25rem 1.25rem 0.25rem;
+  border: 1px solid var(--ins-line);
+  border-radius: 0.8rem;
+  background: linear-gradient(120deg, color-mix(in srgb, var(--ins-card) 93%, transparent), color-mix(in srgb, var(--ins-accent-soft) 46%, var(--ins-card)));
+}
+
+.ins-overview-intro::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  top: -7rem;
+  right: 22%;
+  width: 15rem;
+  height: 15rem;
+  border: 1px solid color-mix(in srgb, var(--ins-accent) 24%, transparent);
+  border-radius: 50%;
+  box-shadow: 0 0 0 2.5rem color-mix(in srgb, var(--ins-accent) 8%, transparent), 0 0 0 5rem color-mix(in srgb, var(--ins-brand) 5%, transparent);
+  animation: ins-orbit 14s linear infinite;
+}
+
+.ins-overview-intro .ins-page-header {
+  margin-bottom: 0.75rem;
+}
+
+.ins-signal-art {
+  position: relative;
+  min-height: 9.5rem;
+  overflow: hidden;
+  border-radius: 0.75rem 0.75rem 0 0;
+}
+
+.ins-signal-art__label {
+  position: absolute;
+  top: 0.7rem;
+  right: 0.8rem;
+  z-index: 2;
+  color: var(--ins-muted);
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+}
+
+.ins-signal-art__svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.ins-signal-art__path {
+  fill: none;
+  stroke: var(--ins-brand);
+  stroke-linecap: round;
+  stroke-width: 2.5;
+  stroke-dasharray: 10 8;
+  animation: ins-dash 9s linear infinite;
+}
+
+.ins-signal-art__dot {
+  fill: var(--ins-accent);
+  filter: drop-shadow(0 0 5px color-mix(in srgb, var(--ins-accent) 55%, transparent));
+  animation: ins-pulse 2.4s ease-in-out infinite;
+}
+
+.ins-signal-art__chip {
+  position: absolute;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.32rem 0.55rem;
+  border: 1px solid color-mix(in srgb, var(--ins-line) 86%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--ins-card) 74%, transparent);
+  color: var(--ins-fg);
+  box-shadow: 0 8px 18px -14px rgba(20, 23, 28, 0.75);
+  font-size: 0.65rem;
+  font-weight: 800;
+  backdrop-filter: blur(7px);
+  animation: ins-float 4.8s ease-in-out infinite;
+}
+
+.ins-signal-art__chip::before {
+  content: "";
+  width: 0.35rem;
+  height: 0.35rem;
+  border-radius: 50%;
+  background: var(--ins-brand);
+}
+
+.ins-signal-art__chip--one { top: 2.5rem; left: 13%; }
+.ins-signal-art__chip--two { top: 5.4rem; right: 9%; animation-delay: -1.3s; }
+.ins-signal-art__chip--three { bottom: 0.5rem; left: 37%; animation-delay: -2.4s; }
+
+.ins-reveal {
+  animation: ins-reveal 420ms cubic-bezier(0.79, 0.14, 0.15, 0.86) both;
+}
+
+.ins-agent-hero {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  border-color: color-mix(in srgb, var(--ins-accent) 42%, var(--ins-ink));
+  background:
+    radial-gradient(circle at 82% 22%, rgba(244, 197, 106, 0.19), transparent 13rem),
+    linear-gradient(135deg, var(--ins-ink), #25332e);
+}
+
+.ins-agent-hero::after {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  right: -5rem;
+  bottom: -9rem;
+  width: 20rem;
+  height: 20rem;
+  border: 1px solid rgba(244, 197, 106, 0.28);
+  border-radius: 50%;
+  box-shadow: 0 0 0 2rem rgba(244, 197, 106, 0.06), 0 0 0 4rem rgba(244, 197, 106, 0.04);
+  animation: ins-orbit 18s linear infinite reverse;
 }
 
 * {
@@ -198,6 +387,24 @@ body {
 @keyframes ins-shimmer {
   100% { transform: translateX(100%); }
 }
+@keyframes ins-reveal {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes ins-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-5px); }
+}
+@keyframes ins-pulse {
+  0%, 100% { opacity: 0.55; transform: scale(0.9); transform-origin: center; }
+  50% { opacity: 1; transform: scale(1.16); transform-origin: center; }
+}
+@keyframes ins-dash {
+  to { stroke-dashoffset: -72; }
+}
+@keyframes ins-orbit {
+  to { transform: rotate(360deg); }
+}
 
 /* fade/slide page-in (respects reduced-motion) */
 .ins-page { animation: ins-fade 0.28s ease both; }
@@ -232,6 +439,13 @@ body {
 
 @media (prefers-reduced-motion: reduce) {
   .ins-page,
+  .ins-reveal,
+  .ins-signal-art__path,
+  .ins-signal-art__dot,
+  .ins-signal-art__chip,
+  .ins-overview-intro::before,
+  .ins-agent-hero::after,
   .ins-skeleton::after { animation: none; }
+  .ins-card:hover { transform: none; }
   .ins-tap:active { transform: none; }
 }

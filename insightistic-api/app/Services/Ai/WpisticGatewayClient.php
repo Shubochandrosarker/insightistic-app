@@ -7,13 +7,15 @@ use Illuminate\Support\Facades\Http;
 /** OpenAI-compatible client for WordPressistic's product-key AI gateway. */
 class WpisticGatewayClient
 {
+    public function __construct(private AiRuntimeSettings $runtime) {}
+
     /**
      * @param  array<int,array{role:string,content:string}>  $messages
      * @return array{content:string,model:string,tokens_in:?int,tokens_out:?int}
      */
     public function complete(array $messages, ?int $organizationId): array
     {
-        $config = config('insightistic.wpistic_gateway');
+        $config = $this->runtime->resolved()['gateway'];
         $productKey = trim((string) ($config['product_key'] ?? ''));
 
         if ($productKey === '') {

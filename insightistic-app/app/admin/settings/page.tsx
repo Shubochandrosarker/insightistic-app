@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/Button";
 import { PageHeader } from "@/components/dashboard/PageHeader";
 import { Spinner } from "@/components/ui/Spinner";
 import { num } from "@/lib/format";
+import Link from "next/link";
 
 /**
  * Platform settings (super admin, read-mostly).
@@ -89,6 +90,7 @@ export default function AdminSettings() {
           <Row label="Paddle" value={<Badge tone={data.paddle?.configured ? "green" : "amber"}>{data.paddle?.configured ? data.paddle?.environment : "not set"}</Badge>} />
           <Row label="Stripe" value={<Badge tone={data.stripe?.configured ? "green" : "amber"}>{data.stripe?.configured ? data.stripe?.mode : "not set"}</Badge>} />
           <Row label="AI provider" value={<Badge tone={data.ai?.configured ? "green" : "amber"}>{data.ai?.configured ? data.ai?.provider : "not set"}</Badge>} />
+          <div className="pt-3"><Link href="/admin/ai" className="text-sm font-semibold text-brand hover:underline">Open editable AI configuration →</Link></div>
         </Card>
       </div>
     </div>

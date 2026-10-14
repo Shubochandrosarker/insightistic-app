@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Field } from "@/components/ui/Field";
 import { useApi } from "@/lib/useApi";
-import { apiPost } from "@/lib/api";
+import { apiPatch, apiPost } from "@/lib/api";
 import { num } from "@/lib/format";
 
 const STATUS_TONE: Record<string, "green" | "amber" | "red" | "slate"> = {
@@ -49,6 +49,45 @@ function CreateOrganization({ onCreated }: { onCreated: () => void }) {
   </>;
 }
 
+function EditOrganization({ organization, onUpdated }: { organization: any; onUpdated: () => void }) {
+  const plansApi = useApi<{ plans: any[] }>("/admin/plans");
+  const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+  const [form, setForm] = useState({
+    name: organization.name || "",
+    owner_email: organization.owner?.email || "",
+    plan: organization.plan?.slug || "",
+    status: organization.status || "active",
+    trial_ends_at: organization.trial_ends_at ? organization.trial_ends_at.slice(0, 10) : "",
+    internal_notes: organization.internal_notes || "",
+  });
+  function close() { setOpen(false); setMessage(null); }
+  async function submit() {
+    setBusy(true); setMessage(null);
+    try {
+      await apiPatch(`/admin/organizations/${organization.id}`, { ...form, trial_ends_at: form.trial_ends_at || null });
+      close(); onUpdated();
+    } catch (e: any) { setMessage(e.message || "Couldn't update the organization."); }
+    finally { setBusy(false); }
+  }
+  return <>
+    <Button variant="ghost" className="px-3 py-1.5 text-xs" onClick={() => setOpen(true)}>Edit</Button>
+    <AdminDialog open={open} title={`Edit ${organization.name}`} description="Update tenant ownership, entitlement, lifecycle status, trial date, and private owner notes." onClose={close}>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <Field label="Organization name" required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+        <Field label="Owner email" type="email" required value={form.owner_email} onChange={(e) => setForm({ ...form, owner_email: e.target.value })} hint="Must match an existing user." />
+        <label className="block"><span className="mb-1.5 block text-xs font-semibold text-fg">Plan</span><select value={form.plan} onChange={(e) => setForm({ ...form, plan: e.target.value })} className="w-full rounded-xl border border-line bg-card2 px-3 py-2 text-sm text-fg outline-none focus:border-brand"><option value="">No plan</option>{(plansApi.data?.plans || []).map((p: any) => <option key={p.slug} value={p.slug}>{p.name}</option>)}</select></label>
+        <label className="block"><span className="mb-1.5 block text-xs font-semibold text-fg">Status</span><select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })} className="w-full rounded-xl border border-line bg-card2 px-3 py-2 text-sm text-fg outline-none focus:border-brand"><option value="active">Active</option><option value="trialing">Trialing</option><option value="past_due">Past due</option><option value="suspended">Suspended</option><option value="canceled">Canceled</option></select></label>
+        <Field label="Trial ends" type="date" value={form.trial_ends_at} onChange={(e) => setForm({ ...form, trial_ends_at: e.target.value })} />
+        <div className="sm:col-span-2"><label className="block"><span className="mb-1.5 block text-xs font-semibold text-fg">Internal notes</span><textarea value={form.internal_notes} onChange={(e) => setForm({ ...form, internal_notes: e.target.value })} rows={4} className="w-full rounded-xl border border-line bg-card2 px-3 py-2 text-sm text-fg outline-none focus:border-brand" /></label></div>
+      </div>
+      {message && <p className="mt-3 rounded-lg border border-bad/20 bg-bad/10 px-3 py-2 text-sm text-bad">{message}</p>}
+      <div className="mt-5 flex justify-end gap-2"><Button variant="ghost" onClick={close}>Cancel</Button><Button onClick={submit} disabled={busy || !form.name || !form.owner_email}>{busy ? "Saving…" : "Save changes"}</Button></div>
+    </AdminDialog>
+  </>;
+}
+
 export default function AdminOrganizations() {
   return (
     <AdminListPage
@@ -60,7 +99,7 @@ export default function AdminOrganizations() {
       empty="No organizations found."
       headerActions={(reload) => <CreateOrganization onCreated={reload} />}
       filters={[
-        { key: "plan", label: "All plans", options: ["starter", "growth", "business", "agency", "agency_pro"].map((p) => ({ value: p, label: p })) },
+        { key: "plan", label: "All plans", options: ["free", "starter", "growth", "business", "agency", "agency_pro"].map((p) => ({ value: p, label: p })) },
         { key: "status", label: "All statuses", options: ["trialing", "active", "past_due", "suspended", "canceled"].map((s) => ({ value: s, label: s })) },
       ]}
       columns={[
@@ -78,6 +117,7 @@ export default function AdminOrganizations() {
         { key: "sites_count", label: "Sites", align: "right", render: (o: any) => num(o.sites_count) },
         { key: "users_count", label: "Team", align: "right", render: (o: any) => num(o.users_count) },
       ]}
+      actions={(o: any, reload) => <EditOrganization organization={o} onUpdated={reload} />}
     />
   );
 }

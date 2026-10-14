@@ -36,15 +36,15 @@ return [
         'timeout' => (int) env('INSIGHTISTIC_AI_TIMEOUT', 240),
     ],
 
-    // Plan-aware OpenRouter routing. The free router chooses from compatible
-    // zero-cost models; paid subscribers use GPT-6 Luna with GLM-5.3 Flash/Prime as
-    // the ordered fallback. Keys remain server-side and are never exposed to
-    // the Next.js app.
+    // Plan-aware OpenRouter routing. WPistic is always attempted first by the
+    // provider bindings; OpenRouter is the configured second provider. GLM
+    // 5.3 Flash is the stable paid default and can be overridden by env or the
+    // owner AI configuration screen. Keys remain server-side.
     'openrouter' => [
         'api_key' => env('OPENROUTER_API_KEY'),
         'base_url' => env('OPENROUTER_BASE_URL', 'https://openrouter.ai/api/v1'),
         'timeout' => (int) env('OPENROUTER_TIMEOUT', 180),
-        'free_model' => env('OPENROUTER_FREE_MODEL', 'openrouter/free'),
+        'free_model' => env('OPENROUTER_FREE_MODEL', 'z-ai/glm-5.3-flash'),
         'free_reasoning_effort' => env('OPENROUTER_FREE_REASONING_EFFORT', 'low'),
         'free_fallback_models' => array_values(array_filter(array_map(
             'trim',
@@ -53,10 +53,10 @@ return [
                 'nvidia/nemotron-3-super-120b-a12b:free,liquid/lfm-2.5-2.6b:free',
             )),
         ))),
-        'paid_model' => env('OPENROUTER_PAID_MODEL', 'openai/gpt-6-luna'),
+        'paid_model' => env('OPENROUTER_PAID_MODEL', 'z-ai/glm-5.3-flash'),
         'paid_fallback_models' => array_values(array_filter(array_map(
             'trim',
-            explode(',', (string) env('OPENROUTER_PAID_FALLBACK_MODELS', 'z-ai/glm-5.3-flash')),
+            explode(',', (string) env('OPENROUTER_PAID_FALLBACK_MODELS', '')),
         ))),
     ],
 
@@ -103,6 +103,18 @@ return [
         'max_content_bytes' => (int) env('INSIGHTISTIC_KNOWLEDGE_MAX_CONTENT_BYTES', 2_000_000),
         'crawl_timeout' => (int) env('INSIGHTISTIC_KNOWLEDGE_CRAWL_TIMEOUT', 20),
         'crawl_max_bytes' => (int) env('INSIGHTISTIC_KNOWLEDGE_CRAWL_MAX_BYTES', 10_485_760),
+    ],
+
+    // Optional shared WPistic AIAgents / knowledge-brain runtime. It is
+    // disabled until the deployed Worker URL is supplied; local, tenant-
+    // isolated Insightistic knowledge remains the default source of truth.
+    'knowledge_agent' => [
+        'enabled' => (bool) env('WPISTIC_KNOWLEDGE_AGENT_ENABLED', false),
+        'base_url' => env('WPISTIC_KNOWLEDGE_AGENT_URL'),
+        'token' => env('WPISTIC_KNOWLEDGE_AGENT_TOKEN'),
+        'agent_slug' => env('WPISTIC_KNOWLEDGE_AGENT_SLUG', 'analytics-pro'),
+        'category' => env('WPISTIC_KNOWLEDGE_AGENT_CATEGORY', 'analytics'),
+        'timeout' => (int) env('WPISTIC_KNOWLEDGE_AGENT_TIMEOUT', 4),
     ],
 
     // Frontend app base (Stripe redirects, invite links).

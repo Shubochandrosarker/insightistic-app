@@ -136,17 +136,29 @@ class OrganizationController extends AdminController
     public function update(Request $request, int $id)
     {
         $org = Organization::findOrFail($id);
-        $before = $org->only(['name', 'plan_id', 'status', 'internal_notes']);
+        $before = $org->only(['name', 'owner_user_id', 'plan_id', 'status', 'trial_ends_at', 'internal_notes']);
 
         $data = $request->validate([
             'name'           => ['nullable', 'string', 'max:150'],
+            'owner_user_id'  => ['nullable', 'integer', 'exists:users,id'],
+            'owner_email'    => ['nullable', 'email'],
             'plan'           => ['nullable', 'string', 'exists:plans,slug'],
             'status'         => ['nullable', 'in:trialing,active,past_due,suspended,canceled'],
+            'trial_ends_at'  => ['nullable', 'date'],
             'internal_notes' => ['nullable', 'string', 'max:5000'],
         ]);
 
+        $ownerId = $data['owner_user_id'] ?? null;
+        if (! $ownerId && ! empty($data['owner_email'])) {
+            $ownerId = \App\Models\User::where('email', strtolower(trim($data['owner_email'])))->value('id');
+            abort_unless($ownerId, 422, 'Choose an existing user as the organization owner.');
+        }
+
         if (! empty($data['name'])) {
             $org->name = $data['name'];
+        }
+        if ($ownerId) {
+            $org->owner_user_id = $ownerId;
         }
         if (! empty($data['plan'])) {
             $org->plan_id = Plan::where('slug', $data['plan'])->value('id');
@@ -154,10 +166,19 @@ class OrganizationController extends AdminController
         if (! empty($data['status'])) {
             $org->status = $data['status'];
         }
+        if ($request->has('trial_ends_at')) {
+            $org->trial_ends_at = $data['trial_ends_at'];
+        }
         if ($request->has('internal_notes')) {
             $org->internal_notes = $data['internal_notes'];
         }
         $org->save();
+
+        if ($ownerId) {
+            $org->users()->syncWithoutDetaching([$ownerId => ['role' => 'owner']]);
+            $org->users()->wherePivot('role', 'owner')->where('users.id', '!=', $ownerId)
+                ->get()->each(fn ($user) => $org->users()->updateExistingPivot($user->id, ['role' => 'member']));
+        }
 
         // Without this, a license's persisted status/plan_id/activation_limit
         // only self-heals the next time something reads it (dashboard Licenses
@@ -167,7 +188,7 @@ class OrganizationController extends AdminController
             $this->licenses->syncForOrganization($org->fresh());
         }
 
-        $this->audit->log($request, 'organization.update', 'Organization', $org->id, $before, $org->only(['name', 'plan_id', 'status', 'internal_notes']));
+        $this->audit->log($request, 'organization.update', 'Organization', $org->id, $before, $org->only(['name', 'owner_user_id', 'plan_id', 'status', 'trial_ends_at', 'internal_notes']));
 
         return response()->json(['organization' => $org->fresh(['plan'])]);
     }

@@ -645,6 +645,8 @@ Route::prefix('admin')->middleware(['auth:sanctum', 'super_admin'])->group(funct
     Route::get('overview', [AdminOverviewController::class, 'overview']);
     Route::get('system-health', [AdminOverviewController::class, 'systemHealth']);
     Route::get('settings', [AdminOverviewController::class, 'settings']);
+    Route::get('ai/configuration', [AdminOverviewController::class, 'aiConfiguration']);
+    Route::patch('ai/configuration', [AdminOverviewController::class, 'updateAiConfiguration'])->middleware('reauth');
 
     /*
      * Observability (spec Phase 2.3). Platform-wide, not tenant-scoped:

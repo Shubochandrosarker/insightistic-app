@@ -139,6 +139,53 @@ function ManagedLicenseEdit({ license, onUpdated }: { license: any; onUpdated: (
   </>;
 }
 
+function NativeLicenseActions({ license, onUpdated }: { license: any; onUpdated: () => void }) {
+  const [limitOpen, setLimitOpen] = useState(false);
+  const [limit, setLimit] = useState(String(license.activation_limit ?? 0));
+  const [reason, setReason] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+
+  async function action(path: string, body: any = {}) {
+    setBusy(true); setMessage(null);
+    try { await apiPost(`/admin/licenses/${license.id}/${path}`, body); onUpdated(); }
+    catch (e: any) { setMessage(e.message || "License action failed."); }
+    finally { setBusy(false); }
+  }
+  async function regenerate() {
+    if (!window.confirm("Regenerate this license? The old key stops working immediately.")) return;
+    setBusy(true); setMessage(null);
+    try {
+      const result = await apiPost(`/admin/licenses/${license.id}/regenerate`);
+      onUpdated();
+      window.alert(`Copy this new license key now (shown once):\n\n${result.license_key}\n\n${result.notice || ""}`);
+    } catch (e: any) { setMessage(e.message || "Could not regenerate the license."); }
+    finally { setBusy(false); }
+  }
+  async function saveLimit() {
+    setBusy(true); setMessage(null);
+    try { await apiPatch(`/admin/licenses/${license.id}/activation-limit`, { limit: Number(limit), reason: reason || null }); setLimitOpen(false); onUpdated(); }
+    catch (e: any) { setMessage(e.message || "Could not update the activation limit."); }
+    finally { setBusy(false); }
+  }
+
+  return <>
+    <span className="flex items-center justify-end gap-1.5">
+      <button onClick={() => setLimitOpen(true)} className="rounded-lg border border-line px-2.5 py-1 text-xs font-semibold text-fg hover:bg-card2">Edit limit</button>
+      <button onClick={regenerate} disabled={busy} className="rounded-lg border border-line px-2.5 py-1 text-xs font-semibold text-fg hover:bg-card2">Regenerate</button>
+      {license.status === "suspended" ? <button onClick={() => action("reactivate")} disabled={busy} className="rounded-lg border border-line px-2.5 py-1 text-xs font-semibold text-good">Reactivate</button> : <button onClick={() => action("suspend", { reason: window.prompt("Reason for suspending this license:") || null })} disabled={busy || license.status === "revoked"} className="rounded-lg border border-line px-2.5 py-1 text-xs font-semibold text-warn">Suspend</button>}
+      <button onClick={() => { if (window.confirm("Disconnect every active site using this license?")) action("disconnect-all", { confirm: true }); }} disabled={busy} className="rounded-lg border border-line px-2.5 py-1 text-xs font-semibold text-fg">Disconnect</button>
+      <button onClick={() => { if (window.confirm("Revoke this license permanently? This cannot be undone.")) action("revoke", { confirm: true, reason: window.prompt("Reason for revoking this license:") || null }); }} disabled={busy || license.status === "revoked"} className="rounded-lg border border-line px-2.5 py-1 text-xs font-semibold text-bad">Revoke</button>
+    </span>
+    {message && <span className="mt-1 block text-right text-[11px] text-bad">{message}</span>}
+    <AdminDialog open={limitOpen} title="Edit activation limit" description={`Set the maximum connected sites for ${license.organization?.name || "this license"}.`} onClose={() => setLimitOpen(false)}>
+      <Field label="Activation limit" type="number" min={0} max={10000} value={limit} onChange={(e) => setLimit(e.target.value)} />
+      <div className="mt-3"><label className="block"><span className="mb-1.5 block text-xs font-semibold text-fg">Reason</span><textarea value={reason} onChange={(e) => setReason(e.target.value)} rows={3} className="w-full rounded-xl border border-line bg-card2 px-3 py-2 text-sm text-fg outline-none focus:border-brand" /></label></div>
+      <div className="mt-5 flex justify-end gap-2"><Button variant="ghost" onClick={() => setLimitOpen(false)}>Cancel</Button><Button onClick={saveLimit} disabled={busy || limit === ""}>{busy ? "Saving…" : "Save limit"}</Button></div>
+    </AdminDialog>
+  </>;
+}
+
 function ManagedLicenses() {
   return <AdminListPage
     title="Managed customer licenses"
@@ -179,6 +226,7 @@ export default function AdminLicenses() {
         { key: "activation_limit", label: "Sites", align: "right", render: (license: any) => `${license.activations_used ?? 0} / ${license.activation_limit ?? 0}` },
         { key: "last_validated_at", label: "Last check-in", align: "right", render: (license: any) => license.last_validated_at ? new Date(license.last_validated_at).toLocaleDateString() : "never" },
       ]}
+      actions={(license: any, reload) => <NativeLicenseActions license={license} onUpdated={reload} />}
     />
     <ManagedLicenses />
   </div>;

@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\Admin;
 use App\Models\User;
 use App\Services\AuditLogger;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 
 class UserController extends AdminController
 {
@@ -85,27 +86,38 @@ class UserController extends AdminController
     public function update(Request $request, int $id)
     {
         $user = User::findOrFail($id);
-        $before = $user->only(['status']);
+        $before = $user->only(['name', 'email', 'status']);
 
         $data = $request->validate([
-            'status' => ['required', 'in:active,disabled,suspended'],
+            'name'     => ['sometimes', 'string', 'max:120'],
+            'email'    => ['sometimes', 'email', 'max:190', Rule::unique('users', 'email')->ignore($user->id)],
+            'password' => ['sometimes', 'nullable', 'string', 'min:12', 'max:200'],
+            'status'   => ['sometimes', 'in:active,disabled,suspended'],
         ]);
 
-        if ($data['status'] !== 'active' && $user->is_super_admin) {
+        if (isset($data['status']) && $data['status'] !== 'active' && $user->is_super_admin) {
             $this->guardLastSuperAdmin($user);
         }
 
-        $user->status = $data['status'];
+        foreach (['name', 'email', 'status', 'password'] as $field) {
+            if (array_key_exists($field, $data)) {
+                if ($field === 'password' && blank($data[$field])) {
+                    continue;
+                }
+                $user->{$field} = $field === 'email' ? strtolower(trim($data[$field])) : $data[$field];
+            }
+        }
         $user->save();
 
         // Login now rejects non-active accounts, but a token issued before
         // this change would otherwise keep working — revoke it immediately
         // so a disable/suspend takes effect on already-open sessions too.
-        if ($data['status'] !== 'active') {
+        if (isset($data['status']) && $data['status'] !== 'active') {
             $user->tokens()->delete();
         }
 
-        $this->audit->log($request, 'user.status_change', 'User', $user->id, $before, $data);
+        $after = $user->only(['name', 'email', 'status']);
+        $this->audit->log($request, 'user.update', 'User', $user->id, $before, $after);
 
         return response()->json(['user' => $user->only(['id', 'name', 'email', 'status', 'is_super_admin'])]);
     }

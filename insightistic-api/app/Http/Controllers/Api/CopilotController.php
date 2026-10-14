@@ -144,6 +144,8 @@ class CopilotController extends Controller
             'sources.*'          => [Rule::in(\App\Services\ContextAssembler::TYPES)],
             'knowledge_base_ids' => ['nullable', 'array'],
             'knowledge_base_ids.*' => ['integer'],
+            'ai_category'        => ['nullable', 'string', 'max:80'],
+            'agent_slug'         => ['nullable', 'string', 'max:120'],
         ]);
 
         // Server-side quota — structured 402 before any provider call.
@@ -215,6 +217,8 @@ class CopilotController extends Controller
             'date_range'         => $range,
             'sources'            => $data['sources'] ?? ['executive'],
             'knowledge_base_ids' => $kbIds,
+            'ai_category'       => $data['ai_category'] ?? null,
+            'agent_slug'        => $data['agent_slug'] ?? null,
             'question'           => $data['content'],
         ]);
 

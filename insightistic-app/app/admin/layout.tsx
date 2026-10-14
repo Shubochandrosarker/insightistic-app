@@ -1,7 +1,7 @@
 "use client";
 import {
   LayoutGrid, Building2, Users, Globe, CreditCard, RefreshCw,
-  FileText, BarChart3, Activity, Settings, Tag, Radar, KeyRound,
+  FileText, BarChart3, Activity, Settings, Tag, Radar, KeyRound, BrainCircuit,
 } from "lucide-react";
 import { AdminProtected } from "@/components/admin/AdminProtected";
 import { AdminTopbar } from "@/components/admin/AdminTopbar";
@@ -26,6 +26,7 @@ const NAV: NavItem[] = [
   { href: "/admin/system-health", label: "System Health", icon: Activity },
   { href: "/admin/observability", label: "Observability", icon: Radar },
   { href: "/admin/settings", label: "Settings", icon: Settings },
+  { href: "/admin/ai", label: "AI Configuration", icon: BrainCircuit },
 ];
 
 const BOTTOM_NAV: NavItem[] = [
@@ -46,6 +47,7 @@ const MORE: NavItem[] = [
   { href: "/admin/system-health", label: "System Health", icon: Activity },
   { href: "/admin/observability", label: "Observability", icon: Radar },
   { href: "/admin/settings", label: "Settings", icon: Settings },
+  { href: "/admin/ai", label: "AI Configuration", icon: BrainCircuit },
 ];
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {

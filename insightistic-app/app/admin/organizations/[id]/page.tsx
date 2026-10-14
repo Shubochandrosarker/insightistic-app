@@ -12,7 +12,6 @@ import { Spinner } from "@/components/ui/Spinner";
 import { num, timeAgo } from "@/lib/format";
 import { ArrowLeft } from "lucide-react";
 
-const PLANS = ["starter", "growth", "business", "agency", "agency_pro"];
 const STATUS_TONE: Record<string, "green" | "amber" | "red" | "slate"> = {
   active: "green", trialing: "amber", past_due: "amber", suspended: "red", canceled: "slate",
 };
@@ -20,6 +19,7 @@ const STATUS_TONE: Record<string, "green" | "amber" | "red" | "slate"> = {
 export default function AdminOrgDetail() {
   const { id } = useParams<{ id: string }>();
   const { data, loading, error, reload } = useApi<any>(`/admin/organizations/${id}`);
+  const plansApi = useApi<{ plans: any[] }>("/admin/plans");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
@@ -96,13 +96,38 @@ export default function AdminOrgDetail() {
                   className="rounded-xl border border-line bg-card2 px-3 py-2 text-sm text-fg outline-none focus:border-brand"
                 >
                   <option value="" disabled>Choose plan…</option>
-                  {PLANS.map((p) => <option key={p} value={p}>{p}</option>)}
+                  {(plansApi.data?.plans || []).map((p: any) => <option key={p.slug} value={p.slug}>{p.name}</option>)}
                 </select>
+              </label>
+              <label className="block">
+                <span className="mb-1.5 block text-xs font-semibold text-fg">Owner email</span>
+                <input
+                  key={data.owner?.email}
+                  defaultValue={data.owner?.email || ""}
+                  onBlur={(e) => { const v = e.target.value.trim(); if (v && v !== data.owner?.email) patch({ owner_email: v }); }}
+                  disabled={busy}
+                  className="w-56 rounded-xl border border-line bg-card2 px-3 py-2 text-sm text-fg outline-none focus:border-brand"
+                />
+              </label>
+              <label className="block">
+                <span className="mb-1.5 block text-xs font-semibold text-fg">Trial ends</span>
+                <input
+                  type="date"
+                  key={o.trial_ends_at}
+                  defaultValue={o.trial_ends_at ? o.trial_ends_at.slice(0, 10) : ""}
+                  onBlur={(e) => patch({ trial_ends_at: e.target.value || null })}
+                  disabled={busy}
+                  className="rounded-xl border border-line bg-card2 px-3 py-2 text-sm text-fg outline-none focus:border-brand"
+                />
               </label>
               {o.status === "suspended"
                 ? <Button onClick={() => patch({ status: "active" })} disabled={busy}>Reactivate</Button>
                 : <Button variant="danger" onClick={() => patch({ status: "suspended" })} disabled={busy}>Suspend</Button>}
             </div>
+            <label className="mt-4 block">
+              <span className="mb-1.5 block text-xs font-semibold text-fg">Internal notes</span>
+              <textarea key={o.internal_notes} defaultValue={o.internal_notes || ""} onBlur={(e) => patch({ internal_notes: e.target.value })} disabled={busy} rows={3} className="w-full rounded-xl border border-line bg-card2 px-3 py-2 text-sm text-fg outline-none focus:border-brand" />
+            </label>
           </Card>
 
           <Card title={`Sites (${num(data.sites?.length)})`}>

@@ -22,7 +22,7 @@ class SiteController extends AdminController
 
         $query = Site::withoutGlobalScope('organization')
             ->with('organization:id,name,slug')
-            ->select(['id', 'organization_id', 'name', 'domain', 'platform', 'connection_status', 'last_sync_at', 'wc_version', 'plugin_version', 'archived_at', 'created_at']);
+            ->select(['id', 'organization_id', 'name', 'domain', 'platform', 'platform_override', 'country', 'language', 'timezone', 'currency', 'status', 'connection_status', 'last_sync_at', 'wc_version', 'plugin_version', 'archived_at', 'created_at']);
 
         if (! $request->boolean('include_archived')) {
             $query->whereNull('archived_at');
@@ -117,15 +117,26 @@ class SiteController extends AdminController
     public function update(Request $request, int $id)
     {
         $site = Site::withoutGlobalScope('organization')->findOrFail($id);
-        $before = $site->only(['name', 'status']);
+        $before = $site->only(['name', 'platform', 'platform_override', 'country', 'language', 'timezone', 'currency', 'status']);
 
         $data = $request->validate([
-            'name'   => ['sometimes', 'string', 'max:120'],
-            'status' => ['sometimes', 'in:active,suspended'],
+            'name'              => ['sometimes', 'string', 'max:120'],
+            'platform'          => ['sometimes', 'string', 'max:32'],
+            'platform_override' => ['sometimes', 'nullable', 'string', 'max:32'],
+            'country'           => ['sometimes', 'nullable', 'string', 'size:2'],
+            'language'          => ['sometimes', 'nullable', 'string', 'max:12'],
+            'timezone'          => ['sometimes', 'nullable', 'string', 'max:64'],
+            'currency'          => ['sometimes', 'nullable', 'string', 'size:3'],
+            'status'            => ['sometimes', 'in:active,suspended'],
         ]);
 
-        if (array_key_exists('name', $data) && trim($data['name']) !== '') {
-            $site->name = trim($data['name']);
+        foreach (['name', 'platform', 'platform_override', 'language', 'timezone', 'currency'] as $field) {
+            if (array_key_exists($field, $data)) {
+                $site->{$field} = $field === 'name' ? trim((string) $data[$field]) : ($data[$field] === null ? null : trim((string) $data[$field]));
+            }
+        }
+        if (array_key_exists('country', $data)) {
+            $site->country = $data['country'] === null ? null : strtoupper(trim($data['country']));
         }
         if (! empty($data['status'])) {
             $site->status = $data['status'];
@@ -133,10 +144,10 @@ class SiteController extends AdminController
         $site->save();
 
         if ($site->wasChanged()) {
-            $this->audit->log($request, 'site.update', 'Site', $site->id, $before, $site->only(['name', 'status']));
+            $this->audit->log($request, 'site.update', 'Site', $site->id, $before, $site->only(['name', 'platform', 'platform_override', 'country', 'language', 'timezone', 'currency', 'status']));
         }
 
-        return response()->json(['site' => $site->only(['id', 'name', 'status', 'connection_status'])]);
+        return response()->json(['site' => $site->only(['id', 'name', 'domain', 'platform', 'platform_override', 'country', 'language', 'timezone', 'currency', 'status', 'connection_status'])]);
     }
 
     /**

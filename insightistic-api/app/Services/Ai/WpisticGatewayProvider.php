@@ -7,11 +7,16 @@ use Illuminate\Support\Facades\Log;
 /** Insightistic AI provider backed by WordPressistic's product-key gateway. */
 class WpisticGatewayProvider implements AiProvider
 {
-    public function __construct(private WpisticGatewayClient $gateway) {}
+    public function __construct(
+        private WpisticGatewayClient $gateway,
+        private ?AiRuntimeSettings $runtime = null,
+    ) {}
 
     public function model(): string
     {
-        return 'wpistic-gateway:' . (config('insightistic.wpistic_gateway.model') ?: 'glm-5.3');
+        $model = $this->runtime?->resolved()['gateway']['model'] ?? config('insightistic.wpistic_gateway.model', 'glm-5.3');
+
+        return 'wpistic-gateway:' . ($model ?: 'glm-5.3');
     }
 
     public function generate(string $system, array $context, ?int $identityId = null): ?array

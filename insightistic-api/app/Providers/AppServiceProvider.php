@@ -5,6 +5,7 @@ namespace App\Providers;
 use App\Metrics\MetricRegistry;
 use App\Query\QueryConcurrencyLimiter;
 use App\Services\Ai\AiProvider;
+use App\Services\Ai\AiRuntimeSettings;
 use App\Services\Ai\AiTierResolver;
 use App\Services\Ai\OpenRouterProvider;
 use App\Services\Ai\PlanAwareAiProvider;
@@ -48,8 +49,9 @@ class AppServiceProvider extends ServiceProvider
         // AI visibility, and investigations. Every external attempt is
         // independently metered so fallback behavior is visible in ops.
         $this->app->bind(AiProvider::class, function () {
-            $gatewayConfig = config('insightistic.wpistic_gateway');
-            $routerConfig = config('insightistic.openrouter');
+            $runtime = $this->app->make(AiRuntimeSettings::class)->resolved();
+            $gatewayConfig = $runtime['gateway'];
+            $routerConfig = $runtime['openrouter'];
             $telemetry = $this->app->make(Telemetry::class);
             $tracing = $this->app->make(Tracing::class);
             $meter = fn (AiProvider $provider, string $name) => new MeteredAiProvider(
@@ -86,8 +88,10 @@ class AppServiceProvider extends ServiceProvider
                 ]), 'openrouter');
             }
 
+            // Keep the shared WPistic brain first for every billing tier.
+            // OpenRouter is a second provider, never the first hop.
             if ($gateway) {
-                $paid[] = $gateway();
+                array_unshift($paid, $gateway());
             }
 
             $rule = $meter(new RuleProvider, 'rule');

@@ -48,24 +48,34 @@ function CreateSite({ onCreated }: { onCreated: () => void }) {
 function RenameDialog({ site, onClose, onSaved }: { site: any; onClose: () => void; onSaved: (patch: any) => void }) {
   const [name, setName] = useState(site.name || "");
   const [status, setStatus] = useState(site.status || "active");
+  const [platform, setPlatform] = useState(site.platform || "generic");
+  const [country, setCountry] = useState(site.country || "");
+  const [language, setLanguage] = useState(site.language || "");
+  const [timezone, setTimezone] = useState(site.timezone || "");
+  const [currency, setCurrency] = useState(site.currency || "");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   async function submit() {
     setBusy(true); setMessage(null);
-    try { const res = await apiPatch(`/admin/sites/${site.id}`, { name, status }); onSaved(res.site); }
+    try { const res = await apiPatch(`/admin/sites/${site.id}`, { name, status, platform, country: country || null, language: language || null, timezone: timezone || null, currency: currency || null }); onSaved(res.site); }
     catch (e: any) { setMessage(e.message || "Couldn't save."); }
     finally { setBusy(false); }
   }
   return (
     <AdminDialog open title="Edit website" description={`Rename or suspend ${site.domain || "this site"}. The domain itself is the connector identity and is not editable here.`} onClose={onClose}>
-      <div className="grid gap-3">
+      <div className="grid gap-3 sm:grid-cols-2">
         <Field label="Website name" required value={name} onChange={(e) => setName(e.target.value)} placeholder="Main marketing site" />
+        <label className="block"><span className="mb-1.5 block text-xs font-semibold text-fg">Platform</span><select value={platform} onChange={(e) => setPlatform(e.target.value)} className="w-full rounded-xl border border-line bg-card2 px-3 py-2 text-sm text-fg outline-none focus:border-brand"><option value="generic">Any website</option><option value="wordpress">WordPress</option><option value="woocommerce">WooCommerce</option><option value="shopify">Shopify</option><option value="laravel">Laravel</option></select></label>
         <label className="block"><span className="mb-1.5 block text-xs font-semibold text-fg">Status</span>
           <select value={status} onChange={(e) => setStatus(e.target.value)} className="w-full rounded-xl border border-line bg-card2 px-3 py-2 text-sm text-fg outline-none focus:border-brand">
             <option value="active">Active</option>
             <option value="suspended">Suspended</option>
           </select>
         </label>
+        <Field label="Country" value={country} onChange={(e) => setCountry(e.target.value.toUpperCase().slice(0, 2))} maxLength={2} placeholder="US" />
+        <Field label="Language" value={language} onChange={(e) => setLanguage(e.target.value)} placeholder="en-US" />
+        <Field label="Timezone" value={timezone} onChange={(e) => setTimezone(e.target.value)} placeholder="America/Phoenix" />
+        <Field label="Currency" value={currency} onChange={(e) => setCurrency(e.target.value.toUpperCase().slice(0, 3))} maxLength={3} placeholder="USD" />
       </div>
       {message && <p className="mt-3 rounded-lg border border-bad/20 bg-bad/10 px-3 py-2 text-sm text-bad">{message}</p>}
       <div className="mt-5 flex justify-end gap-2"><Button variant="ghost" onClick={onClose}>Cancel</Button><Button onClick={submit} disabled={busy || !name}>{busy ? "Saving…" : "Save"}</Button></div>

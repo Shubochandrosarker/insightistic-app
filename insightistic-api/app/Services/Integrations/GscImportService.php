@@ -211,8 +211,12 @@ class GscImportService
 
         // Initial window now; full history in the background.
         SyncDataSource::dispatch($site->id, 'gsc', 30);
-        $backfillFrom = now()->subMonths(16)->toDateString();
-        $backfillTo = now()->subDay()->toDateString();
+        // Use the same three-day provider lag as the regular GSC sync. The
+        // resulting range is deterministic and never ends after the data
+        // source's reliable reporting window.
+        $backfillTo = now($site->timezone ?: config('app.timezone', 'UTC'))->subDays(3);
+        $backfillFrom = $backfillTo->copy()->subMonths(16)->toDateString();
+        $backfillTo = $backfillTo->toDateString();
         Queue::push(new BackfillGscHistory($site, 'queries', $backfillFrom, $backfillTo));
         Queue::push(new BackfillGscHistory($site, 'pages', $backfillFrom, $backfillTo));
 

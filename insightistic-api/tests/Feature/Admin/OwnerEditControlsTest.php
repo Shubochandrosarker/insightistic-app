@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\Site;
+use App\Models\SiteUserAccess;
 use App\Models\User;
 
 use function Pest\Laravel\actingAs;
@@ -104,4 +105,90 @@ it('lets the owner edit site metadata while preserving the connector identity', 
         ->and($site->country)->toBe('US')
         ->and($site->currency)->toBe('USD')
         ->and($site->status)->toBe('suspended');
+});
+
+it('lets the platform owner connect existing users and exact site access to an organization', function () {
+    $admin = ownerEditAdmin('owner-edit-members-admin@example.com');
+    [, $org] = makeOrgUser('owner-edit-members-owner@example.com');
+    $siteA = Site::withoutGlobalScope('organization')->create([
+        'organization_id' => $org->id,
+        'name' => 'Site A',
+        'domain' => 'site-a.example.com',
+        'normalized_domain' => 'site-a.example.com',
+        'canonical_url' => 'https://site-a.example.com',
+        'platform' => 'generic',
+        'status' => 'active',
+        'connection_status' => 'not_installed',
+    ]);
+    $siteB = Site::withoutGlobalScope('organization')->create([
+        'organization_id' => $org->id,
+        'name' => 'Site B',
+        'domain' => 'site-b.example.com',
+        'normalized_domain' => 'site-b.example.com',
+        'canonical_url' => 'https://site-b.example.com',
+        'platform' => 'generic',
+        'status' => 'active',
+        'connection_status' => 'not_installed',
+    ]);
+    $member = User::create([
+        'name' => 'Scoped viewer',
+        'email' => 'owner-edit-scoped-viewer@example.com',
+        'password' => 'secret-password',
+        'status' => 'active',
+    ]);
+
+    actingAs($admin)->postJson("/api/admin/organizations/{$org->id}/members", [
+        'user_id' => $member->id,
+        'role' => 'client_viewer',
+        'site_ids' => [$siteA->id],
+    ])->assertCreated()->assertJsonPath('member.site_ids.0', $siteA->id);
+
+    expect($org->users()->where('users.id', $member->id)->first()->pivot->role)->toBe('client_viewer')
+        ->and(SiteUserAccess::where('user_id', $member->id)->pluck('site_id')->all())->toBe([$siteA->id]);
+
+    actingAs($admin)->patchJson("/api/admin/organizations/{$org->id}/members/{$member->id}", [
+        'role' => 'analyst',
+        'site_ids' => [],
+    ])->assertOk();
+
+    expect($org->users()->where('users.id', $member->id)->first()->pivot->role)->toBe('analyst')
+        ->and(SiteUserAccess::where('user_id', $member->id)->exists())->toBeFalse();
+
+    actingAs($admin)->patchJson("/api/admin/organizations/{$org->id}/members/{$member->id}", [
+        'role' => 'client_viewer',
+        'site_ids' => [$siteB->id],
+    ])->assertOk();
+
+    expect(SiteUserAccess::where('user_id', $member->id)->pluck('site_id')->all())->toBe([$siteB->id]);
+
+    $otherOrg = makeOrgUser('owner-edit-members-other@example.com')[1];
+    $foreignSite = Site::withoutGlobalScope('organization')->create([
+        'organization_id' => $otherOrg->id,
+        'name' => 'Foreign',
+        'domain' => 'foreign.example.com',
+        'normalized_domain' => 'foreign.example.com',
+        'canonical_url' => 'https://foreign.example.com',
+        'platform' => 'generic',
+        'status' => 'active',
+        'connection_status' => 'not_installed',
+    ]);
+
+    actingAs($admin)->patchJson("/api/admin/organizations/{$org->id}/members/{$member->id}", [
+        'role' => 'client_viewer',
+        'site_ids' => [$foreignSite->id],
+    ])->assertStatus(422)->assertJsonPath('code', 'invalid_site_ids');
+});
+
+it('locks the organization owner from platform member removal or role changes', function () {
+    $admin = ownerEditAdmin('owner-edit-owner-lock-admin@example.com');
+    [$owner, $org] = makeOrgUser('owner-edit-owner-lock@example.com');
+
+    actingAs($admin)->patchJson("/api/admin/organizations/{$org->id}/members/{$owner->id}", [
+        'role' => 'analyst',
+        'site_ids' => [],
+    ])->assertStatus(422)->assertJsonPath('code', 'owner_locked');
+
+    actingAs($admin)->deleteJson("/api/admin/organizations/{$org->id}/members/{$owner->id}")
+        ->assertStatus(422)
+        ->assertJsonPath('code', 'owner_locked');
 });

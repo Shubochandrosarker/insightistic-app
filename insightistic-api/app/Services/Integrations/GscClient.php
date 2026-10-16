@@ -12,6 +12,7 @@ use App\Models\SeoQueryPageDaily;
 use App\Models\SeoQuerySnapshot;
 use App\Models\Site;
 use App\Support\SeoGrain;
+use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 
@@ -122,6 +123,7 @@ class GscClient
      */
     public function sync(Site $site, DataSourceCredential $credential, int $days = 30): array
     {
+        $days = max(1, $days);
         $siteUrl = $this->siteUrl($credential);
         $token = $this->oauth->freshAccessToken($credential);
 
@@ -292,6 +294,9 @@ class GscClient
         string $to,
         string $dimension,
     ): int {
+        $dimension = $this->normalizeDailyDimension($dimension);
+        [$from, $to] = $this->validatedDateRange($from, $to);
+
         $dimensions = match ($dimension) {
             'queries'    => ['date', 'query'],
             'pages'      => ['date', 'page'],
@@ -435,6 +440,13 @@ class GscClient
 
     private function query(string $token, string $siteUrl, array $body, string $errorCode): array
     {
+        if (isset($body['startDate'], $body['endDate'])) {
+            [$body['startDate'], $body['endDate']] = $this->validatedDateRange(
+                (string) $body['startDate'],
+                (string) $body['endDate'],
+            );
+        }
+
         $response = Http::withToken($token)
             ->timeout(config('insightistic.integrations.timeout'))
             ->post(sprintf(self::QUERY_URL, rawurlencode($siteUrl)), $body);
@@ -442,6 +454,46 @@ class GscClient
         $this->assertOk($response, $errorCode);
 
         return $response->json() ?? [];
+    }
+
+    /**
+     * Accept the singular names used by the first backfill dispatcher as well
+     * as the canonical state names. This matters for old serialized queue
+     * payloads: retrying a failed job must not recreate the original error.
+     */
+    private function normalizeDailyDimension(string $dimension): string
+    {
+        return match ($dimension) {
+            'query' => 'queries',
+            'page' => 'pages',
+            default => $dimension,
+        };
+    }
+
+    /** @return array{0:string,1:string} */
+    private function validatedDateRange(string $from, string $to): array
+    {
+        try {
+            $start = CarbonImmutable::createFromFormat('!Y-m-d', $from);
+            $end = CarbonImmutable::createFromFormat('!Y-m-d', $to);
+        } catch (\Throwable) {
+            throw new IntegrationFailure('invalid_date_range', 'Search Console dates must use YYYY-MM-DD.', retryable: false);
+        }
+
+        $errors = CarbonImmutable::getLastErrors();
+        if ($start === false || $end === false || ($errors !== false && ($errors['warning_count'] || $errors['error_count']))) {
+            throw new IntegrationFailure('invalid_date_range', 'Search Console dates must use YYYY-MM-DD.', retryable: false);
+        }
+
+        if ($start->gt($end)) {
+            throw new IntegrationFailure(
+                'invalid_date_range',
+                'Search Console end date cannot precede the start date.',
+                retryable: false,
+            );
+        }
+
+        return [$start->toDateString(), $end->toDateString()];
     }
 
     /** Store a normalised path so pages join cleanly with connector data. */

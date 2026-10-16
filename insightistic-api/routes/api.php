@@ -663,6 +663,9 @@ Route::prefix('admin')->middleware(['auth:sanctum', 'super_admin'])->group(funct
     Route::post('organizations', [AdminOrganizationController::class, 'store']);
     Route::get('organizations/{id}', [AdminOrganizationController::class, 'show']);
     Route::patch('organizations/{id}', [AdminOrganizationController::class, 'update']);
+    Route::post('organizations/{id}/members', [AdminOrganizationController::class, 'addMember']);
+    Route::patch('organizations/{id}/members/{userId}', [AdminOrganizationController::class, 'updateMember']);
+    Route::delete('organizations/{id}/members/{userId}', [AdminOrganizationController::class, 'removeMember']);
     Route::post('organizations/{id}/archive', [AdminOrganizationController::class, 'archive']);
     Route::post('organizations/{id}/restore', [AdminOrganizationController::class, 'restore']);
 

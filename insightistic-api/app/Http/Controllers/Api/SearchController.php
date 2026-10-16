@@ -117,7 +117,10 @@ class SearchController extends Controller
         }
 
         $tz = $this->timezone($site);
-        $to = CarbonImmutable::today($tz);
+        // Search Console data is delayed by roughly three days. Keep queued
+        // history on the same closed interval as nightly syncs so a retry can
+        // never ask Google for a future/partially available end date.
+        $to = CarbonImmutable::today($tz)->subDays(3);
         $from = $to->subDays(self::BACKFILL_MAX_DAYS);
         $dimensions = ['queries', 'pages', 'query_page'];
 

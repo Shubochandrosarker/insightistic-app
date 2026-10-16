@@ -95,6 +95,31 @@ it('normalizes already-dispatched singular dimensions before state and client lo
         ->and(SeoBackfillState::where('site_id', $site->id)->where('dimension', 'query')->exists())->toBeFalse();
 });
 
+it('rejects reversed or malformed date windows before contacting Search Console', function () {
+    [, $org] = makeOrgUser('seo-grain-invalid-range@example.com');
+    $site = gscGrainSite($org);
+    $credential = gscGrainCredential($site);
+    Http::fake();
+
+    expect(fn () => app(GscClient::class)->fetchDailyWindow(
+        $site,
+        $credential,
+        '2026-07-02',
+        '2026-07-01',
+        'pages',
+    ))->toThrow(IntegrationFailure::class, 'end date cannot precede');
+
+    expect(fn () => app(GscClient::class)->fetchDailyWindow(
+        $site,
+        $credential,
+        'not-a-date',
+        '2026-07-01',
+        'page',
+    ))->toThrow(IntegrationFailure::class, 'must use YYYY-MM-DD');
+
+    Http::assertNothingSent();
+});
+
 it('writes daily-grain rows on sync and replays them idempotently', function () {
     [$user, $org] = makeOrgUser('seo-grain-sync@example.com');
     $site = gscGrainSite($org);

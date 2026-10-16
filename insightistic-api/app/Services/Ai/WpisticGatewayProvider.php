@@ -31,18 +31,41 @@ class WpisticGatewayProvider implements AiProvider
                 ],
             ], $identityId);
 
-            $content = trim($result['content']);
-            if (preg_match('/^```(?:json)?\s*(.*?)\s*```$/is', $content, $matches)) {
-                $content = trim($matches[1]);
-            }
-
-            $parsed = json_decode($content, true);
-
-            return is_array($parsed) ? $parsed : null;
+            return $this->parseObject((string) $result['content']);
         } catch (\Throwable $e) {
             Log::warning('wpistic-ai-gateway request failed', ['exception' => $e::class]);
 
             return null;
         }
+    }
+
+    /**
+     * Gateways/models sometimes add a short preface around an otherwise valid
+     * JSON object despite the strict prompt. Extract the object safely so a
+     * formatting slip does not turn a successful provider call into a false
+     * provider failure and unnecessary fallback.
+     */
+    private function parseObject(string $content): ?array
+    {
+        $content = trim(preg_replace('/^\xEF\xBB\xBF/', '', $content) ?? $content);
+
+        if (preg_match('/```(?:json)?\s*(.*?)\s*```/is', $content, $matches)) {
+            $content = trim($matches[1]);
+        }
+
+        $parsed = json_decode($content, true);
+        if (is_array($parsed) && ! array_is_list($parsed)) {
+            return $parsed;
+        }
+
+        $start = strpos($content, '{');
+        $end = strrpos($content, '}');
+        if ($start === false || $end === false || $end <= $start) {
+            return null;
+        }
+
+        $parsed = json_decode(substr($content, $start, $end - $start + 1), true);
+
+        return is_array($parsed) && ! array_is_list($parsed) ? $parsed : null;
     }
 }

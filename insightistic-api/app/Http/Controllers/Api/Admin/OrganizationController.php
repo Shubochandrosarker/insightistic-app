@@ -7,8 +7,10 @@ use App\Models\ClientReport;
 use App\Models\Organization;
 use App\Models\Plan;
 use App\Models\Site;
+use App\Models\SiteUserAccess;
 use App\Models\SyncLog;
 use App\Models\UsageCounter;
+use App\Models\User;
 use App\Services\AuditLogger;
 use App\Services\LicenseService;
 use Illuminate\Http\Request;
@@ -115,14 +117,35 @@ class OrganizationController extends AdminController
         $sites = Site::withoutGlobalScope('organization')->where('organization_id', $id)
             ->get(['id', 'name', 'domain', 'connection_status', 'last_sync_at']);
 
+        $memberIds = $org->users()->pluck('users.id');
+        $siteAccess = SiteUserAccess::query()
+            ->whereIn('site_id', $sites->pluck('id'))
+            ->whereIn('user_id', $memberIds)
+            ->get(['user_id', 'site_id'])
+            ->groupBy('user_id');
+
         return response()->json([
             'organization' => $org,
             'owner'        => $org->owner,
             'plan'         => $org->plan,
             'subscription' => $org->subscription,
             'sites'        => $sites,
-            'members'      => $org->users()->get(['users.id', 'name', 'email'])
-                ->map(fn ($u) => ['id' => $u->id, 'name' => $u->name, 'email' => $u->email, 'role' => $u->pivot->role]),
+            'members'      => $org->users()->get(['users.id', 'name', 'email', 'status'])
+                ->map(function ($u) use ($siteAccess, $org) {
+                    $role = $u->pivot->role;
+
+                    return [
+                        'id'       => $u->id,
+                        'name'     => $u->name,
+                        'email'    => $u->email,
+                        'status'   => $u->status,
+                        'role'     => $role,
+                        'site_ids' => $role === 'client_viewer'
+                            ? ($siteAccess->get($u->id, collect())->pluck('site_id')->values()->all())
+                            : [],
+                        'is_owner' => $u->id === $org->owner_user_id,
+                    ];
+                }),
             'usage'        => $org->currentUsage,
             'recent_sync_logs' => SyncLog::whereIn('site_id', $sites->pluck('id'))
                 ->latest('id')->limit(10)->get(['id', 'site_id', 'job', 'status', 'records', 'created_at']),
@@ -130,6 +153,125 @@ class OrganizationController extends AdminController
                 ->latest('id')->limit(10)->get(['id', 'site_id', 'title', 'report_type', 'created_at']),
             'ai_insights_count' => AiInsight::withoutGlobalScope('organization')->where('organization_id', $id)->count(),
         ]);
+    }
+
+    /**
+     * Add an existing platform user to an organization and optionally scope
+     * a client viewer to selected sites. This is deliberately separate from
+     * organization self-service invites: platform admins may connect an
+     * existing account without creating a duplicate identity.
+     */
+    public function addMember(Request $request, int $id)
+    {
+        $org = Organization::findOrFail($id);
+        $data = $request->validate([
+            'user_id'  => ['required', 'integer', 'exists:users,id'],
+            'role'     => ['required', 'in:admin,analyst,client_viewer'],
+            'site_ids' => ['sometimes', 'array'],
+            'site_ids.*' => ['integer'],
+        ]);
+        $user = User::findOrFail($data['user_id']);
+
+        if ($org->users()->where('users.id', $user->id)->exists()) {
+            return response()->json(['message' => 'That user is already a member of this organization.', 'code' => 'member_exists'], 409);
+        }
+
+        $requestedSiteIds = $this->normaliseSiteIds($data['site_ids'] ?? []);
+        $siteIds = $this->validSiteIds($org->id, $requestedSiteIds);
+        if (! $this->sameSiteIds($requestedSiteIds, $siteIds)) {
+            return response()->json(['message' => 'site_ids contains sites that do not belong to this organization.', 'code' => 'invalid_site_ids'], 422);
+        }
+        if ($data['role'] === 'client_viewer' && $siteIds === []) {
+            return response()->json(['message' => 'A client viewer needs at least one site.', 'code' => 'sites_required'], 422);
+        }
+
+        DB::transaction(function () use ($org, $user, $data, $siteIds) {
+            $org->users()->attach($user->id, ['role' => $data['role']]);
+            $this->syncSiteAccess($org->id, $user->id, $data['role'], $siteIds);
+        });
+
+        $this->audit->log($request, 'organization.member_add', 'Organization', $org->id, null, [
+            'user_id' => $user->id,
+            'role' => $data['role'],
+            'site_ids' => $siteIds,
+        ]);
+
+        return response()->json(['member' => [
+            'id' => $user->id,
+            'name' => $user->name,
+            'email' => $user->email,
+            'status' => $user->status,
+            'role' => $data['role'],
+            'site_ids' => $siteIds,
+        ]], 201);
+    }
+
+    /** Update a member's role and exact site scope. */
+    public function updateMember(Request $request, int $id, int $userId)
+    {
+        $org = Organization::findOrFail($id);
+        $member = $org->users()->where('users.id', $userId)->firstOrFail();
+
+        if ($member->id === $org->owner_user_id || $member->pivot->role === 'owner') {
+            return response()->json(['message' => "The organization owner's role can't be changed.", 'code' => 'owner_locked'], 422);
+        }
+
+        $data = $request->validate([
+            'role' => ['required', 'in:admin,analyst,client_viewer'],
+            'site_ids' => ['sometimes', 'array'],
+            'site_ids.*' => ['integer'],
+        ]);
+        $requestedSiteIds = $this->normaliseSiteIds($data['site_ids'] ?? []);
+        $siteIds = $this->validSiteIds($org->id, $requestedSiteIds);
+        if (! $this->sameSiteIds($requestedSiteIds, $siteIds)) {
+            return response()->json(['message' => 'site_ids contains sites that do not belong to this organization.', 'code' => 'invalid_site_ids'], 422);
+        }
+        if ($data['role'] === 'client_viewer' && $siteIds === []) {
+            return response()->json(['message' => 'A client viewer needs at least one site.', 'code' => 'sites_required'], 422);
+        }
+
+        $before = ['role' => $member->pivot->role, 'site_ids' => $this->memberSiteIds($org->id, $userId)];
+        DB::transaction(function () use ($org, $userId, $data, $siteIds) {
+            $org->users()->updateExistingPivot($userId, ['role' => $data['role']]);
+            $this->syncSiteAccess($org->id, $userId, $data['role'], $siteIds);
+        });
+
+        $this->audit->log($request, 'organization.member_update', 'Organization', $org->id, $before, [
+            'user_id' => $userId,
+            'role' => $data['role'],
+            'site_ids' => $siteIds,
+        ]);
+
+        return response()->json(['member' => [
+            'id' => $member->id,
+            'name' => $member->name,
+            'email' => $member->email,
+            'status' => $member->status,
+            'role' => $data['role'],
+            'site_ids' => $siteIds,
+        ]]);
+    }
+
+    /** Remove a member and all site scopes belonging to this organization. */
+    public function removeMember(Request $request, int $id, int $userId)
+    {
+        $org = Organization::findOrFail($id);
+        $member = $org->users()->where('users.id', $userId)->firstOrFail();
+
+        if ($member->id === $org->owner_user_id || $member->pivot->role === 'owner') {
+            return response()->json(['message' => "The organization owner can't be removed.", 'code' => 'owner_locked'], 422);
+        }
+
+        DB::transaction(function () use ($org, $userId) {
+            $org->users()->detach($userId);
+            SiteUserAccess::where('user_id', $userId)
+                ->whereIn('site_id', $this->organizationSiteQuery($org->id)->pluck('id'))
+                ->delete();
+        });
+
+        $this->audit->log($request, 'organization.member_remove', 'Organization', $org->id, ['user_id' => $userId], null);
+
+        return response()->json(['status' => 'removed', 'user_id' => $userId]);
     }
 
     /** Edit name, plan, status, and/or internal notes. */
@@ -223,4 +365,65 @@ class OrganizationController extends AdminController
 
         return response()->json(['organization' => $org->only(['id', 'archived_at'])]);
     }
+
+    /** @return array<int> */
+    private function validSiteIds(int $organizationId, array $siteIds): array
+    {
+        if ($siteIds === []) {
+            return [];
+        }
+
+        return $this->organizationSiteQuery($organizationId)
+            ->whereIn('id', $siteIds)
+            ->pluck('id')
+            ->map(fn ($id) => (int) $id)
+            ->values()
+            ->all();
+    }
+
+    /** @return array<int> */
+    private function normaliseSiteIds(array $siteIds): array
+    {
+        return array_values(array_unique(array_map('intval', $siteIds)));
+    }
+
+    private function sameSiteIds(array $requested, array $valid): bool
+    {
+        sort($requested);
+        sort($valid);
+
+        return $requested === $valid;
+    }
+
+    private function organizationSiteQuery(int $organizationId)
+    {
+        return Site::withoutGlobalScope('organization')->where('organization_id', $organizationId);
+    }
+
+    /** @return array<int> */
+    private function memberSiteIds(int $organizationId, int $userId): array
+    {
+        return SiteUserAccess::where('user_id', $userId)
+            ->whereIn('site_id', $this->organizationSiteQuery($organizationId)->pluck('id'))
+            ->pluck('site_id')
+            ->map(fn ($id) => (int) $id)
+            ->values()
+            ->all();
+    }
+
+    private function syncSiteAccess(int $organizationId, int $userId, string $role, array $siteIds): void
+    {
+        SiteUserAccess::where('user_id', $userId)
+            ->whereIn('site_id', $this->organizationSiteQuery($organizationId)->pluck('id'))
+            ->delete();
+
+        if ($role !== 'client_viewer') {
+            return;
+        }
+
+        foreach ($siteIds as $siteId) {
+            SiteUserAccess::create(['site_id' => $siteId, 'user_id' => $userId, 'role' => 'client_viewer']);
+        }
+    }
+
 }

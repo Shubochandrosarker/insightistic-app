@@ -82,7 +82,7 @@ PROMPT;
                     'openrouter_free' => $this->openAiStream($userMessage, $attemptDelta, $this->openRouterConfig(false), 'openrouter'),
                     'openrouter_paid' => $this->openAiStream($userMessage, $attemptDelta, $this->openRouterConfig(true), 'openrouter'),
                     'gateway' => $this->gateway($userMessage, $attemptDelta, $org),
-                    default => $this->ruleAnswer($question, $promptContext, $attemptDelta),
+                    default => $this->ruleAnswer($question, $promptContext, $attemptDelta, ! $org->allow_external_ai ? 'disabled' : null),
                 };
 
                 if (trim((string) ($result['content'] ?? '')) !== '') {
@@ -104,7 +104,7 @@ PROMPT;
             }
         }
 
-        return $this->ruleAnswer($question, $promptContext, $onDelta);
+        return $this->ruleAnswer($question, $promptContext, $onDelta, ! $org->allow_external_ai ? 'disabled' : 'provider_failed');
     }
 
     public function mode(Organization $org): string
@@ -305,12 +305,17 @@ PROMPT;
      * Deterministic $0 fallback: summarizes the REAL evidence bundle only.
      * Clearly labeled as rule-based; no external call, no invention.
      */
-    private function ruleAnswer(string $question, string $promptContext, callable $onDelta): array
+    private function ruleAnswer(string $question, string $promptContext, callable $onDelta, ?string $reason = null): array
     {
         $hasAnalytics = str_contains($promptContext, 'ANALYTICS DATA');
         $hasDocs = str_contains($promptContext, '<documents>');
 
-        $lines = ['**Rule-based answer** (no external AI configured for this organization).'];
+        $headline = match ($reason) {
+            'disabled' => '**Evidence-only answer** (external AI is disabled for this organization).',
+            'provider_failed' => '**Evidence-only answer** (external AI did not return a usable response).',
+            default => '**Evidence-only answer** (no external AI provider is configured).',
+        };
+        $lines = [$headline];
 
         if (! $hasAnalytics && ! $hasDocs) {
             $lines[] = 'No analytics data or knowledge documents matched this question yet. '
@@ -323,8 +328,11 @@ PROMPT;
             if ($hasAnalytics && preg_match('/ANALYTICS DATA[^:]*:\n(\{.*?\})(?:\n\n|$)/s', $promptContext, $m)) {
                 $lines[] = "```json\n".mb_substr($m[1], 0, 2000)."\n```";
             }
-            $lines[] = '_Configure an AI provider (Settings → AI) to get narrative analysis, '
-                .'trends and recommendations on top of this data._';
+            $lines[] = $reason === 'disabled'
+                ? '_Enable external AI in the organization privacy settings if narrative analysis is wanted._'
+                : ($reason === 'provider_failed'
+                    ? '_The verified evidence is still shown. Check Settings → AI and provider health before retrying narrative analysis._'
+                    : '_Configure an AI provider (Settings → AI) to get narrative analysis, trends and recommendations on top of this data._');
             $confidence = 'low';
             $limitations = 'Rule-based mode lists matched evidence without model reasoning.';
         }

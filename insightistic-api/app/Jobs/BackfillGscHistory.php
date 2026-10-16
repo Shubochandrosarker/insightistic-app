@@ -96,6 +96,16 @@ class BackfillGscHistory implements ShouldQueue
         $from = CarbonImmutable::parse($this->from)->startOfDay();
         $to = CarbonImmutable::parse($this->to)->startOfDay();
 
+        // Search Console exposes a rolling 16-month window. A serialized
+        // backfill can outlive that provider window before an operator
+        // retries it, so clamp stale jobs before the first API request.
+        $providerFloor = CarbonImmutable::today(
+            $this->site->timezone ?: config('app.timezone', 'UTC')
+        )->subMonths(16);
+        if ($from->lt($providerFloor)) {
+            $from = $providerFloor;
+        }
+
         if ($this->force) {
             // A forced refresh re-walks the whole requested range.
             $state->forceFill(['covered_from' => null, 'covered_to' => null])->save();
@@ -128,7 +138,7 @@ class BackfillGscHistory implements ShouldQueue
             do {
                 $chunkEnd = $cursor->addDays(29)->min($to);
 
-                $gsc->fetchDailyWindow($this->site, $credential, $cursor->toDateString(), $chunkEnd->toDateString(), $dimension);
+                $this->fetchChunk($gsc, $credential, $cursor, $chunkEnd, $dimension);
 
                 // Advance the coverage cursor only after the chunk fully
                 // landed, so a crash mid-window replays that whole window.
@@ -147,5 +157,70 @@ class BackfillGscHistory implements ShouldQueue
 
             throw $e;
         }
+    }
+
+    /**
+     * Search Console can reject a valid local window when its reporting data
+     * currently ends before the requested end date. Split that window into
+     * days so available dates still land and only provider-unavailable days
+     * are skipped instead of retrying the entire backfill forever.
+     */
+    private function fetchChunk(
+        GscClient $gsc,
+        DataSourceCredential $credential,
+        CarbonImmutable $from,
+        CarbonImmutable $to,
+        string $dimension,
+    ): void {
+        try {
+            $gsc->fetchDailyWindow(
+                $this->site,
+                $credential,
+                $from->toDateString(),
+                $to->toDateString(),
+                $dimension,
+            );
+
+            return;
+        } catch (IntegrationFailure $e) {
+            if (! $this->isProviderDateRangeFailure($e)) {
+                throw $e;
+            }
+        }
+
+        $skipped = [];
+        for ($day = $from; $day->lte($to); $day = $day->addDay()) {
+            try {
+                $gsc->fetchDailyWindow(
+                    $this->site,
+                    $credential,
+                    $day->toDateString(),
+                    $day->toDateString(),
+                    $dimension,
+                );
+            } catch (IntegrationFailure $e) {
+                if (! $this->isProviderDateRangeFailure($e)) {
+                    throw $e;
+                }
+
+                $skipped[] = $day->toDateString();
+            }
+        }
+
+        if ($skipped !== []) {
+            logger()->warning('Search Console omitted provider-unavailable backfill dates.', [
+                'site_id'   => $this->site->id,
+                'dimension' => $dimension,
+                'dates'     => $skipped,
+            ]);
+        }
+    }
+
+    private function isProviderDateRangeFailure(IntegrationFailure $e): bool
+    {
+        return str_contains(
+            strtolower($e->getMessage()),
+            'invalid date range defined by startdate and enddate',
+        );
     }
 }

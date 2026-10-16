@@ -214,9 +214,9 @@ class GscImportService
         // Use the same three-day provider lag as the regular GSC sync. The
         // resulting range is deterministic and never ends after the data
         // source's reliable reporting window.
-        $backfillTo = now($site->timezone ?: config('app.timezone', 'UTC'))->subDays(3);
-        $backfillFrom = $backfillTo->copy()->subMonths(16)->toDateString();
-        $backfillTo = $backfillTo->toDateString();
+        $timezone = $site->timezone ?: config('app.timezone', 'UTC');
+        $backfillFrom = today($timezone)->subMonths(16)->toDateString();
+        $backfillTo = today($timezone)->subDays(3)->toDateString();
         Queue::push(new BackfillGscHistory($site, 'queries', $backfillFrom, $backfillTo));
         Queue::push(new BackfillGscHistory($site, 'pages', $backfillFrom, $backfillTo));
 

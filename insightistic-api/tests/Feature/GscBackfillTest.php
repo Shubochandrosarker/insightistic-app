@@ -11,6 +11,7 @@ use App\Services\Integrations\GscClient;
 use App\Services\Integrations\IntegrationFailure;
 use App\Support\SeoGrain;
 use Illuminate\Http\Client\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Http;
 
 /**
@@ -118,6 +119,61 @@ it('rejects reversed or malformed date windows before contacting Search Console'
     ))->toThrow(IntegrationFailure::class, 'must use YYYY-MM-DD');
 
     Http::assertNothingSent();
+});
+
+it('clamps stale serialized backfills to Search Console rolling history', function () {
+    [, $org] = makeOrgUser('seo-grain-stale-job@example.com');
+    $site = gscGrainSite($org);
+
+    Carbon::setTestNow('2026-10-16 12:00:00');
+    gscGrainCredential($site);
+    $windows = [];
+    Http::fake(function (Request $request) use (&$windows) {
+        $windows[] = [$request['startDate'], $request['endDate']];
+
+        return Http::response(['rows' => []]);
+    });
+
+    (new BackfillGscHistory($site, 'queries', '2025-05-31', '2026-09-23'))
+        ->handle(app(GscClient::class));
+
+    expect($windows)->toHaveCount(16)
+        ->and($windows[0])->toBe(['2025-06-16', '2025-07-15'])
+        ->and($windows[array_key_last($windows)])->toBe(['2026-09-09', '2026-09-23']);
+
+    Carbon::setTestNow();
+});
+
+it('splits a provider-rejected window and skips only unavailable dates', function () {
+    [, $org] = makeOrgUser('seo-grain-provider-range@example.com');
+    $site = gscGrainSite($org);
+    gscGrainCredential($site);
+
+    $requests = [];
+    Http::fake(function (Request $request) use (&$requests) {
+        $requests[] = [$request['startDate'], $request['endDate']];
+
+        if (count($requests) === 1 || $request['startDate'] === '2026-09-02') {
+            return Http::response([
+                'error' => ['message' => 'Invalid date range defined by startDate and endDate. End date cannot precede the start date.'],
+            ], 400);
+        }
+
+        return Http::response(['rows' => []]);
+    });
+
+    (new BackfillGscHistory($site, 'queries', '2026-09-01', '2026-09-03'))
+        ->handle(app(GscClient::class));
+
+    expect($requests)->toBe([
+        ['2026-09-01', '2026-09-03'],
+        ['2026-09-01', '2026-09-01'],
+        ['2026-09-02', '2026-09-02'],
+        ['2026-09-03', '2026-09-03'],
+    ]);
+
+    $state = SeoBackfillState::where('site_id', $site->id)->where('dimension', 'queries')->firstOrFail();
+    expect($state->status)->toBe('done');
 });
 
 it('writes daily-grain rows on sync and replays them idempotently', function () {

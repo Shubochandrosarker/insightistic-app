@@ -410,6 +410,12 @@ class GscClient
                 continue;
             }
 
+            // Search Console can return distinct URLs that normalize to the
+            // same stored page path (for example, tracking-query variants).
+            // PostgreSQL rejects duplicate conflict keys within one UPSERT
+            // statement, so coalesce the normalized rows before writing them.
+            $payload = $this->coalesceDailyGrainPayload($payload, $dimension);
+
             $update = ['clicks', 'impressions', 'position'];
             if ($dimension !== 'query_page') {
                 $update[] = 'ctr';
@@ -430,6 +436,54 @@ class GscClient
         }
 
         return $written;
+    }
+
+    /**
+     * Merge rows that collapse onto the same daily-grain key after URL/hash
+     * normalization. Search Console metrics are additive; average position is
+     * weighted by impressions and CTR is recalculated from the totals.
+     *
+     * @param array<int,array<string,mixed>> $payload
+     * @return array<int,array<string,mixed>>
+     */
+    private function coalesceDailyGrainPayload(array $payload, string $dimension): array
+    {
+        $merged = [];
+
+        foreach ($payload as $row) {
+            $key = $dimension === 'query_page'
+                ? implode('|', [$row['site_id'], $row['date'], $row['query_hash'], $row['page_hash']])
+                : implode('|', [$row['site_id'], $row['date'], $dimension === 'queries' ? $row['query_hash'] : $row['page_hash']]);
+
+            if (! isset($merged[$key])) {
+                $merged[$key] = $row;
+                continue;
+            }
+
+            $existing = $merged[$key];
+            $existingImpressions = (int) $existing['impressions'];
+            $incomingImpressions = (int) $row['impressions'];
+            $totalImpressions = $existingImpressions + $incomingImpressions;
+
+            $existing['clicks'] += (int) $row['clicks'];
+            $existing['impressions'] = $totalImpressions;
+            $existing['position'] = $totalImpressions > 0
+                ? round((
+                    ((float) $existing['position'] * $existingImpressions)
+                    + ((float) $row['position'] * $incomingImpressions)
+                ) / $totalImpressions, 2)
+                : round(((float) $existing['position'] + (float) $row['position']) / 2, 2);
+
+            if ($dimension !== 'query_page') {
+                $existing['ctr'] = $totalImpressions > 0
+                    ? round($existing['clicks'] / $totalImpressions, 4)
+                    : 0;
+            }
+
+            $merged[$key] = $existing;
+        }
+
+        return array_values($merged);
     }
 
     /** GSC's hard per-call row cap; config only exists so tests can shrink it. */

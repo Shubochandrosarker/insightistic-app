@@ -171,6 +171,30 @@ it('writes daily-grain rows on sync and replays them idempotently', function () 
         ->and($pair->clicks)->toBe(4);
 });
 
+it('coalesces normalized duplicate page keys before the postgres upsert', function () {
+    [, $org] = makeOrgUser('seo-grain-normalized-duplicates@example.com');
+    $site = gscGrainSite($org);
+    $credential = gscGrainCredential($site);
+
+    Http::fake([
+        'www.googleapis.com/webmasters/*' => Http::response(['rows' => [
+            ['keys' => ['2026-07-01', 'https://grain.example.com/landing?utm=one'], 'clicks' => 5, 'impressions' => 200, 'ctr' => 0.025, 'position' => 8.1],
+            ['keys' => ['2026-07-01', 'https://grain.example.com/landing?utm=two'], 'clicks' => 3, 'impressions' => 100, 'ctr' => 0.03, 'position' => 9.1],
+        ]]),
+    ]);
+
+    $written = app(GscClient::class)->fetchDailyWindow($site, $credential, '2026-07-01', '2026-07-01', 'pages');
+    $page = SeoPageDaily::where('site_id', $site->id)->firstOrFail();
+
+    expect($written)->toBe(1)
+        ->and(SeoPageDaily::where('site_id', $site->id)->count())->toBe(1)
+        ->and($page->page_path)->toBe('/landing')
+        ->and($page->clicks)->toBe(8)
+        ->and($page->impressions)->toBe(300)
+        ->and($page->ctr)->toBe(0.0267)
+        ->and($page->position)->toBe(8.43);
+});
+
 it('paginates a daily window when the first page returns exactly the row limit', function () {
     [$user, $org] = makeOrgUser('seo-grain-page@example.com');
     $site = gscGrainSite($org);

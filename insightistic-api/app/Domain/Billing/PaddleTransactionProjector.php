@@ -2,6 +2,7 @@
 
 namespace App\Domain\Billing;
 
+use App\Domain\Billing\Exceptions\UnresolvableOrganizationException;
 use App\Models\BillingTransaction;
 use App\Models\EntitlementGrant;
 use App\Models\Organization;
@@ -67,9 +68,7 @@ final class PaddleTransactionProjector
                 'subscription_id'         => $payload['subscription_id'] ?? null,
             ]);
 
-            throw new \RuntimeException(
-                'Paddle transaction ' . ($payload['id'] ?? '?') . ' has no resolvable organization.'
-            );
+            throw new UnresolvableOrganizationException('Paddle transaction', (string) ($payload['id'] ?? '?'));
         }
 
         $totals = $payload['details']['totals'] ?? [];

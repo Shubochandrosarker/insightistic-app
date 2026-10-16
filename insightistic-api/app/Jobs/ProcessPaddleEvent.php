@@ -2,6 +2,7 @@
 
 namespace App\Jobs;
 
+use App\Domain\Billing\Exceptions\UnresolvableOrganizationException;
 use App\Domain\Billing\PaddleEventProcessor;
 use App\Models\BillingEvent;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -41,13 +42,24 @@ class ProcessPaddleEvent implements ShouldQueue
                 'processed_at'      => now(),
             ]);
         } catch (\Throwable $e) {
-            // Preserve what happened for the operator; the final attempt
-            // marks the event failed instead of leaving it looking pending.
+            // Missing tenant metadata is terminal: retrying cannot infer the
+            // correct organization and must never duplicate billing effects.
+            $terminal = $e instanceof UnresolvableOrganizationException;
+
             $this->event->update([
                 'attempts'          => $this->event->attempts + 1,
                 'last_error'        => mb_substr($e->getMessage(), 0, 4000),
-                'processing_status' => $this->attempts() >= $this->tries ? 'failed' : 'pending',
+                'processing_status' => $terminal || $this->attempts() >= $this->tries ? 'failed' : 'pending',
             ]);
+
+            if ($terminal) {
+                logger()->warning('Paddle event marked terminal after organization resolution failed.', [
+                    'event_id'          => $this->event->id,
+                    'provider_event_id' => $this->event->provider_event_id,
+                ]);
+
+                return;
+            }
 
             throw $e; // Rethrow so Laravel retries/backoffs normally.
         }

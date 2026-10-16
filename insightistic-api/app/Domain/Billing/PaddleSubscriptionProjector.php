@@ -2,6 +2,7 @@
 
 namespace App\Domain\Billing;
 
+use App\Domain\Billing\Exceptions\UnresolvableOrganizationException;
 use App\Models\Organization;
 use App\Models\PlanPrice;
 use App\Models\Subscription;
@@ -54,9 +55,7 @@ final class PaddleSubscriptionProjector
                 'customer_id'              => $payload['customer_id'] ?? null,
             ]);
 
-            throw new \RuntimeException(
-                'Paddle subscription ' . ($payload['id'] ?? '?') . ' has no resolvable organization.'
-            );
+            throw new UnresolvableOrganizationException('Paddle subscription', (string) ($payload['id'] ?? '?'));
         }
 
         $status = $this->localStatus($payload['status'] ?? null);

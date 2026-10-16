@@ -187,6 +187,28 @@ it('marks an accepted Paddle event processed after the queued projector succeeds
         ->and($event->fresh()->attempts)->toBe(0);
 });
 
+it('marks a Paddle event with no organization as terminal without retrying it', function () {
+    config()->set('billing.paddle.webhook_secret', 'pdlwh_test');
+    Queue::fake();
+
+    $data = paddleTransactionData('lifetime', ['custom_data' => null]);
+    [$body, $sig] = signedPaddleDelivery(
+        paddleEvent('transaction.completed', $data, 'evt_missing_org'),
+        'pdlwh_test'
+    );
+
+    postPaddleWebhook($body, $sig)->assertOk();
+
+    $event = BillingEvent::firstOrFail();
+    (new ProcessPaddleEvent($event, $data))->handle(app(PaddleEventProcessor::class));
+
+    $event = $event->fresh();
+    expect($event->processing_status)->toBe('failed')
+        ->and($event->last_error)->toContain('no resolvable organization')
+        ->and($event->attempts)->toBe(1)
+        ->and($event->processed_at)->toBeNull();
+});
+
 it('processes a redelivered event only once', function () {
     config()->set('billing.paddle.webhook_secret', 'pdlwh_test');
     Queue::fake();

@@ -111,7 +111,9 @@ class BackfillGscHistory implements ShouldQueue
             $state->forceFill(['covered_from' => null, 'covered_to' => null])->save();
         } elseif ($state->covered_to !== null) {
             // Resume: skip dates that already landed in an earlier attempt.
-            $resume = $state->covered_to->addDay();
+            // The date cast returns Illuminate\Support\Carbon; normalize it
+            // back to the immutable type used by the chunk cursor.
+            $resume = CarbonImmutable::parse($state->covered_to->toDateString())->addDay();
             if ($resume->gt($from)) {
                 $from = $resume;
             }

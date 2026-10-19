@@ -26,6 +26,20 @@ class PaddleCatalogSeeder extends Seeder
      * Amounts are the source of truth for what was created in Paddle.
      */
     private const PRICES = [
+        // Current canonical recurring catalog: one Paddle product
+        // "Insightistic SaaS" with four plans and monthly/yearly prices.
+        // Keep the older IDs below as historical mappings for existing
+        // subscriptions and webhook replay; checkout selection explicitly
+        // prefers these catalog_product-tagged rows.
+        'pri_01m5a6ty51a3a2kqbhv2j66rmt' => ['starter',    'monthly', 2900,   ['catalog_product' => 'insightistic_saas', 'catalog_version' => '2026-10-19']],
+        'pri_01m5a6vvw9xwxe90j50b1fmcv9' => ['starter',    'yearly',  29000,  ['catalog_product' => 'insightistic_saas', 'catalog_version' => '2026-10-19']],
+        'pri_01m5a6v4ttsjttj1wgvaqwrpcg' => ['growth',     'monthly', 6900,   ['catalog_product' => 'insightistic_saas', 'catalog_version' => '2026-10-19']],
+        'pri_01m5a6w86sjk368tw2xkk8a382' => ['growth',     'yearly',  69000,  ['catalog_product' => 'insightistic_saas', 'catalog_version' => '2026-10-19']],
+        'pri_01m5a6v9y9yjphm37s2kgsj5yb' => ['agency',     'monthly', 14900,  ['catalog_product' => 'insightistic_saas', 'catalog_version' => '2026-10-19']],
+        'pri_01m5a6wkzn2t2wpzkh9a1w266y' => ['agency',     'yearly',  149000, ['catalog_product' => 'insightistic_saas', 'catalog_version' => '2026-10-19']],
+        'pri_01m5a6vf0hqt6c9bydrjdvbsmd' => ['agency_pro', 'monthly', 29900,  ['catalog_product' => 'insightistic_saas', 'catalog_version' => '2026-10-19']],
+        'pri_01m5a6wzgk0vpaxadscp1ym79g' => ['agency_pro', 'yearly',  299000, ['catalog_product' => 'insightistic_saas', 'catalog_version' => '2026-10-19']],
+
         // Recurring (Paddle product "Insightistic SaaS — <Plan>")
         'pri_01m2y7dpx1tqvsmnepav833pjc' => ['starter',    'monthly',     2900,   []],
         'pri_01m2y7dqcnwnwtnzmxt5zxq0fn' => ['starter',    'yearly',      29000,  []],

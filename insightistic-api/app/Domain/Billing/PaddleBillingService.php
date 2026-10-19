@@ -77,9 +77,17 @@ final class PaddleBillingService
         // Keep the selector portable across the supported database drivers;
         // metadata_json is already a tiny, bounded credit-pack catalog.
         $prices = $priceQuery->get();
-        $price = $pack
-            ? $prices->first(fn (PlanPrice $candidate): bool => (int) ($candidate->metadata_json['credits'] ?? 0) === (int) $pack['credits'])
-            : $prices->first();
+        if ($pack) {
+            $price = $prices->first(
+                fn (PlanPrice $candidate): bool => (int) ($candidate->metadata_json['credits'] ?? 0) === (int) $pack['credits']
+            );
+        } else {
+            // The old per-plan Paddle products remain mapped for history, but
+            // all new recurring checkouts must use the canonical unified SaaS
+            // product. The metadata marker makes this deterministic even
+            // while old subscriptions still reference their original price.
+            $price = $this->preferredCurrentCatalogPrice($prices);
+        }
 
         if (! $price) {
             $this->ltdCampaign->release($reservation);
@@ -160,13 +168,15 @@ final class PaddleBillingService
             ->where('provider_price_id', $sub->provider_price_id)
             ->value('kind');
 
-        $price = PlanPrice::query()
+        $prices = PlanPrice::query()
             ->where('provider', 'paddle')
             ->where('kind', in_array($kind, ['monthly', 'yearly'], true) ? $kind : 'monthly')
             ->where('currency', config('billing.paddle.default_currency', 'USD'))
             ->where('is_active', true)
             ->whereHas('plan', fn ($query) => $query->where('slug', $planSlug)->where('is_active', true))
-            ->first();
+            ->get();
+
+        $price = $this->preferredCurrentCatalogPrice($prices);
 
         if (! $price) {
             throw new BillingConfigurationException('price_not_configured', 'This plan has no Paddle price configured for the change.');
@@ -187,5 +197,13 @@ final class PaddleBillingService
             ->whereNotNull('provider_subscription_id')
             ->orderByDesc('id')
             ->firstOrFail();
+    }
+
+    /** Prefer the current unified SaaS Paddle catalog over historical rows. */
+    private function preferredCurrentCatalogPrice(\Illuminate\Support\Collection $prices): ?PlanPrice
+    {
+        return $prices->first(
+            fn (PlanPrice $candidate): bool => ($candidate->metadata_json['catalog_product'] ?? null) === 'insightistic_saas'
+        ) ?? $prices->first();
     }
 }

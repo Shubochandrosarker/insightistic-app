@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Organization;
+use App\Models\EntitlementGrant;
 use App\Models\Plan;
 use App\Models\Subscription;
 use Illuminate\Support\Carbon;
@@ -146,6 +147,12 @@ class StripeWebhookProcessor
         if ($plan) {
             $sub->plan_id = $plan->id;
             $org->plan_id = $plan->id;
+            EntitlementGrant::withoutGlobalScope('organization')
+                ->where('organization_id', $org->id)
+                ->where('source', 'manual')
+                ->where('source_reference', 'admin_plan_override:' . $org->id)
+                ->whereNull('revoked_at')
+                ->update(['revoked_at' => now()]);
         }
         $sub->save();
 

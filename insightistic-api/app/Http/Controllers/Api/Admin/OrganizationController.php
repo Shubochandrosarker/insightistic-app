@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\Admin;
 
 use App\Models\AiInsight;
 use App\Models\ClientReport;
+use App\Models\EntitlementGrant;
 use App\Models\Organization;
 use App\Models\Plan;
 use App\Models\Site;
@@ -316,6 +317,29 @@ class OrganizationController extends AdminController
         }
         $org->save();
 
+        // Organization.plan_id is the administrative record, but an active
+        // subscription normally has precedence in EntitlementResolver. Keep
+        // an explicit, auditable admin override so a support plan assignment
+        // immediately reaches the owner's dashboard and plugin entitlements
+        // without pretending that Paddle/Stripe was charged or changed.
+        if (! empty($data['plan'])) {
+            EntitlementGrant::withoutGlobalScope('organization')->updateOrCreate(
+                [
+                    'source' => 'manual',
+                    'source_reference' => 'admin_plan_override:' . $org->id,
+                ],
+                [
+                    'organization_id' => $org->id,
+                    'plan_id' => $org->plan_id,
+                    'features_json' => null,
+                    'limits_json' => null,
+                    'starts_at' => now(),
+                    'ends_at' => null,
+                    'revoked_at' => null,
+                ],
+            );
+        }
+
         if ($ownerId) {
             $org->users()->syncWithoutDetaching([$ownerId => ['role' => 'owner']]);
             $org->users()->wherePivot('role', 'owner')->where('users.id', '!=', $ownerId)
@@ -327,7 +351,7 @@ class OrganizationController extends AdminController
         // tab, plugin validate/activate) — this org's licenses would report
         // stale entitlements to anything reading them in between.
         if (! empty($data['plan']) || ! empty($data['status'])) {
-            $this->licenses->syncForOrganization($org->fresh());
+            $this->licenses->syncForOrganization($org->fresh(['plan']));
         }
 
         $this->audit->log($request, 'organization.update', 'Organization', $org->id, $before, $org->only(['name', 'owner_user_id', 'plan_id', 'status', 'trial_ends_at', 'internal_notes']));

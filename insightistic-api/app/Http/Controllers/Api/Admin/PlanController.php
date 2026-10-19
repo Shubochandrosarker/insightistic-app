@@ -23,8 +23,14 @@ class PlanController extends AdminController
 
     public function index()
     {
+        $slugs = config('commercial.admin_plan_slugs', []);
+
         return response()->json([
-            'plans' => Plan::withCount('organizations')->orderBy('sort_order')->orderBy('price_monthly')->get(),
+            'plans' => Plan::withCount('organizations')
+                ->whereIn('slug', $slugs)
+                ->orderBy('sort_order')
+                ->orderBy('price_monthly')
+                ->get(),
         ]);
     }
 

@@ -124,6 +124,41 @@ it('uses the resolved plan allowance before charging the published AI tariff', f
         ->toBe(['charged' => 'insight_credits', 'cost' => 100]);
 });
 
+it('tops up the current monthly allowance after a plan upgrade without duplicating it', function () {
+    [, $org] = makeOrgUser('wallet-plan-upgrade@example.com', [
+        'monthly_ai_credits' => 100,
+    ]);
+    $wallet = app(CreditWallet::class);
+
+    expect($wallet->summary($org)['monthly_included']['granted'])->toBe(100);
+
+    $org->plan_id = Plan::create([
+        'name' => 'Upgrade plan',
+        'slug' => 'upgrade-plan-'.uniqid(),
+        'site_limit' => 10,
+        'user_limit' => 3,
+        'ai_insight_limit' => 100,
+        'report_limit' => 20,
+        'limits_json' => ['monthly_ai_credits' => 250],
+        'is_active' => true,
+    ])->id;
+    $org->save();
+
+    $summary = $wallet->summary($org);
+    expect($summary['monthly_included']['granted'])->toBe(250)
+        ->and($summary['monthly_included']['remaining'])->toBe(250)
+        ->and(CreditLedgerEntry::withoutGlobalScope('organization')
+            ->where('organization_id', $org->id)
+            ->where('source_type', 'monthly_plan_adjustment')
+            ->count())->toBe(1);
+
+    $wallet->summary($org);
+    expect(CreditLedgerEntry::withoutGlobalScope('organization')
+        ->where('organization_id', $org->id)
+        ->where('source_type', 'monthly_plan_adjustment')
+        ->count())->toBe(1);
+});
+
 it('reverses available purchased credits once after a verified full refund', function () {
     [, $org] = makeOrgUser('wallet-refund@example.com');
     $plan = Plan::create(['name' => 'Refund pack', 'slug' => 'refund-pack', 'is_active' => false]);

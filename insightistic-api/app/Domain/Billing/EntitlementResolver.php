@@ -46,17 +46,27 @@ final class EntitlementResolver
         $source = 'none';
         $status = $this->statusEcho($organization, $subscription);
 
-        if ($override) {
+        // A platform admin can assign a support/complementary plan without
+        // changing the customer's provider subscription. This explicit grant
+        // is higher precedence than provider state, is auditable, and is
+        // cleared when a new provider subscription projection arrives.
+        $adminOverride = $this->adminPlanOverrideFor($organization);
+        if ($adminOverride?->plan_id) {
+            $plan = Plan::find($adminOverride->plan_id);
+            $source = $plan ? 'manual' : 'none';
+        }
+
+        if (! $plan && $override) {
             // Admin override: the subscription's plan applies regardless of
             // its own status (suspension was already handled above).
             $plan = $subscription->plan_id ? Plan::find($subscription->plan_id) : null;
             $source = 'subscription';
             $status = 'override';
-        } elseif (
+        } elseif (! $plan && (
             $subscription
             && in_array($subscription->status, self::ACTIVE_SUBSCRIPTION_STATUSES, true)
             && $subscription->plan_id
-        ) {
+        )) {
             $plan = Plan::find($subscription->plan_id);
             $source = $plan ? 'subscription' : 'none';
         }
@@ -171,6 +181,20 @@ final class EntitlementResolver
             ->get()
             ->sortBy(fn (EntitlementGrant $grant) => self::GRANT_SOURCE_ORDER[$grant->source] ?? 99)
             ->values();
+    }
+
+    private function adminPlanOverrideFor(Organization $organization): ?EntitlementGrant
+    {
+        return EntitlementGrant::withoutGlobalScope('organization')
+            ->where('organization_id', $organization->id)
+            ->where('source', 'manual')
+            ->where('source_reference', 'admin_plan_override:' . $organization->id)
+            ->whereNotNull('plan_id')
+            ->whereNull('revoked_at')
+            ->where(fn ($query) => $query->whereNull('starts_at')->orWhere('starts_at', '<=', now()))
+            ->where(fn ($query) => $query->whereNull('ends_at')->orWhere('ends_at', '>', now()))
+            ->latest('id')
+            ->first();
     }
 
     /** Status echo for the payload: subscription first, org fallback, 'free' when nothing applies. */

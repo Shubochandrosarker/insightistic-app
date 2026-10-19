@@ -28,12 +28,9 @@ final class CreditWallet
             // The organization row serializes lazy grant creation for the
             // first concurrent requests in a new billing period.
             $lockedOrganization = Organization::whereKey($organization->id)->lockForUpdate()->firstOrFail();
-            $exists = CreditLedgerEntry::withoutGlobalScope('organization')
+            $entries = CreditLedgerEntry::withoutGlobalScope('organization')
                 ->where('organization_id', $lockedOrganization->id)->where('bucket', 'monthly_included')
-                ->where('period_key', $period)->where('source_type', 'monthly_grant')->exists();
-            if ($exists) {
-                return;
-            }
+                ->where('period_key', $period)->get();
 
             $resolved = $this->entitlements->resolve($lockedOrganization);
             $amount = (int) ($resolved['limits']['monthly_ai_credits'] ?? 0);
@@ -44,11 +41,25 @@ final class CreditWallet
                 return;
             }
 
+            $granted = (int) $entries
+                ->whereIn('source_type', ['monthly_grant', 'monthly_plan_adjustment'])
+                ->sum('amount_signed');
+            if ($granted >= $amount) {
+                return;
+            }
+
+            $grantAmount = $amount - $granted;
+            $planSlug = (string) ($resolved['plan']['slug'] ?? 'unknown');
+            $sourceType = $granted > 0 ? 'monthly_plan_adjustment' : 'monthly_grant';
+            $sourceReference = $granted > 0
+                ? $lockedOrganization->id . ':' . $period . ':plan-adjustment:' . $planSlug . ':' . $amount
+                : $lockedOrganization->id . ':' . $period;
+
             $this->ledger->grant(
-                $lockedOrganization, $amount, 'monthly_included_credits', 'monthly_grant',
-                $lockedOrganization->id . ':' . $period, 'monthly_included', $period,
+                $lockedOrganization, $grantAmount, $sourceType === 'monthly_grant' ? 'monthly_included_credits' : 'monthly_plan_upgrade', $sourceType,
+                $sourceReference, 'monthly_included', $period,
                 CarbonImmutable::now('UTC')->startOfMonth()->addMonth(),
-                ['plan_slug' => $resolved['plan']['slug'], 'catalog_version' => config('commercial.version')],
+                ['plan_slug' => $planSlug, 'catalog_version' => config('commercial.version')],
             );
         });
     }

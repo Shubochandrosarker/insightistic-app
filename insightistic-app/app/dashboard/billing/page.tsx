@@ -23,6 +23,18 @@ const PLANS = [
   { slug: "agency_pro", name: "Agency Pro", featured: false },
 ];
 
+const RECURRING_PLAN_SLUGS = new Set(["starter", "growth", "agency", "agency_pro"]);
+const UPGRADE_RANKS: Record<string, number> = {
+  free: 0,
+  starter: 10,
+  angel_solo: 20,
+  growth: 30,
+  angel_studio: 40,
+  agency: 50,
+  angel_agency: 60,
+  agency_pro: 70,
+};
+
 type PlanOption = { slug: string; name: string };
 type Phase = "idle" | "processing";
 
@@ -144,23 +156,6 @@ export default function BillingPage() {
       }, 250);
     }
   }, []);
-
-  // Live catalog names/featured flags win once loaded; the constant covers
-  // the window while /public/plans is loading or failed.
-  const planOptions: PlanOption[] = (() => {
-    const live = plansData?.plans;
-    if (!Array.isArray(live) || live.length === 0) return PLANS;
-    return live
-      .filter((p: any) => p?.slug && p?.is_purchasable !== false)
-      .map((p: any) => {
-        const name = String(p.name ?? p.slug);
-        return {
-          slug: String(p.slug),
-          name:
-            p.is_featured && !name.includes("Best Value") ? `${name} — Best Value` : name,
-        };
-      });
-  })();
 
   /**
    * Paddle webhook, not the checkout callback, makes a subscription real.
@@ -320,6 +315,22 @@ export default function BillingPage() {
     finally { setBusy(false); }
   }
 
+  // Keep the selected checkout plan valid when the authenticated account or
+  // live catalog arrives after the initial render.
+  useEffect(() => {
+    if (!data) return;
+    const currentSlug = String(lifetimeGrantOf(data)?.plan_slug || data.plan?.slug || "free");
+    const currentRank = UPGRADE_RANKS[currentSlug] ?? 0;
+    const live = Array.isArray(plansData?.plans) && plansData.plans.length ? plansData.plans : PLANS;
+    const options = live.filter((p: any) => {
+      const slug = String(p?.slug || "");
+      return RECURRING_PLAN_SLUGS.has(slug)
+        && p?.is_purchasable !== false
+        && (UPGRADE_RANKS[slug] ?? 0) > currentRank;
+    });
+    if (options.length && !options.some((p: any) => String(p.slug) === plan)) setPlan(String(options[0].slug));
+  }, [data, plansData, plan]);
+
   if (loading || !data) return <Spinner />;
   const usage = data.usage || {};
   const planObj = data.plan || {};
@@ -335,6 +346,36 @@ export default function BillingPage() {
         : null;
   const hasSubscription = !!data.subscription?.stripe_subscription_id || !!provider;
   const lifetimeGrant = lifetimeGrantOf(data);
+  const currentSlug = String(lifetimeGrant?.plan_slug || planObj.slug || "free");
+  const currentRank = UPGRADE_RANKS[currentSlug] ?? 0;
+
+  // The API is the source of truth, but only the four recurring products can
+  // be opened through the subscription checkout. Filter to plans strictly
+  // above the current entitlement so a lifetime Angel customer never sees a
+  // lower Growth/Starter choice as an apparent upgrade.
+  const liveRecurring = Array.isArray(plansData?.plans) && plansData.plans.length
+    ? plansData.plans
+    : PLANS;
+  const planOptions: PlanOption[] = liveRecurring
+    .filter((p: any) => {
+      const slug = String(p?.slug || "");
+      return RECURRING_PLAN_SLUGS.has(slug)
+        && p?.is_purchasable !== false
+        && (UPGRADE_RANKS[slug] ?? 0) > currentRank;
+    })
+    .map((p: any) => {
+      const name = String(p.name ?? p.slug);
+      return {
+        slug: String(p.slug),
+        name: p.is_featured && !name.includes("Best Value") ? `${name} — Best Value` : name,
+      };
+    });
+  const selectedPlanAvailable = planOptions.some((p) => p.slug === plan);
+  const isLifetimePlan = Boolean(lifetimeGrant) || currentSlug.startsWith("angel_") || planObj.limits?.billing_model === "lifetime";
+  const monthlyCreditsGranted = Number(data.credits?.monthly_included?.granted ?? planObj.limits?.monthly_ai_credits ?? 0);
+  const monthlyCreditsRemaining = Number(data.credits?.monthly_included?.remaining ?? 0);
+  const monthlyCreditsUsed = Math.max(0, monthlyCreditsGranted - monthlyCreditsRemaining);
+
   const campaign = plansData?.ltd?.campaign;
   const soldOut = campaign?.sold_out === true;
   const founderTiers = Array.isArray(plansData?.ltd?.plans) && plansData.ltd.plans.length
@@ -365,7 +406,7 @@ export default function BillingPage() {
           <div className="text-[11px] font-bold uppercase tracking-wide text-brand-700">Current plan</div>
           <div className="mt-1 flex items-baseline gap-2">
             <span className="text-3xl font-bold text-fg">{planObj.name || "Free trial"}</span>
-            {planObj.price_monthly != null && <span className="text-sm text-muted">{money0(Number(planObj.price_monthly) / 100)}/mo</span>}
+            {planObj.price_monthly != null && <span className="text-sm text-muted">{money0(Number(planObj.price_monthly) / 100)} {isLifetimePlan ? "one time · lifetime" : "/mo"}</span>}
           </div>
           <div className="mt-1 text-sm text-muted">
             Status: {data.organization?.status}
@@ -406,7 +447,7 @@ export default function BillingPage() {
 
         <Card title="Usage this period">
           <div className="space-y-4">
-            <UsageBar label="AI insights" used={usage.ai_insights?.used ?? 0} limit={usage.ai_insights?.limit ?? null} />
+            <UsageBar label="AI insight runs" used={usage.ai_insights?.used ?? 0} limit={usage.ai_insights?.limit ?? null} />
             <UsageBar label="Reports generated" used={usage.reports?.used ?? 0} limit={usage.reports?.limit ?? null} />
             <UsageBar label="Sites connected" used={sites.length} limit={planObj.site_limit ?? null} />
           </div>
@@ -414,12 +455,13 @@ export default function BillingPage() {
       </div>
 
       <Card className="mt-5" title="Insight Credits" subtitle="Monthly included credits refresh automatically; purchased credits do not expire.">
-        <div className="grid gap-4 sm:grid-cols-3">
-          <div><div className="text-xs text-muted">Monthly included remaining</div><div className="mt-1 text-2xl font-bold text-fg">{num(data.credits?.monthly_included?.remaining ?? 0)}</div></div>
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div><div className="text-xs text-muted">Included this month</div><div className="mt-1 text-2xl font-bold text-fg">{num(monthlyCreditsGranted)}</div></div>
+          <div><div className="text-xs text-muted">Included remaining</div><div className="mt-1 text-2xl font-bold text-fg">{num(monthlyCreditsRemaining)}</div></div>
+          <div><div className="text-xs text-muted">Used this month</div><div className="mt-1 text-2xl font-bold text-fg">{num(monthlyCreditsUsed)}</div></div>
           <div><div className="text-xs text-muted">Purchased remaining</div><div className="mt-1 text-2xl font-bold text-fg">{num(data.credits?.purchased?.remaining ?? 0)}</div></div>
-          <div><div className="text-xs text-muted">Total usable</div><div className="mt-1 text-2xl font-bold text-fg">{num(data.credits?.total_usable ?? 0)}</div></div>
         </div>
-        <p className="mt-3 text-xs text-muted">Next monthly reset: {data.credits?.next_reset_at ? new Date(data.credits.next_reset_at).toLocaleDateString() : "—"}. AI actions use included credits before purchased credits.</p>
+        <p className="mt-3 text-xs text-muted">Total usable now: {num(data.credits?.total_usable ?? monthlyCreditsRemaining)}. Next monthly reset: {data.credits?.next_reset_at ? new Date(data.credits.next_reset_at).toLocaleDateString() : "—"}. AI actions use included credits before purchased credits.</p>
       </Card>
 
       <Card id="change-plan" className="mt-5" title="Change plan">
@@ -429,7 +471,9 @@ export default function BillingPage() {
             <span className="mb-1.5 block text-xs font-semibold text-fg">Plan</span>
             <select value={plan} onChange={(e) => setPlan(e.target.value)}
               className="w-full rounded-xl border border-line bg-card2 px-3 py-2 text-sm text-fg outline-none focus:border-brand">
-              {planOptions.map((p) => <option key={p.slug} value={p.slug}>{p.name}</option>)}
+              {planOptions.length === 0
+                ? <option value="">No higher plan is available</option>
+                : planOptions.map((p) => <option key={p.slug} value={p.slug}>{p.name}</option>)}
             </select>
           </label>
           <label className="block">
@@ -446,7 +490,7 @@ export default function BillingPage() {
             <Spinner label={finishLabel} />
           ) : (
             <>
-              <Button onClick={checkout} disabled={busy}>{busy ? "Opening checkout…" : "Continue to checkout"}</Button>
+              <Button onClick={checkout} disabled={busy || !selectedPlanAvailable}>{busy ? "Opening checkout…" : planOptions.length ? "Continue to checkout" : "No upgrade available"}</Button>
               <p className="mt-2 text-xs text-muted">Secure checkout via {provider === "stripe" ? "Stripe" : "Paddle"}.</p>
             </>
           )}
@@ -471,7 +515,9 @@ export default function BillingPage() {
           </div>
         ) : (
           <div className="grid gap-4 sm:grid-cols-3">
-            {founderTiers.map((t: { slug: string; name: string; price: number; limits: string }) => (
+            {founderTiers
+              .filter((t: { slug: string }) => (UPGRADE_RANKS[t.slug] ?? 0) > currentRank)
+              .map((t: { slug: string; name: string; price: number; limits: string }) => (
               <div
                 key={t.slug}
                 className={`flex flex-col rounded-xl border bg-card2 p-4 ${
@@ -494,7 +540,10 @@ export default function BillingPage() {
                   Buy {t.name} — ${t.price}
                 </Button>
               </div>
-            ))}
+              ))}
+            {founderTiers.every((t: { slug: string }) => (UPGRADE_RANKS[t.slug] ?? 0) <= currentRank) && (
+              <p className="text-sm text-muted">No higher Founding Angel tier is available for this account.</p>
+            )}
           </div>
         )}
         <p className="mt-3 text-xs text-muted">

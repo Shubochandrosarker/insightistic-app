@@ -112,8 +112,43 @@ describe("Billing page checkout", () => {
 
     render(<BillingPage />);
 
-    expect(await screen.findByText("$299/mo")).toBeInTheDocument();
+    expect(await screen.findByText((content) => content.replace(/\s+/g, "") === "$299/mo")).toBeInTheDocument();
     expect(screen.queryByText(/trial ends/i)).not.toBeInTheDocument();
+  });
+
+  it("shows the catalog allowance and only higher plans for an Angel account", async () => {
+    apiMocks.apiGet.mockImplementation((path: string) =>
+      path === "/billing/subscription"
+        ? Promise.resolve({
+            organization: { status: "active" },
+            plan: {
+              slug: "angel_studio",
+              name: "Angel Studio",
+              price_monthly: 29900,
+              limits: { billing_model: "lifetime", monthly_ai_credits: 8000 },
+            },
+            usage: { ai_insights: { used: 9, limit: 100 }, reports: { used: 0, limit: 25 } },
+            credits: {
+              monthly_included: { granted: 8000, remaining: 6500 },
+              purchased: { remaining: 0 },
+              total_usable: 6500,
+            },
+            subscription: {},
+          })
+        : path === "/public/plans"
+          ? Promise.resolve(livePlans)
+          : Promise.resolve({}),
+    );
+
+    render(<BillingPage />);
+
+    expect(await screen.findByText((content) => content.includes("one time"))).toBeInTheDocument();
+    expect(screen.getByText("Included this month")).toBeInTheDocument();
+    expect(screen.getByText("Included remaining")).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "Agency" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "Agency Pro" })).toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: "Starter" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: "Growth — Best Value" })).not.toBeInTheDocument();
   });
 
   it("keeps the legacy Stripe redirect when Paddle is not enabled (501)", async () => {

@@ -172,6 +172,31 @@ it('honors an admin override on an otherwise inactive subscription', function ()
         ->and($resolved['limits']['sites'])->toBe(10);
 });
 
+it('lets an explicit admin plan assignment override an active provider subscription', function () {
+    $providerPlan = resolverPlan(['name' => 'Provider Growth', 'slug' => 'provider-growth-'.Str::random(8)]);
+    $adminPlan = resolverPlan(['name' => 'Admin Agency', 'slug' => 'admin-agency-'.Str::random(8), 'site_limit' => 30]);
+    $org = resolverOrg('resolver-admin-plan@example.com');
+    Subscription::create([
+        'organization_id' => $org->id,
+        'plan_id' => $providerPlan->id,
+        'status' => 'active',
+    ]);
+    EntitlementGrant::create([
+        'organization_id' => $org->id,
+        'plan_id' => $adminPlan->id,
+        'source' => 'manual',
+        'source_reference' => 'admin_plan_override:'.$org->id,
+        'starts_at' => now(),
+    ]);
+
+    $resolved = app(EntitlementResolver::class)->resolve($org);
+
+    expect($resolved['source'])->toBe('manual')
+        ->and($resolved['plan']['id'])->toBe($adminPlan->id)
+        ->and($resolved['plan']['slug'])->toBe($adminPlan->slug)
+        ->and($resolved['limits']['sites'])->toBe(30);
+});
+
 it('exposes limitFor and hasFeature as thin uncached wrappers', function () {
     $plan = resolverPlan(['features_json' => ['white_label']]);
     $org = resolverOrg('resolver-wrappers@example.com');

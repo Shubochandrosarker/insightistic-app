@@ -4,6 +4,7 @@ namespace App\Domain\Billing;
 
 use App\Domain\Billing\Exceptions\UnresolvableOrganizationException;
 use App\Models\Organization;
+use App\Models\EntitlementGrant;
 use App\Models\PlanPrice;
 use App\Models\Subscription;
 use App\Services\LicenseService;
@@ -108,6 +109,12 @@ final class PaddleSubscriptionProjector
         if ($plan) {
             $sub->plan_id = $plan->id;
             $org->plan_id = $plan->id;
+            EntitlementGrant::withoutGlobalScope('organization')
+                ->where('organization_id', $org->id)
+                ->where('source', 'manual')
+                ->where('source_reference', 'admin_plan_override:' . $org->id)
+                ->whereNull('revoked_at')
+                ->update(['revoked_at' => now()]);
         }
         $sub->save();
 

@@ -19,7 +19,8 @@ class PublicPlanController extends Controller
 {
     public function index(Request $request, LtdCampaignService $campaign)
     {
-        $plans = Plan::where(fn ($query) => $query->where('is_active', true)->orWhere('slug', 'free'))
+        $plans = Plan::whereIn('slug', array_merge(['free'], config('commercial.recurring_plan_slugs', [])))
+            ->where(fn ($query) => $query->where('is_active', true)->orWhere('slug', 'free'))
             ->orderBy('sort_order')
             ->orderBy('price_monthly')
             ->get()
@@ -38,6 +39,7 @@ class PublicPlanController extends Controller
                 // dashboard from promising allowances the plan registry does
                 // not actually grant.
                 'limits'           => [
+                    'billing_model'          => $p->limits_json['billing_model'] ?? 'subscription',
                     'crawl_pages_monthly'    => $p->limit('crawl_pages_monthly'),
                     'http_crawl_pages_monthly' => $p->limit('http_crawl_pages_monthly'),
                     'browser_rendering_minutes_monthly' => $p->limit('browser_rendering_minutes_monthly'),
@@ -56,6 +58,7 @@ class PublicPlanController extends Controller
             'sites' => $p['sites'], 'team_seats' => $p['seats'],
             'monthly_ai_credits' => $p['monthly_credits'], 'features' => $p['features'],
             'limits' => [
+                'billing_model' => 'lifetime',
                 'crawl_pages_monthly' => $p['crawl_pages'],
                 'browser_rendering_minutes_monthly' => $p['browser_minutes'],
                 'tracked_keywords' => $p['keywords'],

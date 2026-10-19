@@ -26,6 +26,28 @@ return [
         ['slug' => 'credits_20000', 'credits' => 20000, 'price_minor' => 4900],
         ['slug' => 'credits_50000', 'credits' => 50000, 'price_minor' => 9900],
     ],
+    // The public/admin catalog is deliberately allow-listed. Historical
+    // plan rows remain in the database so old webhooks and entitlements can
+    // still be resolved, but they are not new offers.
+    'recurring_plan_slugs' => ['starter', 'growth', 'agency', 'agency_pro'],
+    'ltd_plan_slugs' => ['angel_solo', 'angel_studio', 'angel_agency'],
+    'admin_plan_slugs' => [
+        'free', 'starter', 'growth', 'agency', 'agency_pro',
+        'angel_solo', 'angel_studio', 'angel_agency',
+    ],
+    // A single upgrade order for the dashboard. This is intentionally a
+    // product hierarchy rather than a price sort: lifetime and recurring
+    // offers can be compared by the capacity tier they provide.
+    'upgrade_ranks' => [
+        'free' => 0,
+        'starter' => 10,
+        'angel_solo' => 20,
+        'growth' => 30,
+        'angel_studio' => 40,
+        'agency' => 50,
+        'angel_agency' => 60,
+        'agency_pro' => 70,
+    ],
     'regular_plans' => [
         'free' => [
             'name' => 'Free Connected', 'monthly' => 0, 'yearly' => 0,

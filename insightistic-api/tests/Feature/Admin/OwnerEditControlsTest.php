@@ -54,7 +54,7 @@ it('lets the owner edit organization ownership, plan, lifecycle, trial and notes
         ->and($org->status)->toBe('trialing')
         ->and($org->internal_notes)->toBe('Founder override')
         ->and($org->users()->where('users.id', $newOwner->id)->first()->pivot->role)->toBe('owner')
-        ->and($org->users()->where('users.id', $owner->id)->first()->pivot->role)->toBe('member');
+        ->and($org->users()->where('users.id', $owner->id)->first()->pivot->role)->toBe('admin');
 });
 
 it('lets the owner edit a user profile, status and password without exposing it', function () {

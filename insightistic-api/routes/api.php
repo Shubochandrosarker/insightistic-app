@@ -817,12 +817,14 @@ Route::prefix('connector/v1')->middleware(['connector.auth', 'throttle:connector
 });
 
 // ---- Stripe webhook (no tenant, signature-verified) -----------------------
-Route::post('billing/webhook/stripe', [BillingController::class, 'webhook']);
+// throttle:webhooks bounds signature-check flooding (the check itself fails
+// closed; this just keeps the HMAC + log cost finite).
+Route::post('billing/webhook/stripe', [BillingController::class, 'webhook'])->middleware('throttle:webhooks');
 
 // ---- Paddle webhook (same shape: no tenant, HMAC-verified, queued) --------
 // Deliberately outside every middleware group — Paddle retries with its own
 // schedule and its servers carry no bearer token.
-Route::post('billing/webhook/paddle', [PaddleWebhookController::class, '__invoke']);
+Route::post('billing/webhook/paddle', [PaddleWebhookController::class, '__invoke'])->middleware('throttle:webhooks');
 
 // ---- Uptime monitoring (Phase 12, docs/roadmap-2026/16-PERFORMANCE-UPTIME.md)
 // Appended as its own group rather than spliced into the site.access group

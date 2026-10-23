@@ -7,7 +7,7 @@ import { ShieldAlert } from "lucide-react";
 
 /** Persistent banner + clear exit for an active impersonation session (spec §13.9). */
 export function ImpersonationBanner() {
-  const { applyToken } = useAuth();
+  const { applyToken, logout } = useAuth();
   const router = useRouter();
   const [meta, setMeta] = useState<ImpersonationMeta | null>(null);
   const [exiting, setExiting] = useState(false);
@@ -22,7 +22,18 @@ export function ImpersonationBanner() {
     setExiting(true);
     const stash = getImpersonation();
     try { await apiPost("/impersonation/end"); } catch { /* still exit locally even if the server call fails */ }
-    if (stash) await applyToken(stash.adminToken);
+    try {
+      if (stash) await applyToken(stash.adminToken);
+    } catch {
+      // The stashed admin token is dead (expired mid-impersonation). The
+      // local session token was already swapped by applyToken, so the only
+      // sane state is a full sign-out — never leave the browser rendering
+      // the impersonated user with a dead token.
+      clearImpersonation();
+      logout();
+      router.push("/login");
+      return;
+    }
     clearImpersonation();
     router.push("/admin/users");
   }

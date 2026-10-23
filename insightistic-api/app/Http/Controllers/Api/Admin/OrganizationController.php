@@ -342,8 +342,11 @@ class OrganizationController extends AdminController
 
         if ($ownerId) {
             $org->users()->syncWithoutDetaching([$ownerId => ['role' => 'owner']]);
+            // Demote the outgoing owner to admin — a real role in the
+            // vocabulary (owner/admin/analyst/client_viewer). 'member' exists
+            // nowhere else: every role gate would silently fail for them.
             $org->users()->wherePivot('role', 'owner')->where('users.id', '!=', $ownerId)
-                ->get()->each(fn ($user) => $org->users()->updateExistingPivot($user->id, ['role' => 'member']));
+                ->get()->each(fn ($user) => $org->users()->updateExistingPivot($user->id, ['role' => 'admin']));
         }
 
         // Without this, a license's persisted status/plan_id/activation_limit

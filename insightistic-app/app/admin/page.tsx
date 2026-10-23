@@ -4,6 +4,7 @@ import { useApi } from "@/lib/useApi";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { PageHeader } from "@/components/dashboard/PageHeader";
+import { ErrorState } from "@/components/dashboard/states";
 import { SkeletonGrid } from "@/components/app-shell/SkeletonCard";
 import { money0, num, timeAgo } from "@/lib/format";
 import {
@@ -25,7 +26,16 @@ function Stat({ icon, label, value, tone = "brand" }: { icon: React.ReactNode; l
 }
 
 export default function AdminOverview() {
-  const { data, loading } = useApi<any>("/admin/overview");
+  const { data, loading, error, reload } = useApi<any>("/admin/overview");
+
+  if (error && !data) {
+    return (
+      <div>
+        <PageHeader title="Platform overview" subtitle="Everything across every organization." />
+        <ErrorState message={error} onRetry={reload} />
+      </div>
+    );
+  }
 
   if (loading || !data) {
     return (

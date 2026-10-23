@@ -137,9 +137,16 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         // Named rate limiters (attached in routes/api.php as throttle:<name>).
-        // auth: brute-force protection on credential endpoints.
+        // auth: brute-force protection on credential endpoints — per IP AND
+        // per submitted email, so an attack spread over many IPs can't hammer
+        // one account, and (behind the proxy chain, where every caller shares
+        // one apparent IP) a single attacker can't exhaust the bucket for the
+        // whole customer base.
         RateLimiter::for('auth', function (Request $request) {
-            return Limit::perMinute(10)->by($request->ip());
+            return [
+                Limit::perMinute(10)->by($request->ip()),
+                Limit::perMinute(10)->by('auth-email:'.hash('sha256', (string) $request->input('email'))),
+            ];
         });
         // license: plugin activation/validation — per IP and per key prefix so
         // a single attacker can't enumerate keys from many source IPs cheaply.
@@ -195,6 +202,13 @@ class AppServiceProvider extends ServiceProvider
         RateLimiter::for('query-engine', function (Request $request) {
             return Limit::perMinute(30)
                 ->by('query-engine:'.($request->user()?->id ?: $request->ip()));
+        });
+        // webhooks: Stripe/Paddle delivery endpoints. Signature verification
+        // fails closed, but each attempt still costs an HMAC (+ a critical
+        // log for Paddle) — bound the flood surface. Generous enough that
+        // legitimate provider retry bursts never trip it.
+        RateLimiter::for('webhooks', function (Request $request) {
+            return Limit::perMinute(300)->by('webhook:'.$request->ip());
         });
 
         /*

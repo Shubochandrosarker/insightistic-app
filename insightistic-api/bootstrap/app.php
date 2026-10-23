@@ -13,6 +13,24 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware) {
         /*
+         * The API is only ever reached through the edge proxy chain
+         * (Cloudflare -> nginx -> Next.js app container -> api container) and
+         * is never published directly, so the client IP must come from the
+         * forwarded headers. Without this, every caller shares the proxy's
+         * address: the per-IP throttle:auth bucket collapses to 10
+         * requests/minute for the entire customer base, and login-alert
+         * device fingerprints and impersonation audit IPs all record the
+         * proxy. Default trusts private ranges (the Docker networks the
+         * proxies live on); TRUSTED_PROXIES=* or a CIDR list overrides.
+         */
+        $middleware->trustProxies(
+            at: array_values(array_filter(array_map('trim', explode(
+                ',',
+                (string) env('TRUSTED_PROXIES', '10.0.0.0/8,172.16.0.0/12,192.168.0.0/16'),
+            )))),
+        );
+
+        /*
          * Outermost, so the timing covers everything the application does —
          * including the middleware below it. Measuring from further in hides
          * exactly the layers most likely to be slow: tenancy resolution,

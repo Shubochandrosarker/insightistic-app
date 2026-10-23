@@ -8,6 +8,7 @@ import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { PageHeader } from "@/components/dashboard/PageHeader";
+import { ErrorState } from "@/components/dashboard/states";
 import { Spinner } from "@/components/ui/Spinner";
 import { initPaddle, openPaddleCheckout } from "@/lib/paddle";
 import type { PaddleEnvironment } from "@/lib/paddle";
@@ -125,7 +126,7 @@ function checkoutErrorMessage(e: any): string {
 }
 
 export default function BillingPage() {
-  const { data, loading, reload } = useApi<any>("/billing/subscription");
+  const { data, loading, error, reload } = useApi<any>("/billing/subscription");
   const { data: plansData } = useApi<any>("/public/plans");
   const { sites } = useDashboard();
   const [plan, setPlan] = useState("growth");
@@ -331,6 +332,16 @@ export default function BillingPage() {
     if (options.length && !options.some((p: any) => String(p.slug) === plan)) setPlan(String(options[0].slug));
   }, [data, plansData, plan]);
 
+  // The subscription endpoint is owner/admin-only — non-privileged members
+  // and transient failures must land on a retry card, not an eternal spinner.
+  if ((loading || !data) && error) {
+    return (
+      <div>
+        <PageHeader title="Billing" subtitle="Your plan, subscription and invoices." />
+        <ErrorState message={error} onRetry={reload} />
+      </div>
+    );
+  }
   if (loading || !data) return <Spinner />;
   const usage = data.usage || {};
   const planObj = data.plan || {};

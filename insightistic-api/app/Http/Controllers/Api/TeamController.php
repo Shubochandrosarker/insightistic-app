@@ -86,6 +86,14 @@ class TeamController extends Controller
             return response()->json(['message' => 'That person is already in this organization.'], 409);
         }
 
+        // Never pull a disabled/suspended/archived account into an
+        // organization — those states are admin decisions and must not be
+        // laundered through an invite (only active members and pending
+        // invited accounts are attachable).
+        if ($user && ($user->archived_at !== null || ! in_array($user->status, ['active', 'invited'], true))) {
+            return response()->json(['message' => 'That account is not available to invite.'], 422);
+        }
+
         // New users are created in an "invited" state with a random password.
         // Credential delivery / set-password lands with the auth email flow (Week 6).
         if (! $user) {
@@ -107,8 +115,12 @@ class TeamController extends Controller
             }
         });
 
-        // For brand-new users, email a set-password (accept-invite) link.
-        if ($user->wasRecentlyCreated) {
+        // Email a set-password (accept-invite) link for brand-new users, and
+        // RE-send it when re-inviting an existing pending user: invite tokens
+        // expire after an hour, and the 409 above means re-inviting someone
+        // who never accepted is the owner's only resend path.
+        $sendInvite = $user->wasRecentlyCreated || $user->status === 'invited';
+        if ($sendInvite) {
             try {
                 $token = PasswordBroker::broker()->createToken($user);
                 $acceptUrl = rtrim(config('insightistic.app_url'), '/')
@@ -127,7 +139,7 @@ class TeamController extends Controller
                 'role'  => $data['role'],
                 'sites' => $siteIds,
             ],
-            'note' => $user->wasRecentlyCreated ? 'Invite email sent with a set-password link.' : null,
+            'note' => $sendInvite ? 'Invite email sent with a set-password link.' : null,
         ], 201);
     }
 

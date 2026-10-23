@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { PageHeader } from "@/components/dashboard/PageHeader";
 import { EmptyState } from "@/components/dashboard/EmptyState";
+import { ErrorState } from "@/components/dashboard/states";
 import { Spinner } from "@/components/ui/Spinner";
 import { timeAgo } from "@/lib/format";
 import { AlertTriangle, Bell, RefreshCcw } from "lucide-react";
@@ -23,8 +24,9 @@ export default function AlertsPage() {
   const [showResolved, setShowResolved] = useState(false);
   const [scanning, setScanning] = useState(false);
   const [busyId, setBusyId] = useState<number | null>(null);
+  const [actionErr, setActionErr] = useState<string | null>(null);
 
-  const { data, loading, reload } = useApi<{ alerts: AlertRow[] }>(
+  const { data, loading, error, reload } = useApi<{ alerts: AlertRow[] }>(
     siteId ? `/sites/${siteId}/alerts?status=${showResolved ? "resolved" : "open"}` : null,
     [showResolved],
   );
@@ -34,15 +36,23 @@ export default function AlertsPage() {
   async function scanNow() {
     if (!siteId) return;
     setScanning(true);
-    try { await apiPost(`/sites/${siteId}/alerts/scan`); reload(); }
-    finally { setScanning(false); }
+    setActionErr(null);
+    try {
+      await apiPost(`/sites/${siteId}/alerts/scan`);
+      reload();
+    } catch (e: any) {
+      setActionErr(e?.message || "The scan couldn't be started.");
+    } finally { setScanning(false); }
   }
 
   async function toggle(a: AlertRow) {
     setBusyId(a.id);
+    setActionErr(null);
     try {
       await apiPost(`/sites/${siteId}/alerts/${a.id}/${a.is_resolved ? "reopen" : "resolve"}`);
       reload();
+    } catch (e: any) {
+      setActionErr(e?.message || "That change couldn't be saved.");
     } finally { setBusyId(null); }
   }
 
@@ -70,8 +80,17 @@ export default function AlertsPage() {
         }
       />
 
+      {actionErr && (
+        <p className="mb-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600">{actionErr}</p>
+      )}
+
       {loading ? (
         <Spinner />
+      ) : error ? (
+        // A fetch failure must never read as "All clear" — that's a
+        // monitoring page claiming everything is fine precisely when it
+        // couldn't check.
+        <ErrorState message={error} onRetry={reload} />
       ) : alerts.length === 0 ? (
         <EmptyState
           icon={<AlertTriangle size={20} />}

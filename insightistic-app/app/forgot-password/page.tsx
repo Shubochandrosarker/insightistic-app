@@ -6,18 +6,21 @@ import { AuthShell } from "@/components/auth/AuthShell";
 export default function Forgot() {
   const [email, setEmail] = useState("");
   const [msg, setMsg] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   async function submit() {
     setBusy(true);
+    setErr(null);
     try { const r = await apiPost("/auth/forgot-password", { email }); setMsg(r.message); }
-    catch (e: any) { setMsg(e.message); }
+    catch (e: any) { setErr(e.message); }
     finally { setBusy(false); }
   }
 
   return (
     <AuthShell title="Reset your password">
       {msg && <p className="mb-3 text-sm text-emerald-600">{msg}</p>}
+      {err && <p className="mb-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600">{err}</p>}
       <input className="ins-input" placeholder="Email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
       <button onClick={submit} disabled={busy} className="ins-btn mt-4">{busy ? "Sending…" : "Send reset link"}</button>
     </AuthShell>

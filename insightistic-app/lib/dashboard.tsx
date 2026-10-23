@@ -1,5 +1,5 @@
 "use client";
-import { createContext, useContext, useEffect, useState, ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, ReactNode } from "react";
 import { apiGet } from "./api";
 import type { Site } from "./types";
 
@@ -53,12 +53,18 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
   const [custom, setCustom] = useState<{ from: string; to: string } | null>(null);
   const [loading, setLoading] = useState(true);
 
-  async function reloadSites() {
+  const reloadSites = useCallback(async () => {
     const res = await apiGet("/sites");
     const list: Site[] = res.sites || [];
     setSites(list);
-    setSiteIdState((cur) => cur ?? (list[0]?.id ?? null));
-  }
+    setSiteIdState((cur) => {
+      // A restored ins_site that this account can't see (stale selection
+      // from a previous sign-in on a shared browser, or a site removed
+      // since) must not stick — fall back to the first available site.
+      if (cur != null && list.some((s) => s.id === cur)) return cur;
+      return list[0]?.id ?? null;
+    });
+  }, []);
 
   useEffect(() => {
     const saved = localStorage.getItem("ins_period");
@@ -89,28 +95,38 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       .catch((err) => console.warn("Failed to load brand settings; using defaults.", err));
   }, []);
 
-  const setSiteId = (id: number) => { setSiteIdState(id); localStorage.setItem("ins_site", String(id)); };
+  const setSiteId = useCallback((id: number) => {
+    setSiteIdState(id);
+    localStorage.setItem("ins_site", String(id));
+  }, []);
 
   // Choosing a preset always clears any custom range.
-  const setPeriod = (p: string) => {
+  const setPeriod = useCallback((p: string) => {
     setPeriodState(p);
     setCustom(null);
     localStorage.setItem("ins_period", JSON.stringify({ key: p } satisfies SavedPeriod));
-  };
+  }, []);
 
   // The backend silently coerces an end before the start; we keep to >= from
   // client-side so the picker can never produce a misleading range.
-  const setCustomRange = (from: string, to: string) => {
+  const setCustomRange = useCallback((from: string, to: string) => {
     if (!validRange(from, to)) return;
     setPeriodState("custom");
     setCustom({ from, to });
     localStorage.setItem("ins_period", JSON.stringify({ key: "custom", from, to } satisfies SavedPeriod));
-  };
+  }, []);
 
   const rangeQuery = custom ? `&from=${custom.from}&to=${custom.to}` : "";
 
+  // Stable identities + memoized value: pages hang effects off these
+  // callbacks (see lib/auth.tsx for why unstable identities are dangerous).
+  const value = useMemo<DashState>(
+    () => ({ sites, siteId, setSiteId, period, setPeriod, rangeQuery, setCustomRange, reloadSites, loading }),
+    [sites, siteId, setSiteId, period, setPeriod, rangeQuery, setCustomRange, reloadSites, loading],
+  );
+
   return (
-    <Ctx.Provider value={{ sites, siteId, setSiteId, period, setPeriod, rangeQuery, setCustomRange, reloadSites, loading }}>
+    <Ctx.Provider value={value}>
       {children}
     </Ctx.Provider>
   );

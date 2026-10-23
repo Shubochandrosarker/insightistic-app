@@ -153,8 +153,17 @@ class AuthController extends Controller
             function (User $user, string $password) {
                 $user->forceFill([
                     'password' => $password, // hashed cast
-                    'status'   => 'active',  // activates invited accounts
+                    // Accepting an invite activates the account; every other
+                    // status keeps its current value. Flipping disabled /
+                    // suspended accounts back to active here would let anyone
+                    // un-disable themselves straight from the forgot-password
+                    // form (the admin disable control must survive a reset).
+                    'status'   => $user->status === 'invited' ? 'active' : $user->status,
                 ])->save();
+
+                // A reset usually means the old credentials may be
+                // compromised — every existing session token dies with them.
+                $user->tokens()->delete();
             }
         );
 
@@ -184,7 +193,10 @@ class AuthController extends Controller
             return response()->json(['message' => 'Accept your invite first — check your email for the invite link.'], 403);
         }
 
-        if ($user->status !== 'active') {
+        // Same account-state gate as OAuthController: archived_at is its own
+        // kill switch (AdminUserController::archive), independent of status —
+        // password login must not be a side door around it.
+        if ($user->status !== 'active' || $user->archived_at !== null) {
             return response()->json(['message' => 'This account has been disabled. Contact your organization owner or support.'], 403);
         }
 
@@ -235,7 +247,7 @@ class AuthController extends Controller
 
         $user = User::find($userId);
 
-        if (! $user || $user->status !== 'active' || ! $user->hasMfa()) {
+        if (! $user || $user->status !== 'active' || $user->archived_at !== null || ! $user->hasMfa()) {
             return response()->json(['message' => 'Invalid credentials.'], 422);
         }
 

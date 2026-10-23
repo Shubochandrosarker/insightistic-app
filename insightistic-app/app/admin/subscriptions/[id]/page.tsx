@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Field } from "@/components/ui/Field";
 import { PageHeader } from "@/components/dashboard/PageHeader";
+import { ErrorState } from "@/components/dashboard/states";
 import { Spinner } from "@/components/ui/Spinner";
 import { money0, timeAgo } from "@/lib/format";
 import { ArrowLeft } from "lucide-react";
@@ -22,7 +23,7 @@ const fmtMoney = (cents?: number, currency = "usd") => (cents == null ? "—" : 
 
 export default function AdminSubscriptionDetail() {
   const { id } = useParams<{ id: string }>();
-  const { data, loading, reload } = useApi<any>(`/admin/subscriptions/${id}`);
+  const { data, loading, error, reload } = useApi<any>(`/admin/subscriptions/${id}`);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
 
@@ -40,6 +41,16 @@ export default function AdminSubscriptionDetail() {
     }
   }
 
+  if (error && !data) {
+    return (
+      <div>
+        <Link href="/admin/subscriptions" className="mb-3 inline-flex items-center gap-1.5 text-sm text-muted hover:text-fg">
+          <ArrowLeft size={15} /> Subscriptions
+        </Link>
+        <ErrorState message={error} onRetry={reload} />
+      </div>
+    );
+  }
   if (loading || !data) return <Spinner />;
 
   const sub = data.subscription;

@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/lib/auth";
@@ -15,8 +15,16 @@ export default function OAuthCallback() {
   const { applyToken } = useAuth();
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
+  // The hash is consumed exactly once. It is stripped from the URL below, so
+  // any effect re-run (unstable dependency identity, StrictMode) would re-parse
+  // an empty hash and flash a phantom "no sign-in token" error while the first
+  // run's applyToken promise was still completing the redirect.
+  const handled = useRef(false);
 
   useEffect(() => {
+    if (handled.current) return;
+    handled.current = true;
+
     const params = new URLSearchParams(window.location.hash.replace(/^#/, ""));
     const token = params.get("token");
     const err = params.get("error");

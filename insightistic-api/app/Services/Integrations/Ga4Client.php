@@ -117,6 +117,56 @@ class Ga4Client
      *
      * @return array{days:int,dimension_rows:int,latest_date:?string}
      */
+    /** GA4 Data API: max metrics per runReport request. */
+    private const MAX_METRICS_PER_REPORT = 10;
+
+    /** Daily-total metrics, in the order sync() maps them to columns. */
+    public const DAILY_METRICS = [
+        'totalUsers', 'newUsers', 'sessions', 'engagedSessions',
+        'screenPageViews', 'engagementRate', 'bounceRate',
+        'averageSessionDuration', 'conversions', 'transactions', 'totalRevenue',
+    ];
+
+    /**
+     * Run the daily report in metric batches within GA4's per-request limit
+     * and merge rows by date into one row with all DAILY_METRICS values.
+     * A date missing from a batch gets "0" for that batch's metrics.
+     *
+     * @return array{rows: list<array{dimensionValues: list<array>, metricValues: list<array>}>}
+     */
+    private function dailyTotals(string $token, string $propertyId, string $start, string $end): array
+    {
+        $batches = array_chunk(self::DAILY_METRICS, 6);
+        $byDate = [];
+        $offset = 0;
+
+        foreach ($batches as $batch) {
+            $report = $this->runReport($token, $propertyId, [
+                'dateRanges' => [['startDate' => $start, 'endDate' => $end]],
+                'dimensions' => [['name' => 'date']],
+                'metrics'    => array_map(fn ($m) => ['name' => $m], $batch),
+                'limit'      => 400,
+            ], 'ga4_daily_failed');
+
+            foreach ($report['rows'] ?? [] as $row) {
+                $date = $row['dimensionValues'][0]['value'] ?? '';
+                $byDate[$date] ??= array_fill(0, count(self::DAILY_METRICS), ['value' => '0']);
+                foreach (array_values($row['metricValues'] ?? []) as $i => $v) {
+                    $byDate[$date][$offset + $i] = $v;
+                }
+            }
+            $offset += count($batch);
+        }
+
+        ksort($byDate);
+        $rows = [];
+        foreach ($byDate as $date => $metrics) {
+            $rows[] = ['dimensionValues' => [['value' => (string) $date]], 'metricValues' => $metrics];
+        }
+
+        return ['rows' => $rows];
+    }
+
     public function sync(Site $site, DataSourceCredential $credential, int $days = 30): array
     {
         $propertyId = $this->propertyId($credential);
@@ -124,16 +174,10 @@ class Ga4Client
         $start = now()->subDays($days)->toDateString();
         $end = now()->subDay()->toDateString();
 
-        $daily = $this->runReport($token, $propertyId, [
-            'dateRanges' => [['startDate' => $start, 'endDate' => $end]],
-            'dimensions' => [['name' => 'date']],
-            'metrics'    => array_map(fn ($m) => ['name' => $m], [
-                'totalUsers', 'newUsers', 'sessions', 'engagedSessions',
-                'screenPageViews', 'engagementRate', 'bounceRate',
-                'averageSessionDuration', 'conversions', 'transactions', 'totalRevenue',
-            ]),
-            'limit' => 400,
-        ], 'ga4_daily_failed');
+        // GA4 caps a single report at 10 metrics, so the 11 daily totals are
+        // fetched in two batches and stitched back together by date, keeping
+        // the original metric order the mapping below indexes into.
+        $daily = $this->dailyTotals($token, $propertyId, $start, $end);
 
         $latestDate = null;
         $rows = 0;

@@ -72,40 +72,67 @@ function firstValidationMessage(data: any): string | null {
   return null;
 }
 
+const RETRYABLE_GET_STATUSES = new Set([408, 425, 500, 502, 503, 504, 520, 521, 522, 523, 524]);
+
+const pause = (milliseconds: number) =>
+  new Promise<void>((resolve) => window.setTimeout(resolve, milliseconds));
+
 async function request(path: string, opts: RequestInit = {}, json = true) {
   const token = getToken();
   const headers: Record<string, string> = { Accept: "application/json", ...(opts.headers as any) };
   if (token) headers["Authorization"] = `Bearer ${token}`;
   if (json && opts.body) headers["Content-Type"] = "application/json";
 
-  let res: Response;
-  try {
-    res = await fetch(`${BASE}/api${path}`, { ...opts, headers });
-  } catch (e) {
-    // fetch() only rejects on network-level failures: DNS, refused connection,
-    // blocked CORS preflight, mixed content, TLS errors. Surface a human message
-    // instead of the raw "Failed to fetch".
-    throw {
-      status: 0,
-      network: true,
-      message:
-        "Can't reach the Insightistic server. Please check your connection and try again in a moment.",
-    } as ApiError;
+  // Dashboard reads are safe to retry. A short bounded retry absorbs the
+  // occasional Cloudflare/origin 52x or dropped connection without replaying
+  // mutations such as checkout, login, or settings updates.
+  const method = (opts.method || "GET").toUpperCase();
+  const maxAttempts = method === "GET" ? 3 : 1;
+
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    let res: Response;
+    try {
+      res = await fetch(`${BASE}/api${path}`, { ...opts, headers });
+    } catch {
+      if (attempt + 1 < maxAttempts) {
+        await pause(250 * Math.pow(2, attempt));
+        continue;
+      }
+      // fetch() only rejects on network-level failures: DNS, refused
+      // connections, blocked CORS, mixed content, or TLS errors.
+      throw {
+        status: 0,
+        network: true,
+        message:
+          "Can\'t reach the Insightistic server. Please check your connection and try again in a moment.",
+      } as ApiError;
+    }
+
+    const data = await res.json().catch(() => null);
+
+    if (!res.ok) {
+      if (
+        attempt + 1 < maxAttempts &&
+        RETRYABLE_GET_STATUSES.has(res.status)
+      ) {
+        await pause(250 * Math.pow(2, attempt));
+        continue;
+      }
+      throw {
+        status: res.status,
+        message: firstValidationMessage(data) || data?.message || `Request failed (HTTP ${res.status})`,
+        errors: data?.errors,
+        data,
+      } as ApiError;
+    }
+
+    return data;
   }
 
-  const data = await res.json().catch(() => null);
-
-  if (!res.ok) {
-    throw {
-      status: res.status,
-      message: firstValidationMessage(data) || data?.message || `Request failed (HTTP ${res.status})`,
-      errors: data?.errors,
-      data,
-    } as ApiError;
-  }
-  return data;
+  // The loop either returns or throws. This keeps TypeScript exhaustive if
+  // maxAttempts is changed to a computed value later.
+  throw { status: 0, network: true, message: "Request failed." } as ApiError;
 }
-
 export const apiGet = (p: string) => request(p);
 export const apiPost = (p: string, body?: any) =>
   request(p, { method: "POST", body: body ? JSON.stringify(body) : undefined });

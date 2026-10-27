@@ -14,7 +14,7 @@
  * forwards the checkout request (fix/billing-pay-domain, 2026-10-13).
  *
  * Contracts (mirrors pay.wpistic.com):
- *   URL params : ?price=pri_…&embed=1&email=…&data=<json customData>
+ *   URL params : ?price=pri_…&embed=1&email=…&customer=ctm_…&data=<json customData>
  *   postMessage in : { type:"insightistic-checkout-open", priceId, email, customData }
  *   postMessage out: { type:"insightistic-checkout-completed" }
  *                    { type:"insightistic-checkout-closed", completed:bool }
@@ -26,13 +26,15 @@ var paid = false;
 
 function post(msg) { try { if (window.parent && window.parent !== window) window.parent.postMessage(msg, '*'); } catch (e) {} }
 
-function startCheckout(priceId, email, customData) {
+function startCheckout(priceId, email, customData, customerId) {
   if (!priceId) { st('Missing price.'); return; }
   st('Opening secure checkout…');
   try {
     Paddle.Checkout.open({
       items: [{ priceId: priceId, quantity: 1 }],
-      customer: email ? { email: email } : undefined,
+      // A known Paddle customer id keeps every purchase on the same
+      // customer record linked to the org; email is the first-purchase fallback.
+      customer: /^ctm_[a-z0-9]+$/.test(customerId || '') ? { id: customerId } : (email ? { email: email } : undefined),
       customData: customData || undefined,
       settings: { displayMode: 'overlay', theme: 'light', locale: 'en' }
     });
@@ -60,18 +62,19 @@ Paddle.Initialize({
 var qs = new URLSearchParams(location.search);
 var deepPrice = qs.get('price');
 var deepEmail = qs.get('email') || '';
+var deepCustomer = qs.get('customer') || '';
 var deepData = null;
 if (qs.get('data')) { try { deepData = JSON.parse(qs.get('data')); } catch (e) {} }
 if (deepPrice) {
   // email/data come from the authenticated dashboard config — forward them.
-  startCheckout(deepPrice, deepEmail, deepData);
+  startCheckout(deepPrice, deepEmail, deepData, deepCustomer);
 }
 
 // postMessage trigger (embed mode started without a price in the URL).
 window.addEventListener('message', function (e) {
   var d = e.data || {};
   if (d.type === 'insightistic-checkout-open') {
-    startCheckout(d.priceId, d.email, d.customData);
+    startCheckout(d.priceId, d.email, d.customData, d.customerId);
   }
 });
 </script>

@@ -208,6 +208,7 @@ Route::middleware(['auth:sanctum', 'tenant', 'restrict.impersonation'])->group(f
     // Paddle.js; change-plan is a real billing mutation, so reauth like the
     // Stripe cancel above. Both no-op with 501 while the feature flag is off
     // (checked inside the controllers so the routes stay discoverable).
+    Route::post('billing/start-trial', [BillingController::class, 'startTrial'])->middleware('role:owner');
     Route::post('billing/checkout-config', [BillingController::class, 'paddleCheckoutConfig'])->middleware('role:owner');
     Route::post('billing/change-plan', [BillingController::class, 'paddleChangePlan'])->middleware(['role:owner', 'reauth']);
 

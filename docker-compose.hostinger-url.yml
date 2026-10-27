@@ -6,7 +6,7 @@ x-api-env: &api_env
   APP_KEY: ${APP_KEY:?Set APP_KEY in the Docker Manager environment panel}
   APP_URL: https://api.insightistic.com
   INSIGHTISTIC_APP_URL: https://app.insightistic.com
-  INSIGHTISTIC_TRIAL_DAYS: "14"
+  INSIGHTISTIC_TRIAL_DAYS: "7"
   INSIGHTISTIC_RELEASE: ${INSIGHTISTIC_RELEASE:-unknown}
   INSIGHTISTIC_BUILD_TIME: ${INSIGHTISTIC_BUILD_TIME:-}
 

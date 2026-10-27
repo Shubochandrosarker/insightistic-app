@@ -7,7 +7,7 @@ type Stat = { value?: number; suffix?: string; big: string; small: string };
 
 const stats: Stat[] = [
   { value: 3, suffix: " min", big: "3 min", small: "to connect" },
-  { value: 14, suffix: " days", big: "14 days", small: "free trial" },
+  { value: 7, suffix: " days", big: "7 days", small: "free trial" },
   { big: "White-label", small: "for agencies" },
 ];
 

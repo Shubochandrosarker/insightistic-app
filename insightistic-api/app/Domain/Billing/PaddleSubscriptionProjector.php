@@ -78,6 +78,7 @@ final class PaddleSubscriptionProjector
         } catch (\Throwable) {
         }
 
+        app(PaddleCustomerLinker::class)->link($org, $payload['customer_id'] ?? null);
         $sub->organization_id          = $org->id;
         $sub->billing_provider         = 'paddle';
         $sub->provider_subscription_id = $payload['id'];
@@ -148,7 +149,13 @@ final class PaddleSubscriptionProjector
             return $org;
         }
 
-        return $sub->exists ? $sub->organization : null;
+        if ($sub->exists) {
+            return $sub->organization;
+        }
+
+        $customerId = $payload['customer_id'] ?? null;
+
+        return $customerId ? Organization::where('paddle_customer_id', $customerId)->first() : null;
     }
 
     /** Active plan_prices mapping for a Paddle price id; null when unmapped. */

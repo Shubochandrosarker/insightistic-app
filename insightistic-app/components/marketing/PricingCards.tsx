@@ -95,12 +95,13 @@ export function PricingCards() {
               {p.feats.map((f) => <li key={f}>• {f}</li>)}
             </ul>
             <Link href={`/register?plan=${p.slug}&interval=${annual ? "yearly" : "monthly"}`} className={`mt-6 block rounded-lg py-2 text-center text-sm font-medium ${p.highlight ? "bg-brand text-white hover:bg-brand2" : "border border-slate-300 text-slate-700 hover:border-slate-400"}`}>
-              {p.isFree ? "Create free account" : "Start free trial"}
+              {p.isFree ? "Create free account" : "Start 7-day free trial"}
             </Link>
           </div>
         ))}
       </div>
-      <p className="mt-8 text-center text-sm text-slate-500">Annual prices are billed once per year: Starter $290, Growth $690, Agency $1,490, Agency Pro $2,990.</p>
+      <p className="mt-8 text-center text-sm text-slate-600">Every paid plan starts with a 7-day free trial — no credit card required. 30-day money-back guarantee, no questions asked.</p>
+      <p className="mt-2 text-center text-sm text-slate-500">Annual prices are billed once per year: Starter $290, Growth $690, Agency $1,490, Agency Pro $2,990.</p>
     </div>
   );
 }

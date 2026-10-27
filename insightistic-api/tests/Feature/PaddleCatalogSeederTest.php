@@ -15,7 +15,7 @@ it('seeds the live paddle catalog into plan_prices with correct plan and kind ma
     $this->seed(PlanSeeder::class);
     $this->seed(PaddleCatalogSeeder::class);
 
-    expect(PlanPrice::query()->where('provider', 'paddle')->count())->toBe(22);
+    expect(PlanPrice::query()->where('provider', 'paddle')->count())->toBe(28);
 
     $canonicalStarterMonthly = PlanPrice::query()
         ->where('provider', 'paddle')
@@ -89,7 +89,7 @@ it('never silently repoints a price id at a different plan', function () {
     $this->seed(PaddleCatalogSeeder::class);
 
     expect($price->fresh()->plan->slug)->toBe('growth')
-        ->and(PlanPrice::query()->where('provider', 'paddle')->count())->toBe(22);
+        ->and(PlanPrice::query()->where('provider', 'paddle')->count())->toBe(28);
 });
 
 it('maps configured Angel Paddle IDs to the new lifetime plans', function () {

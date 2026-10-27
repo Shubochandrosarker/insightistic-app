@@ -7,6 +7,7 @@ use App\Domain\Billing\Exceptions\PaddleApiException;
 use App\Domain\Billing\PaddleBillingService;
 use App\Domain\Billing\CreditWallet;
 use App\Domain\Billing\EntitlementResolver;
+use App\Domain\Billing\TrialService;
 use App\Http\Controllers\Controller;
 use App\Models\EntitlementGrant;
 use App\Models\Plan;
@@ -45,7 +46,9 @@ class BillingController extends Controller
         }
 
         return response()->json([
-            'organization' => $org->only(['id', 'name', 'status', 'trial_ends_at']),
+            'organization' => $org->only(['id', 'name', 'status', 'trial_ends_at', 'trial_started_at', 'trial_plan_slug']),
+            'trial'        => app(TrialService::class)->eligibility($org),
+            'refund_policy' => ['money_back_days' => (int) config('commercial.refund_window_days', 30), 'no_questions_asked' => true],
             'plan'         => $effectivePlan ? array_merge($effectivePlan->toArray(), [
                 'effective_source' => $resolved['source'], 'effective_status' => $resolved['status'],
                 'features' => $resolved['features'], 'limits' => $resolved['limits'],
@@ -216,6 +219,34 @@ class BillingController extends Controller
         $processed = $this->processor->processOnce($event);
 
         return response()->json(['received' => true, 'duplicate' => ! $processed]);
+    }
+
+    /**
+     * POST /billing/start-trial — activate any regular plan as a 7-day trial
+     * with no payment (no Paddle checkout). LTD tiers are never trialable.
+     */
+    public function startTrial(Request $request, TrialService $trials)
+    {
+        $data = $request->validate(['plan' => ['required', 'string', 'exists:plans,slug']]);
+        $org = $this->tenancy->organization()->load('subscription');
+
+        try {
+            $org = $trials->start($org, $data['plan']);
+        } catch (BillingConfigurationException $e) {
+            return response()->json(['message' => $e->getMessage(), 'code' => $e->errorCode], 422);
+        }
+
+        try {
+            app(LicenseService::class)->syncForOrganization($org);
+            app(\App\Services\Analytics\AttributionService::class)->event('trial_started', $org, $request->user(), ['plan' => $data['plan']]);
+        } catch (\Throwable) {
+        }
+
+        return response()->json([
+            'ok' => true,
+            'organization' => $org->only(['id', 'status', 'trial_ends_at', 'trial_plan_slug']),
+            'credits' => $this->creditWallet->summary($org),
+        ]);
     }
 
     // ---- Paddle (roadmap 23-STRIPE-TO-PADDLE-MIGRATION) ----------------------

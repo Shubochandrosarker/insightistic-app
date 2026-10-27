@@ -56,7 +56,8 @@ class RunTrialAutomation extends Command
 
             // Trial has lapsed → project license status (expired), lock advanced
             // features, keep the free plugin working, tell the user once.
-            $licenses->syncForOrganization($org);
+            app(\App\Domain\Billing\TrialService::class)->expire($org);
+            $licenses->syncForOrganization($org->fresh());
 
             if ($mailer->send($org, 'trial_expired')) {
                 $expired++;

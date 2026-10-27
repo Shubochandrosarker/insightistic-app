@@ -83,6 +83,7 @@ function checkoutFrameReportsCompleted() {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  window.history.pushState({}, "", "/dashboard/billing");
   document.getElementById("paddle-js")?.remove();
   document.getElementById("insightistic-checkout-frame")?.remove();
   delete (window as any).Paddle;
@@ -252,8 +253,10 @@ describe("Billing page checkout", () => {
         : Promise.resolve({}),
     );
 
+    // /ltd is direct checkout: arriving with ?plan=angel_solo opens the
+    // one-time checkout immediately, without a click or a trial.
+    window.history.pushState({}, "", "/dashboard/billing?plan=angel_solo");
     render(<BillingPage />);
-    await userEvent.click(await screen.findByRole("button", { name: "Buy Angel Solo — $149" }));
 
     // One-time LTD purchase: same envelope, kind 'lifetime'.
     await waitFor(() =>
@@ -314,5 +317,27 @@ describe("Billing page checkout", () => {
       credit_pack: "credits_20000",
     });
   });
-});
 
+  it("starts a no-payment 7-day trial for an eligible account instead of opening checkout", async () => {
+    apiMocks.apiGet.mockImplementation((path: string) =>
+      path === "/billing/subscription"
+        ? Promise.resolve({ ...freeOrg, organization: { status: "active" }, plan: { slug: "free", name: "Free Connected" }, trial: { eligible: true, days: 7 } })
+        : path === "/public/plans" ? Promise.resolve(livePlans) : Promise.resolve({}),
+    );
+    apiMocks.apiPost.mockResolvedValue({ ok: true, organization: { status: "trialing", trial_ends_at: "2026-11-03T00:00:00Z" } });
+
+    render(<BillingPage />);
+    await userEvent.click(await screen.findByRole("button", { name: "Start 7-day free trial" }));
+
+    await waitFor(() => expect(apiMocks.apiPost).toHaveBeenCalledWith("/billing/start-trial", { plan: "growth" }));
+    expect(apiMocks.apiPost).not.toHaveBeenCalledWith("/billing/checkout-config", expect.anything());
+    expect(document.getElementById("insightistic-checkout-frame")).toBeNull();
+  });
+
+  it("does not list Founding Angel tiers in-app unless arriving from /ltd", async () => {
+    render(<BillingPage />);
+    await screen.findByText("Change plan");
+    expect(screen.queryByRole("button", { name: /Buy Angel/ })).not.toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: /Buy .* credits/ }).length).toBeGreaterThan(0);
+  });
+});

@@ -60,10 +60,9 @@ final class PaddleEventProcessor
 
             case 'customer.created':
             case 'customer.updated':
-                // Customer profile lives at the provider; nothing to project.
-                Log::debug('Paddle customer event acknowledged without projection.', [
-                    'event_type' => $eventType,
-                ]);
+                // Link the Paddle customer to its organization when the
+                // match is unambiguous; profile data stays at the provider.
+                app(PaddleCustomerLinker::class)->fromCustomerEvent($data);
                 break;
 
             default:

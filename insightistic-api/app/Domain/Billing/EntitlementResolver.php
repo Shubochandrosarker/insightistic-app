@@ -78,6 +78,15 @@ final class EntitlementResolver
         // subscription row exists: a cancelled/expired paid subscription
         // must fall back to Free (or an active lifetime grant), not retain a
         // stale paid plan_id from a historical billing projection.
+        // No-payment trial: the trial plan applies only while the trial
+        // window is open and no live paid subscription decides the plan.
+        $liveSubscription = $subscription && in_array($subscription->status, self::ACTIVE_SUBSCRIPTION_STATUSES, true);
+        if (! $plan && ! $liveSubscription && $organization->onTrial() && $organization->plan_id) {
+            $plan = Plan::find($organization->plan_id);
+            $source = $plan ? 'trial' : $source;
+            $status = $plan ? 'trialing' : $status;
+        }
+
         if (! $plan && ! $subscription && $organization->plan_id) {
             $organizationPlan = $organization->relationLoaded('plan')
                 ? $organization->getRelation('plan')

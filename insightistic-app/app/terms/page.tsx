@@ -46,9 +46,10 @@ export default function Terms() {
         <h2 className="mt-6 text-lg font-semibold text-slate-900">5. Refunds &amp; Cancellation</h2>
         <p className="mt-2">
           Subscriptions can be cancelled at any time from your billing page; access continues to
-          the end of the paid period. Refunds are available within 14 days of purchase via the
-          Paddle checkout or by contacting support. One-time purchases (lifetime deals, credit
-          packs) are refundable within 30 days of purchase under the applicable provider and support review.
+          the end of the paid period. Every regular plan starts with a 7-day free trial and no
+          payment details are required to start it. Every purchase — subscriptions, Founding Angel
+          lifetime plans and credit packs — is covered by a 30-day money-back guarantee, no
+          questions asked: contact support or use the Paddle receipt within 30 days of payment.
         </p>
 
         <h2 className="mt-8 text-lg font-semibold text-slate-900">6. Insightistic Founding Angel lifetime terms</h2>

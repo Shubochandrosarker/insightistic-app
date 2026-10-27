@@ -8,7 +8,9 @@
 return [
     'version' => '2026-10-14',
     'currency' => 'USD',
-    'trial_days' => 14,
+    'trial_days' => (int) env('INSIGHTISTIC_TRIAL_DAYS', 7),
+    // 30-day money-back guarantee, no questions asked (all purchases).
+    'refund_window_days' => 30,
     'ltd_campaign' => [
         'slug' => 'founding-angel-2026',
         'name' => 'Founding Angel Plans',

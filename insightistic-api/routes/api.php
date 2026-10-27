@@ -618,6 +618,7 @@ Route::middleware(['auth:sanctum', 'tenant', 'restrict.impersonation'])->group(f
     });
 
     // ---- AI Copilot (Phase 5) — personal threads within the org. ----------
+    Route::get('copilot/agents', [\App\Http\Controllers\Api\CopilotController::class, 'agents']);
     Route::get('copilot/threads', [\App\Http\Controllers\Api\CopilotController::class, 'threads']);
     Route::post('copilot/threads', [\App\Http\Controllers\Api\CopilotController::class, 'createThread']);
     Route::get('copilot/threads/{id}', [\App\Http\Controllers\Api\CopilotController::class, 'showThread']);

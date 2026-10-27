@@ -125,6 +125,15 @@ class CopilotController extends Controller
      * Events: run.started, delta {text}, citations {citations[]},
      * run.completed {message}, run.failed {message,code}.
      */
+    public function agents()
+    {
+        return response()->json(['agents' => collect(config('copilot_agents', []))
+            ->map(fn ($a, $key) => [
+                'key' => $key, 'name' => $a['name'], 'sources' => $a['sources'],
+                'skills' => $a['skills'], 'starters' => $a['starters'],
+            ])->values()]);
+    }
+
     public function sendMessage(Request $request, int $id)
     {
         $thread = $this->findThread($request, $id);
@@ -146,7 +155,15 @@ class CopilotController extends Controller
             'knowledge_base_ids.*' => ['integer'],
             'ai_category'        => ['nullable', 'string', 'max:80'],
             'agent_slug'         => ['nullable', 'string', 'max:120'],
+            'agent'              => ['nullable', 'string', Rule::in(array_keys(config('copilot_agents', [])))],
         ]);
+
+        $agent = ! empty($data['agent']) ? config('copilot_agents.'.$data['agent']) : null;
+        if ($agent) {
+            $data['sources'] = $data['sources'] ?? $agent['sources'];
+            $data['ai_category'] = $data['ai_category'] ?? $agent['ai_category'];
+            $data['agent_slug'] = $data['agent_slug'] ?? $agent['rag_agent_slug'];
+        }
 
         // Server-side quota — structured 402 before any provider call.
         if (! $this->usage->canSendAiMessage($org)) {
@@ -209,6 +226,7 @@ class CopilotController extends Controller
                 'period'             => $data['period'] ?? null,
                 'sources'            => $data['sources'] ?? null,
                 'knowledge_base_ids' => $kbIds,
+                'agent'              => $data['agent'] ?? null,
             ],
         ])->save();
 
@@ -221,6 +239,11 @@ class CopilotController extends Controller
             'agent_slug'        => $data['agent_slug'] ?? null,
             'question'           => $data['content'],
         ]);
+
+        if ($agent) {
+            $context['prompt_context'] = "AGENT ROLE\n".$agent['role']
+                ."\nSkills: ".implode(', ', $agent['skills'])."\n\n".$context['prompt_context'];
+        }
 
         return new StreamedResponse(function () use ($org, $data, $context, $assistantMessage, $range) {
             $emit = function (string $event, array $payload) {

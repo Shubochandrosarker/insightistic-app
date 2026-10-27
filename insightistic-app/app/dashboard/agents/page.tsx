@@ -14,6 +14,7 @@ import { PageHeader } from "@/components/dashboard/PageHeader";
 import { SignalGraphic } from "@/components/dashboard/SignalGraphic";
 
 type Agent = {
+  key: string;
   name: string;
   description: string;
   category: string;
@@ -25,6 +26,7 @@ type Agent = {
 
 const AGENTS: Agent[] = [
   {
+    key: "seo",
     name: "SEO Analyst",
     description: "Turn crawl findings and page data into a prioritized SEO action plan.",
     category: "Search intelligence",
@@ -34,6 +36,7 @@ const AGENTS: Agent[] = [
     starter: "Find the highest-impact SEO fixes for this site.",
   },
   {
+    key: "search",
     name: "Search Analyst",
     description: "Explain search performance changes across queries, pages, and opportunities.",
     category: "Search intelligence",
@@ -43,6 +46,7 @@ const AGENTS: Agent[] = [
     starter: "What changed in search performance this month?",
   },
   {
+    key: "keyword",
     name: "Keyword Analyst",
     description: "Find themes, gaps, and next targets from your real search demand.",
     category: "Search intelligence",
@@ -52,6 +56,7 @@ const AGENTS: Agent[] = [
     starter: "Build a keyword cluster from our recent search queries.",
   },
   {
+    key: "article",
     name: "Article Analyst",
     description: "Review content quality, topical coverage, and practical improvements.",
     category: "Content intelligence",
@@ -61,6 +66,7 @@ const AGENTS: Agent[] = [
     starter: "Which articles should we improve first and why?",
   },
   {
+    key: "site-audit",
     name: "Site Audit Analyst",
     description: "Translate technical issues into clear fixes ordered by impact and effort.",
     category: "Website intelligence",
@@ -70,6 +76,7 @@ const AGENTS: Agent[] = [
     starter: "Summarize the critical issues from our latest crawl.",
   },
   {
+    key: "growth",
     name: "Growth Analyst",
     description: "Connect traffic, search, performance, and commerce signals into growth actions.",
     category: "Business intelligence",
@@ -79,6 +86,7 @@ const AGENTS: Agent[] = [
     starter: "Where is the clearest growth opportunity in our data?",
   },
   {
+    key: "knowledge",
     name: "Knowledge Curator",
     description: "Keep the AI knowledge base useful, current, and grounded in your own sources.",
     category: "AI workspace",
@@ -117,19 +125,29 @@ function AgentCard({ agent, onOpen }: { agent: Agent; onOpen: (agent: Agent) => 
 
 export default function AgentsPage() {
   const router = useRouter();
-  const { sites, siteId } = useDashboard();
+  const { sites, siteId, period } = useDashboard();
   const activeSite = sites.find((site) => site.id === siteId);
   const [selected, setSelected] = useState<Agent | null>(null);
   const [prompt, setPrompt] = useState("");
 
+  function launch(agent: Agent | null, text: string) {
+    const q = new URLSearchParams();
+    if (agent) q.set("agent", agent.key);
+    if (text.trim()) q.set("prompt", text.trim());
+    if (activeSite) q.set("site_id", String(activeSite.id));
+    if (period) q.set("period", String(period));
+    router.push(`/dashboard/copilot?${q.toString()}`);
+  }
+
   function openAgent(agent: Agent) {
     setSelected(agent);
     setPrompt(agent.starter);
+    launch(agent, agent.starter);
   }
 
   function startAnalysis() {
     if (!selected && !prompt.trim()) return;
-    router.push(`/dashboard/copilot${activeSite ? `?site_id=${activeSite.id}` : ""}`);
+    launch(selected, prompt || selected?.starter || "");
   }
 
   return (

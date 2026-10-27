@@ -252,6 +252,8 @@ export default function CopilotPage() {
 
   const [sourcesSel, setSourcesSel] = useState<string[]>([]);
   const [kbSel, setKbSel] = useState<string[]>([]);
+  const [agent, setAgent] = useState<string | null>(null);
+  const handoffRef = useRef(false);
 
   const [renamingId, setRenamingId] = useState<number | null>(null);
   const [renameText, setRenameText] = useState("");
@@ -297,7 +299,29 @@ export default function CopilotPage() {
 
   /* ------------------------------ send / stream ----------------------------- */
 
-  async function send(content: string) {
+  // Agent hand-off: /dashboard/copilot?agent=..&prompt=..&site_id=..&period=..
+  // pre-fills and auto-submits the prompt once, then clears the params.
+  useEffect(() => {
+    if (handoffRef.current || typeof window === "undefined") return;
+    const q = new URLSearchParams(window.location.search);
+    const prompt = q.get("prompt");
+    const agentKey = q.get("agent");
+    if (!prompt && !agentKey) return;
+    handoffRef.current = true;
+    const sid = Number(q.get("site_id")) || null;
+    const per = q.get("period");
+    if (agentKey) setAgent(agentKey);
+    if (sid) setSiteId(sid);
+    if (per) setPeriod(per as any);
+    window.history.replaceState(null, "", window.location.pathname);
+    if (prompt) send(prompt, { agent: agentKey, siteId: sid, period: per });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  async function send(content: string, over: { agent?: string | null; siteId?: number | null; period?: string | null } = {}) {
+    const useAgent = over.agent ?? agent;
+    const useSite = over.siteId ?? siteId;
+    const usePeriod = over.period ?? period;
     const text = content.trim();
     if (!text || streaming) return;
     setInput("");
@@ -310,7 +334,7 @@ export default function CopilotPage() {
       try {
         const res = await apiPost("/copilot/threads", {
           title: text.slice(0, 60),
-          ...(siteId ? { site_id: siteId } : {}),
+          ...(useSite ? { site_id: useSite } : {}),
         });
         threadId = res?.thread?.id;
         if (threadId == null) throw new Error("The server didn't return a thread.");
@@ -349,8 +373,9 @@ export default function CopilotPage() {
       if (token) headers["Authorization"] = `Bearer ${token}`;
 
       const body: Record<string, any> = { content: text };
-      if (siteId) body.site_id = siteId;
-      if (period) body.period = period;
+      if (useSite) body.site_id = useSite;
+      if (usePeriod) body.period = usePeriod;
+      if (useAgent) body.agent = useAgent;
       if (sourcesSel.length) body.sources = sourcesSel;
       if (kbSel.length) body.knowledge_base_ids = kbSel.map(Number);
 

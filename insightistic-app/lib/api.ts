@@ -75,7 +75,7 @@ function firstValidationMessage(data: any): string | null {
 const RETRYABLE_GET_STATUSES = new Set([408, 425, 500, 502, 503, 504, 520, 521, 522, 523, 524]);
 
 const pause = (milliseconds: number) =>
-  new Promise<void>((resolve) => window.setTimeout(resolve, milliseconds));
+  new Promise<void>((resolve) => setTimeout(resolve, milliseconds));
 
 async function request(path: string, opts: RequestInit = {}, json = true) {
   const token = getToken();
@@ -133,6 +133,7 @@ async function request(path: string, opts: RequestInit = {}, json = true) {
   // maxAttempts is changed to a computed value later.
   throw { status: 0, network: true, message: "Request failed." } as ApiError;
 }
+
 export const apiGet = (p: string) => request(p);
 export const apiPost = (p: string, body?: any) =>
   request(p, { method: "POST", body: body ? JSON.stringify(body) : undefined });

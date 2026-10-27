@@ -57,9 +57,23 @@ class PaddleCatalogSeeder extends Seeder
 
         // Insight Credit packs (one-time => credit_ledger grant; credits in
         // metadata drive fulfillment — see PaddleTransactionProjector)
-        'pri_01m2y7dxpgpp7sajjt9maky1j7' => ['insight_credits', 'credit_pack', 1500, ['credits' => 5000]],
-        'pri_01m2y7dymwecszpnpc511geb35' => ['insight_credits', 'credit_pack', 4900, ['credits' => 20000]],
-        'pri_01m2y7dzdf1j627w2tbmx0nr52' => ['insight_credits', 'credit_pack', 9900, ['credits' => 50000]],
+        // The 2026-09-20 credit prices are ARCHIVED in Paddle; they stay
+        // mapped (inactive) so historical transactions still resolve.
+        'pri_01m2y7dxpgpp7sajjt9maky1j7' => ['insight_credits', 'credit_pack', 1500, ['credits' => 5000, 'paddle_archived' => true]],
+        'pri_01m2y7dymwecszpnpc511geb35' => ['insight_credits', 'credit_pack', 4900, ['credits' => 20000, 'paddle_archived' => true]],
+        'pri_01m2y7dzdf1j627w2tbmx0nr52' => ['insight_credits', 'credit_pack', 9900, ['credits' => 50000, 'paddle_archived' => true]],
+
+        // Current Insightistic Credits catalog (created 2026-10-27 under
+        // pro_01m2y7dpd4bjbtxsqx09bbsmqw), amounts match the live pricing page.
+        'pri_01m5z87zgs5bg5hspmprhshevh' => ['insight_credits', 'credit_pack', 1500, ['credits' => 5000, 'credit_pack' => 'credits_5000', 'catalog_product' => 'insightistic_credits', 'catalog_version' => '2026-10-27']],
+        'pri_01m5z881kb364te3exfkxvn3jf' => ['insight_credits', 'credit_pack', 4900, ['credits' => 20000, 'credit_pack' => 'credits_20000', 'catalog_product' => 'insightistic_credits', 'catalog_version' => '2026-10-27']],
+        'pri_01m5z8843qwmhkxvw92py0jpcw' => ['insight_credits', 'credit_pack', 9900, ['credits' => 50000, 'credit_pack' => 'credits_50000', 'catalog_product' => 'insightistic_credits', 'catalog_version' => '2026-10-27']],
+
+        // Founding Angel LTD (product pro_01m4wn2615ym5f3hd2pazksj6v, one-time,
+        // direct checkout from /ltd). Env PADDLE_PRICE_ANGEL_* may add more.
+        'pri_01m4wn26nhwwr3xpn4tdgfdss3' => ['angel_solo',   'lifetime', 14900, ['campaign' => 'founding-angel-2026', 'catalog_product' => 'insightistic_ltd']],
+        'pri_01m4wn2791zs00kbhw2w3w36ma' => ['angel_studio', 'lifetime', 29900, ['campaign' => 'founding-angel-2026', 'catalog_product' => 'insightistic_ltd']],
+        'pri_01m4wn27vn7hrbfxbhk336nnw9' => ['angel_agency', 'lifetime', 69900, ['campaign' => 'founding-angel-2026', 'catalog_product' => 'insightistic_ltd']],
     ];
 
     /**
@@ -154,7 +168,7 @@ class PaddleCatalogSeeder extends Seeder
                     'currency'            => 'USD',
                     'amount_minor'        => $amount,
                     'billing_interval'    => $kind === 'monthly' ? 'month' : ($kind === 'yearly' ? 'year' : null),
-                    'is_active'           => true,
+                    'is_active'           => ! ($metadata['paddle_archived'] ?? false),
                     'metadata_json'       => $metadata ?: null,
                 ],
             );
@@ -173,7 +187,7 @@ class PaddleCatalogSeeder extends Seeder
 
         foreach ($env as $key => [$plan, $amount]) {
             $id = trim((string) env($key, ''));
-            if ($id !== '') {
+            if ($id !== '' && ! array_key_exists($id, self::PRICES)) {
                 $prices[$id] = [$plan, 'lifetime', $amount, ['campaign' => 'founding-angel-2026']];
             }
         }

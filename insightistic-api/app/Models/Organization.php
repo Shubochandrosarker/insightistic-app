@@ -14,12 +14,14 @@ class Organization extends Model
         'name', 'slug', 'owner_user_id', 'plan_id', 'status', 'trial_ends_at',
         'archived_at', 'internal_notes', 'first_touch_json', 'last_touch_json',
         'marketing_consent', 'marketing_consent_at',
+        'trial_started_at', 'trial_plan_slug', 'paddle_customer_id',
     ];
 
     protected function casts(): array
     {
         return [
             'trial_ends_at'          => 'datetime',
+            'trial_started_at'       => 'datetime',
             'archived_at'            => 'datetime',
             'deletion_requested_at'  => 'datetime',
             'deletion_scheduled_for' => 'datetime',

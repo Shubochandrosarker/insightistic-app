@@ -128,6 +128,8 @@ const initPromises = new Map<string, Promise<PaddleJs>>();
 export interface OpenPaddleCheckoutOptions {
   priceId: string;
   email?: string;
+  /** Paddle customer id already linked to the org (ctm_…), when known. */
+  customerId?: string;
   customData?: Record<string, unknown>;
   /** The checkout completed (paid). */
   onSuccess: () => void;
@@ -193,6 +195,7 @@ export function openPaddleCheckout(opts: OpenPaddleCheckoutOptions): void {
 
   const params = new URLSearchParams({ price: opts.priceId, embed: "1" });
   if (opts.email) params.set("email", opts.email);
+  if (opts.customerId) params.set("customer", opts.customerId);
   if (opts.customData) params.set("data", JSON.stringify(opts.customData));
 
   const wrap = document.createElement("div");

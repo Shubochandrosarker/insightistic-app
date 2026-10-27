@@ -75,7 +75,7 @@ export default function Register() {
   return (
     <AuthShell
       title="Start your free trial"
-      subtitle="14 days free. No credit card required."
+      subtitle="7 days free on any plan. No credit card required."
       footer={
         <>
           Already have an account?{" "}

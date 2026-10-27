@@ -136,6 +136,8 @@ export default function BillingPage() {
   const [phase, setPhase] = useState<Phase>("idle");
   const [finishLabel, setFinishLabel] = useState("Finishing your subscription setup…");
   const [selectedFounderTier, setSelectedFounderTier] = useState<string | null>(null);
+  const trialDays: number = Number(data?.trial?.days ?? 7);
+  const trialEligible: boolean = data?.trial?.eligible === true;
   const paidRef = useRef(false);
 
   // Preselect the plan passed from the marketing-site CTA (?plan=).
@@ -184,6 +186,21 @@ export default function BillingPage() {
     reload();
   }
 
+  /** Regular plans start as a 7-day trial with no payment (no checkout). */
+  async function startTrial() {
+    setBusy(true); setMsg(null);
+    try {
+      const r = await apiPost("/billing/start-trial", { plan });
+      const ends = r?.organization?.trial_ends_at ? new Date(r.organization.trial_ends_at).toLocaleDateString() : null;
+      setMsg(`Your ${trialDays}-day free trial is active${ends ? ` until ${ends}` : ""} — no payment needed.`);
+      reload();
+    } catch (e: any) {
+      setMsg(e?.data?.message || e?.message || "The trial could not be started.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function checkout() {
     setBusy(true); setMsg(null);
     const beforePlanName = data?.plan?.name;
@@ -205,6 +222,7 @@ export default function BillingPage() {
       openPaddleCheckout({
         priceId: cfg.price_id,
         email: cfg.customer?.email,
+        customerId: cfg.customer?.id,
         customData: cfg.custom_data,
         onSuccess: () => { paidRef.current = true; finishSetup(beforePlanName); },
         onClose: (completed) => {
@@ -244,6 +262,7 @@ export default function BillingPage() {
       openPaddleCheckout({
         priceId: cfg.price_id,
         email: cfg.customer?.email,
+        customerId: cfg.customer?.id,
         customData: cfg.custom_data,
         onSuccess: () => { paidRef.current = true; finishOneTime(planSlug, kind); },
         onClose: (completed) => {
@@ -334,6 +353,17 @@ export default function BillingPage() {
 
   // The subscription endpoint is owner/admin-only — non-privileged members
   // and transient failures must land on a retry card, not an eternal spinner.
+  // /ltd is direct checkout: arriving with ?plan=angel_* opens the one-time
+  // Paddle checkout straight away (once), with no trial and no plan picker.
+  const ltdAutoOpened = useRef(false);
+  useEffect(() => {
+    if (ltdAutoOpened.current || !data || !selectedFounderTier) return;
+    if (lifetimeGrantOf(data)) return;
+    ltdAutoOpened.current = true;
+    oneTimeCheckout(selectedFounderTier, "lifetime");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data, selectedFounderTier]);
+
   if ((loading || !data) && error) {
     return (
       <div>
@@ -501,13 +531,26 @@ export default function BillingPage() {
             <Spinner label={finishLabel} />
           ) : (
             <>
-              <Button onClick={checkout} disabled={busy || !selectedPlanAvailable}>{busy ? "Opening checkout…" : planOptions.length ? "Continue to checkout" : "No upgrade available"}</Button>
-              <p className="mt-2 text-xs text-muted">Secure checkout via {provider === "stripe" ? "Stripe" : "Paddle"}.</p>
+              {trialEligible && planOptions.length > 0 ? (
+                <>
+                  <Button onClick={startTrial} disabled={busy || !selectedPlanAvailable}>{busy ? "Starting trial…" : `Start ${trialDays}-day free trial`}</Button>
+                  <p className="mt-2 text-xs text-muted">No payment required to start. Choose a paid plan any time before the trial ends.</p>
+                </>
+              ) : (
+                <>
+                  <Button onClick={checkout} disabled={busy || !selectedPlanAvailable}>{busy ? "Opening checkout…" : planOptions.length ? "Continue to checkout" : "No upgrade available"}</Button>
+                  <p className="mt-2 text-xs text-muted">Secure checkout via {provider === "stripe" ? "Stripe" : "Paddle"}. 30-day money-back guarantee, no questions asked.</p>
+                </>
+              )}
             </>
           )}
         </div>
       </Card>
 
+      {/* The lifetime deal is sold from /ltd (direct, one-time checkout).
+          In-app it appears only when the user arrives from /ltd with an
+          Angel tier selected, or already owns one. */}
+      {(selectedFounderTier || lifetimeGrant) && (
       <Card id="founder-lifetime" className="mt-5" title="Founding Angel Plans"
         subtitle="One payment. Lifetime core access. Only 100 total licenses across all Angel tiers.">
         {soldOut && <p className="mb-3 rounded-lg border border-line bg-card2 px-3 py-2 text-sm text-muted">Founding Angel Plans — Sold Out. Our first 100 Founding Angel licenses have been claimed. You can still choose a regular subscription or buy Insight Credits.</p>}
@@ -561,6 +604,8 @@ export default function BillingPage() {
           Lifetime access applies to the purchased core plan and feature family while Insightistic operates. Monthly allowances are shared across connected sites and do not roll over. See <Link href="/terms" className="underline hover:text-fg">the terms</Link> for details.
         </p>
       </Card>
+
+      )}
 
       <Card id="credit-packs" className="mt-5" title="Insight credit packs"
         subtitle="One-time top-ups — they don't expire while the service operates.">

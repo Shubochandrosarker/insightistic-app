@@ -74,6 +74,7 @@ final class PaddleTransactionProjector
         $totals = $payload['details']['totals'] ?? [];
         $completed = $status === 'completed';
 
+        app(PaddleCustomerLinker::class)->link($org, $payload['customer_id'] ?? null);
         $txn->organization_id           = $org->id;
         $txn->provider                  = 'paddle';
         $txn->provider_transaction_id   = $payload['id'];
@@ -297,6 +298,10 @@ final class PaddleTransactionProjector
         // but only when they identify exactly one organization; a shared
         // customer must never be guessed onto the most recent tenant.
         $customerId = $payload['customer_id'] ?? null;
+
+        if ($customerId && ($linked = Organization::where('paddle_customer_id', $customerId)->first())) {
+            return $linked;
+        }
 
         if ($customerId) {
             $transactionOrganizations = BillingTransaction::withoutGlobalScope('organization')

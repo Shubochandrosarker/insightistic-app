@@ -121,7 +121,7 @@ return [
     'app_url' => env('INSIGHTISTIC_APP_URL', 'https://app.insightistic.com'),
 
     // Trial length for new organizations. Keep this aligned with public pricing.
-    'trial_days' => (int) env('INSIGHTISTIC_TRIAL_DAYS', 14),
+    'trial_days' => (int) env('INSIGHTISTIC_TRIAL_DAYS', 7),
 
     'license' => [
         // Seconds between plugin-side validation calls (daily WP-Cron).

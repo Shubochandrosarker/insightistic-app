@@ -110,9 +110,13 @@ final class PaddleBillingService
             'amount_minor' => $price->amount_minor,
             'client_token' => $clientToken,
             'environment'  => config('billing.paddle.sandbox') ? 'sandbox' : 'production',
-            'customer'     => ['email' => $org->owner?->email],
+            'customer'     => $org->paddle_customer_id
+                ? ['id' => $org->paddle_customer_id, 'email' => $org->owner?->email]
+                : ['email' => $org->owner?->email],
             'custom_data'  => [
                 'organization_id' => $org->id,
+                'user_id'         => $org->owner_user_id,
+                'product_line'    => $kind === 'credit_pack' ? 'insightistic_credits' : ($kind === 'lifetime' ? 'insightistic_ltd' : 'insightistic_saas'),
                 'purchase_kind'   => $kind,
                 'plan_slug'       => $plan->slug,
                 ...($pack ? ['credit_pack' => $pack['slug'], 'credit_amount' => $pack['credits']] : []),

@@ -8,7 +8,7 @@ generate locally). You scaffold Laravel, then copy these files over it.
 
 - Full PostgreSQL schema (all 19 tables from the spec) as migrations
 - Multi-tenant isolation baked into the ORM (global scope, not manual WHERE clauses)
-- Auth: register (bootstraps org + owner + 14-day trial), login, me, logout
+- Auth: register (bootstraps org + owner + 7-day trial, no card), login, me, logout
 - Organization + Site management with plan `site_limit` enforcement
 - One-time connector API key (sha256-hashed at rest)
 - Connector handshake endpoint for the WordPress plugin

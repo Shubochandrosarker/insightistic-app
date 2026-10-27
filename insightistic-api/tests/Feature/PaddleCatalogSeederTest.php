@@ -95,8 +95,11 @@ it('never silently repoints a price id at a different plan', function () {
 it('maps configured Angel Paddle IDs to the new lifetime plans', function () {
     $this->seed(PlanSeeder::class);
     putenv('PADDLE_PRICE_ANGEL_SOLO=pri_test_angel_solo');
+    $_ENV['PADDLE_PRICE_ANGEL_SOLO'] = $_SERVER['PADDLE_PRICE_ANGEL_SOLO'] = 'pri_test_angel_solo';
     putenv('PADDLE_PRICE_ANGEL_STUDIO=pri_test_angel_studio');
+    $_ENV['PADDLE_PRICE_ANGEL_STUDIO'] = $_SERVER['PADDLE_PRICE_ANGEL_STUDIO'] = 'pri_test_angel_studio';
     putenv('PADDLE_PRICE_ANGEL_AGENCY=pri_test_angel_agency');
+    $_ENV['PADDLE_PRICE_ANGEL_AGENCY'] = $_SERVER['PADDLE_PRICE_ANGEL_AGENCY'] = 'pri_test_angel_agency';
 
     try {
         $this->seed(PaddleCatalogSeeder::class);
@@ -107,7 +110,10 @@ it('maps configured Angel Paddle IDs to the new lifetime plans', function () {
             ->and(PlanPrice::where('provider_price_id', 'pri_test_angel_agency')->first()->kind)->toBe('lifetime');
     } finally {
         putenv('PADDLE_PRICE_ANGEL_SOLO');
+        unset($_ENV['PADDLE_PRICE_ANGEL_SOLO'], $_SERVER['PADDLE_PRICE_ANGEL_SOLO']);
         putenv('PADDLE_PRICE_ANGEL_STUDIO');
+        unset($_ENV['PADDLE_PRICE_ANGEL_STUDIO'], $_SERVER['PADDLE_PRICE_ANGEL_STUDIO']);
         putenv('PADDLE_PRICE_ANGEL_AGENCY');
+        unset($_ENV['PADDLE_PRICE_ANGEL_AGENCY'], $_SERVER['PADDLE_PRICE_ANGEL_AGENCY']);
     }
 });

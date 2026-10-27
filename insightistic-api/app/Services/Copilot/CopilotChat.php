@@ -68,6 +68,8 @@ PROMPT;
         $userMessage = ($promptContext !== '' ? $promptContext."\n\n" : '')
             .'QUESTION: '.$question;
 
+        $attemptedExternal = false;
+
         foreach ($this->providerChain($org) as $provider) {
             $emitted = false;
             $attemptDelta = function (string $delta) use ($onDelta, &$emitted): void {
@@ -77,12 +79,16 @@ PROMPT;
                 }
             };
 
+            if ($provider !== 'rule') {
+                $attemptedExternal = true;
+            }
+
             try {
                 $result = match ($provider) {
                     'openrouter_free' => $this->openAiStream($userMessage, $attemptDelta, $this->openRouterConfig(false), 'openrouter'),
                     'openrouter_paid' => $this->openAiStream($userMessage, $attemptDelta, $this->openRouterConfig(true), 'openrouter'),
                     'gateway' => $this->gateway($userMessage, $attemptDelta, $org),
-                    default => $this->ruleAnswer($question, $promptContext, $attemptDelta, ! $org->allow_external_ai ? 'disabled' : null),
+                    default => $this->ruleAnswer($question, $promptContext, $attemptDelta, ! $org->allow_external_ai ? 'disabled' : ($attemptedExternal ? 'provider_failed' : null)),
                 };
 
                 if (trim((string) ($result['content'] ?? '')) !== '') {

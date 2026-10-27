@@ -76,7 +76,8 @@ export default function SearchOpportunitiesPage() {
       />
     );
 
-  const items: any[] = req.data?.[type] || [];
+  // The API nests reports under `opportunities` ({ window, opportunities: { [type]: [...] } }).
+  const items: any[] = req.data?.opportunities?.[type] || [];
 
   const columns: Column<OpportunityItem>[] = [
     {

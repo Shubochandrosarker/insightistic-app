@@ -98,7 +98,7 @@ PROMPT;
                 // A streamed provider can only be retried before any visible
                 // answer text has been sent; otherwise the client would see
                 // a duplicated or contradictory partial answer.
-                Log::warning('Insightistic Copilot provider failed', [
+                \App\Support\SafeLog::warning('Insightistic Copilot provider failed', [
                     'provider' => $provider,
                     'exception' => $e::class,
                     'tier' => $this->tiers->resolve($org->id)['tier'],

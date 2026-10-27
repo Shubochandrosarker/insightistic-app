@@ -87,7 +87,7 @@ export default function KnowledgePage() {
     <div>
       <PageHeader
         title="Knowledge"
-        subtitle="Give the AI Copilot your own documents, pages, and notes to ground its answers."
+        subtitle="Give Agent JOLLY your own documents, pages, and notes to ground its answers."
         right={
           <Button
             className="!bg-violet hover:!bg-violet/90 shadow-[0_8px_20px_-8px_rgba(108,92,231,0.6)]"
@@ -168,7 +168,7 @@ export default function KnowledgePage() {
         <EmptyState
           icon={<BookOpen size={20} />}
           title="No knowledge bases yet"
-          hint="A knowledge base is a private library of your own content — docs, help pages, policies, product sheets. The AI Copilot searches it to answer questions with your facts instead of guesses."
+          hint="A knowledge base is a private library of your own content — docs, help pages, policies, product sheets. Agent JOLLY searches it to answer questions with your facts instead of guesses."
           action={
             <Button
               className="!bg-violet hover:!bg-violet/90 shadow-[0_8px_20px_-8px_rgba(108,92,231,0.6)]"

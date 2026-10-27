@@ -58,6 +58,9 @@ class CopilotContextBuilder
         }
 
         // Knowledge retrieval — org-scoped, optional KB/site filters.
+        // Knowledge and shared-brain lookups are enrichment: a failure must
+        // degrade to "no hits", never kill the Copilot stream.
+        try {
         $knowledgeHits = $this->retriever->search(
             $org->id,
             (string) $selection['question'],
@@ -67,12 +70,21 @@ class CopilotContextBuilder
                 'limit'              => 6,
             ],
         );
+        } catch (\Throwable $e) {
+            $knowledgeHits = [];
+            \App\Support\SafeLog::warning('Copilot knowledge lookup failed', ['exception' => $e::class]);
+        }
 
-        $sharedBrain = $this->sharedBrain->search(
-            (string) $selection['question'],
-            $selection['ai_category'] ?? null,
-            $selection['agent_slug'] ?? null,
-        );
+        try {
+            $sharedBrain = $this->sharedBrain->search(
+                (string) $selection['question'],
+                $selection['ai_category'] ?? null,
+                $selection['agent_slug'] ?? null,
+            );
+        } catch (\Throwable $e) {
+            $sharedBrain = ['agent' => null, 'knowledge' => [], 'skills' => []];
+            \App\Support\SafeLog::warning('Copilot shared-brain lookup failed', ['exception' => $e::class]);
+        }
 
         return [
             'evidence'       => $evidence,

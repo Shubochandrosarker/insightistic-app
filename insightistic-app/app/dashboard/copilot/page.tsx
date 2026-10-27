@@ -606,7 +606,7 @@ export default function CopilotPage() {
   return (
     <div>
       <PageHeader
-        title="AI Copilot"
+        title="Agent JOLLY"
         subtitle="Ask questions about your analytics and your own knowledge bases — answers cite their sources."
         right={remaining != null ? (
           <span className="text-xs text-muted">{remaining} AI message{remaining === 1 ? "" : "s"} left this month</span>
@@ -713,7 +713,7 @@ export default function CopilotPage() {
                     <span className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-violet/10 text-violet">
                       <Bot size={22} />
                     </span>
-                    <h3 className="text-sm font-semibold text-fg">Ask the Copilot anything about {site?.name || "your data"}</h3>
+                    <h3 className="text-sm font-semibold text-fg">Ask Agent JOLLY anything about {site?.name || "your data"}</h3>
                     <p className="mx-auto mt-1 max-w-sm text-sm text-muted">
                       It reads your analytics for the selected period plus any knowledge bases you've built, and cites where each answer came from.
                     </p>

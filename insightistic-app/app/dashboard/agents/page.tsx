@@ -155,7 +155,7 @@ export default function AgentsPage() {
       <PageHeader
         title="AI Workspace"
         subtitle={`${activeSite?.name || "Your website"} · focused agents for search, content, audit, and growth decisions`}
-        right={<Link href="/dashboard/copilot" className="inline-flex items-center gap-2 rounded-lg bg-fg px-3.5 py-2 text-xs font-bold text-card hover:-translate-y-0.5"><WandSparkles size={14} className="text-[#f4c56a]" /> Open AI Copilot</Link>}
+        right={<Link href="/dashboard/copilot" className="inline-flex items-center gap-2 rounded-lg bg-fg px-3.5 py-2 text-xs font-bold text-card hover:-translate-y-0.5"><WandSparkles size={14} className="text-[#f4c56a]" /> Open Agent JOLLY</Link>}
       />
 
       <section className="ins-agent-hero mb-6 rounded-xl border p-5 text-card shadow-[0_16px_35px_-24px_rgba(20,23,28,0.8)] sm:p-6">
@@ -163,7 +163,7 @@ export default function AgentsPage() {
           <div className="max-w-xl">
             <div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.16em] text-card/60"><Sparkles size={14} className="text-[#f4c56a]" /> Analyze your data with AI</div>
             <h2 className="mt-2 text-2xl font-extrabold tracking-tight">Ask one focused question. Get an evidence-backed next step.</h2>
-            <p className="mt-2 text-sm leading-6 text-card/65">Choose an agent below or send the question directly to the Insightistic Copilot with your connected site and date range as context.</p>
+            <p className="mt-2 text-sm leading-6 text-card/65">Choose an agent below or send the question directly to Agent JOLLY with your connected site and date range as context.</p>
           </div>
           <div className="w-full max-w-xl lg:max-w-[33rem]">
             <label htmlFor="agent-prompt" className="sr-only">What do you want to understand?</label>

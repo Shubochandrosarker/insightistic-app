@@ -196,16 +196,20 @@ it('syncs GA4 rows into traffic_daily under the ga4 source', function () {
 
     Http::fake([
         'analyticsdata.googleapis.com/*' => Http::sequence()
-            ->push([
-                'rows' => [[
-                    'dimensionValues' => [['value' => '20260701']],
-                    'metricValues'    => [
-                        ['value' => '10'], ['value' => '4'], ['value' => '12'], ['value' => '9'],
-                        ['value' => '40'], ['value' => '0.75'], ['value' => '0.25'], ['value' => '65.4'],
-                        ['value' => '2'], ['value' => '1'], ['value' => '99.5'],
-                    ],
-                ]],
-            ])
+            // Daily totals arrive in two batches (GA4 caps reports at 10 metrics).
+            ->push(['rows' => [[
+                'dimensionValues' => [['value' => '20260701']],
+                'metricValues'    => [
+                    ['value' => '10'], ['value' => '4'], ['value' => '12'], ['value' => '9'],
+                    ['value' => '40'], ['value' => '0.75'],
+                ],
+            ]]])
+            ->push(['rows' => [[
+                'dimensionValues' => [['value' => '20260701']],
+                'metricValues'    => [
+                    ['value' => '0.25'], ['value' => '65.4'], ['value' => '2'], ['value' => '1'], ['value' => '99.5'],
+                ],
+            ]]])
             ->push(['rows' => [[
                 'dimensionValues' => [['value' => 'Organic Search']],
                 'metricValues'    => [['value' => '5'], ['value' => '4'], ['value' => '6'], ['value' => '1'], ['value' => '20']],
@@ -249,7 +253,18 @@ it('syncs GA4 rows into traffic_daily under the ga4 source', function () {
         ->and($row->users)->toBe(10)
         // GA4 sends ratios; the column stores percent.
         ->and((float) $row->engagement_rate)->toBe(75.0)
-        ->and((float) $row->revenue)->toBe(99.5);
+        ->and((float) $row->revenue)->toBe(99.5)
+        ->and((float) $row->bounce_rate)->toBe(25.0)
+        ->and($row->conversions)->toBe(2);
+
+    // No daily request may exceed GA4's 10-metric limit.
+    $dailyRequests = collect(Http::recorded())
+        ->map(fn ($pair) => $pair[0]->data())
+        ->filter(fn ($body) => ($body['dimensions'][0]['name'] ?? null) === 'date');
+    expect($dailyRequests)->toHaveCount(2);
+    $dailyRequests->each(fn ($body) => expect(count($body['metrics']))->toBeLessThanOrEqual(10));
+    expect($dailyRequests->flatMap(fn ($b) => array_column($b['metrics'], 'name'))->values()->all())
+        ->toBe(\App\Services\Integrations\Ga4Client::DAILY_METRICS);
 
     $state = DataSourceConnection::withoutGlobalScope('organization')->firstOrFail();
     expect($state->state)->toBe('connected')->and($state->last_successful_at)->not->toBeNull();

@@ -83,7 +83,7 @@ export default function PrivacyPage() {
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <p className="text-sm text-fg">
-              Send data to external AI providers for insights and Copilot answers
+              Send data to external AI providers for insights and Agent JOLLY answers
             </p>
             <p className="mt-1 text-xs text-muted">
               Turn this off to keep your data away from third-party models. Insights fall back to

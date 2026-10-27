@@ -36,7 +36,7 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       { label: "AI Overview", href: "/dashboard/visibility" },
       { label: "AI Insights", href: "/dashboard/insights" },
-      { label: "AI Copilot", href: "/dashboard/copilot" },
+      { label: "Agent JOLLY", href: "/dashboard/copilot" },
       { label: "AI Knowledge Base", href: "/dashboard/knowledge" },
       { label: "Deep Dives", href: "/dashboard/intelligence" },
       { label: "Alerts", href: "/dashboard/alerts" },

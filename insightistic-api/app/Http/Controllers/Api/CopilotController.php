@@ -341,7 +341,11 @@ class CopilotController extends Controller
                     'remaining_messages' => max(0, $this->usage->limit($org, 'monthly_ai_messages') - (int) $this->usage->counter($org)->ai_messages_used),
                 ]);
             } catch (\Throwable $e) {
-                report($e);
+                try {
+                    report($e);
+                } catch (\Throwable) {
+                    // An unwritable log must not replace run.failed with a 500.
+                }
 
                 $assistantMessage->forceFill([
                     'status'     => 'failed',

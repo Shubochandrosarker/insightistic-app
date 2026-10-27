@@ -241,7 +241,7 @@ function TestRetrievalCard({ kbId }: { kbId: string }) {
   return (
     <Card
       title="Test retrieval"
-      subtitle="See exactly which chunks the Copilot would pull for a question — no AI call, just the search."
+      subtitle="See exactly which chunks Agent JOLLY would pull for a question — no AI call, just the search."
     >
       <div className="flex gap-2">
         <input
@@ -337,7 +337,7 @@ export default function KnowledgeBaseDetailPage() {
     if (!kb) return;
     const archiving = kb.status !== "archived";
     if (!window.confirm(archiving
-      ? `Archive "${kb.name}"? It will stop being used by the Copilot until you restore it.`
+      ? `Archive "${kb.name}"? It will stop being used by Agent JOLLY until you restore it.`
       : `Restore "${kb.name}" to active?`)) return;
     setActionError(null);
     try {

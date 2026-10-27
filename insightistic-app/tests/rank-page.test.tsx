@@ -137,7 +137,7 @@ describe("Rank Tracker page", () => {
     render(<RankTrackerPage />);
 
     expect(
-      await screen.findByText(/DATAFORSEO_LOGIN \/ DATAFORSEO_PASSWORD/),
+      await screen.findByText(/Live rank checks are coming soon/),
     ).toBeInTheDocument();
   });
 
@@ -188,7 +188,7 @@ describe("Rank Tracker page", () => {
 
     expect(apiMocks.apiPost).toHaveBeenCalledWith("/sites/1/rank/check", {});
     // The banner is already on screen; the 422 repeats the same message as the action status.
-    const hits = await screen.findAllByText(/DATAFORSEO_LOGIN \/ DATAFORSEO_PASSWORD/);
+    const hits = await screen.findAllByText(/Live rank checks are coming soon/);
     expect(hits.length).toBeGreaterThanOrEqual(2);
   });
 

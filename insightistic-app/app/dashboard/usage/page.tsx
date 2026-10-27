@@ -20,20 +20,12 @@ type UsageEntry = { used?: number | null; limit?: number | null };
 
 /** Friendly names for the dimensions the API currently meters. */
 const USAGE_LABELS: Record<string, string> = {
+  tracked_keywords: "Tracked keywords",
+  crawl_pages: "Crawl pages",
+  ai_prompt_runs: "AI prompt runs",
   ai_insights: "AI insights",
   reports: "Reports",
 };
-
-/**
- * Dimensions that exist in plans (limits_json) but are not part of the
- * usage payload yet — shown as coming-soon rows, and only while absent
- * from the payload so the page never falls behind the API.
- */
-const UPCOMING_DIMENSIONS: { key: string; label: string }[] = [
-  { key: "tracked_keywords", label: "Tracked keywords" },
-  { key: "crawl_pages", label: "Crawl pages" },
-  { key: "ai_prompt_runs", label: "AI prompt runs" },
-];
 
 function usageLabel(key: string): string {
   return (
@@ -79,7 +71,7 @@ export default function UsagePage() {
   if (loading) {
     return (
       <div>
-        <PageHeader title="Usage" subtitle="Metered usage this billing month — plan limits enforced server-side." />
+        <PageHeader title="Usage" subtitle="Your usage this billing month against your plan's limits." />
         <Spinner />
       </div>
     );
@@ -88,7 +80,7 @@ export default function UsagePage() {
   if (error) {
     return (
       <div>
-        <PageHeader title="Usage" subtitle="Metered usage this billing month — plan limits enforced server-side." />
+        <PageHeader title="Usage" subtitle="Your usage this billing month against your plan's limits." />
         <ErrorState message={error} onRetry={reload} />
       </div>
     );
@@ -98,11 +90,10 @@ export default function UsagePage() {
     data?.usage && typeof data.usage === "object" && !Array.isArray(data.usage) ? data.usage : {};
   const usageKeys = Object.keys(usage);
   const grant = lifetimeGrantOf(data);
-  const upcoming = UPCOMING_DIMENSIONS.filter((d) => !(d.key in usage));
 
   return (
     <div>
-      <PageHeader title="Usage" subtitle="Metered usage this billing month — plan limits enforced server-side." />
+      <PageHeader title="Usage" subtitle="Your usage this billing month against your plan's limits." />
 
       {usageKeys.length === 0 ? (
         <EmptyState
@@ -137,21 +128,6 @@ export default function UsagePage() {
         </Card>
       )}
 
-      {upcoming.length > 0 && (
-        <Card title="Coming to usage tracking" className="mt-5">
-          <p className="text-sm text-muted">
-            These plan dimensions are enforced server-side already; per-dimension meters arrive with usage tracking.
-          </p>
-          <ul className="mt-3 space-y-1.5">
-            {upcoming.map((d) => (
-              <li key={d.key} className="flex items-center justify-between text-sm">
-                <span className="text-muted">{d.label}</span>
-                <span className="text-xs text-muted">Coming soon</span>
-              </li>
-            ))}
-          </ul>
-        </Card>
-      )}
     </div>
   );
 }

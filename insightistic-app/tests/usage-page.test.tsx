@@ -52,26 +52,28 @@ describe("Usage page", () => {
     expect(screen.getByText("This billing month")).toBeInTheDocument();
   });
 
-  it("shows coming-soon rows only for plan dimensions the payload lacks", async () => {
-    // crawl_pages now exists in the payload — it must render as a real bar
-    // (title-cased fallback label) and drop out of the coming-soon list.
+  it("renders real meters for tracked keywords, crawl pages and AI prompt runs with no dev copy", async () => {
     mockSubscription({
       ...payload,
       usage: {
         ...payload.usage,
+        tracked_keywords: { used: 7, limit: 150 },
         crawl_pages: { used: 12000, limit: 50000 },
+        ai_prompt_runs: { used: 3, limit: 40 },
       },
     });
 
     render(<UsagePage />);
 
-    expect(await screen.findByText("Crawl Pages")).toBeInTheDocument();
+    expect(await screen.findByText("Crawl pages")).toBeInTheDocument();
     expect(screen.getByText("12,000 / 50,000")).toBeInTheDocument();
-
-    expect(screen.getByText("Coming to usage tracking")).toBeInTheDocument();
     expect(screen.getByText("Tracked keywords")).toBeInTheDocument();
+    expect(screen.getByText("7 / 150")).toBeInTheDocument();
     expect(screen.getByText("AI prompt runs")).toBeInTheDocument();
-    expect(screen.queryByText("Crawl pages")).not.toBeInTheDocument();
+    expect(screen.getByText("3 / 40")).toBeInTheDocument();
+    expect(screen.queryByText("Coming to usage tracking")).not.toBeInTheDocument();
+    expect(screen.queryByText("Coming soon")).not.toBeInTheDocument();
+    expect(screen.queryByText(/server-side/)).not.toBeInTheDocument();
   });
 
   it("shows the lifetime grant card when the subscription payload carries one", async () => {

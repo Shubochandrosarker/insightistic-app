@@ -61,9 +61,39 @@ class BillingController extends Controller
             'usage'        => [
                 'ai_insights' => ['used' => $org->currentUsage->ai_insights_used ?? 0, 'limit' => $resolved['limits']['standard_ai_requests_monthly'] ?? $effectivePlan?->ai_insight_limit],
                 'reports'     => ['used' => $org->currentUsage->reports_generated ?? 0, 'limit' => $resolved['limits']['client_ready_reports_monthly'] ?? $effectivePlan?->report_limit],
-            ],
+            ] + $this->featureUsage($org),
             'credits' => $this->creditWallet->summary($org),
         ]);
+    }
+
+    /**
+     * Org-wide meters for the per-feature plan dimensions, derived from the
+     * same ledgers each feature's quota gate counts: active tracked keywords,
+     * crawl pages reserved this calendar month (sum of max_pages of every run,
+     * any status), and AI visibility prompt runs this month.
+     *
+     * @return array<string, array{used: int, limit: int}>
+     */
+    private function featureUsage($org): array
+    {
+        $usage = app(UsageService::class);
+        $siteIds = \Illuminate\Support\Facades\DB::table('sites')->where('organization_id', $org->id)->pluck('id');
+        $monthStart = now()->startOfMonth();
+
+        return [
+            'tracked_keywords' => [
+                'used'  => (int) \Illuminate\Support\Facades\DB::table('rank_keywords')->whereIn('site_id', $siteIds)->where('active', true)->count(),
+                'limit' => $usage->limit($org, 'tracked_keywords'),
+            ],
+            'crawl_pages' => [
+                'used'  => (int) \Illuminate\Support\Facades\DB::table('crawl_runs')->whereIn('site_id', $siteIds)->where('created_at', '>=', $monthStart)->sum('max_pages'),
+                'limit' => $usage->limit($org, 'http_crawl_pages_monthly'),
+            ],
+            'ai_prompt_runs' => [
+                'used'  => (int) \Illuminate\Support\Facades\DB::table('ai_visibility_runs')->whereIn('site_id', $siteIds)->where('created_at', '>=', $monthStart)->count(),
+                'limit' => $usage->limit($org, 'ai_prompt_runs_monthly'),
+            ],
+        ];
     }
 
     /** Dedicated wallet endpoint used by the app and WordPress connector. */

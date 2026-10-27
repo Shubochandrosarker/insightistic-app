@@ -15,7 +15,7 @@ import { num } from "@/lib/format";
 
 /** Shown by the banner and re-shown verbatim when a check 422s with rank_provider_not_configured. */
 export const PROVIDER_NOT_CONNECTED_MSG =
-  "SERP provider not connected — add DataForSEO credentials (DATAFORSEO_LOGIN / DATAFORSEO_PASSWORD) on the server to enable live rank checks.";
+  "Live rank checks are coming soon. Add keywords now and we'll start tracking automatically.";
 
 /**
  * A SERP position with its tone: 1-3 green bold, 4-10 green, 11-20 amber,

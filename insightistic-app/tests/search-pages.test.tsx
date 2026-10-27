@@ -151,7 +151,10 @@ describe("Opportunities page", () => {
   it("renders a winner with its reason string (doc 10: flags explain why)", async () => {
     apiMocks.apiGet.mockImplementation((path: string) => {
       if (String(path).includes("/search/opportunities")) {
+        // Real API shape: reports nested under `opportunities`.
         return Promise.resolve({
+          window: { from: "2026-09-30", to: "2026-10-27" },
+          opportunities: {
           winners: [
             {
               query: "email marketing tool",
@@ -169,6 +172,7 @@ describe("Opportunities page", () => {
           ctr_opportunities: [],
           content_decay: [],
           cannibalization: [],
+          },
         });
       }
       return Promise.resolve({ states: [] });

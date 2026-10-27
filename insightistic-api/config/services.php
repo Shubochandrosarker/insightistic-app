@@ -15,10 +15,12 @@
 |
 */
 
-$redirectBase = rtrim((string) env(
-    'OAUTH_REDIRECT_BASE',
-    env('INSIGHTISTIC_APP_URL', 'https://app.insightistic.com')
-), '/');
+// `?:` (not env()'s default) so an EMPTY value — what docker compose's
+// `${VAR:-}` passes through — falls back instead of yielding a blank or
+// relative redirect_uri.
+$redirectBase = rtrim((string) (env('OAUTH_REDIRECT_BASE')
+    ?: env('INSIGHTISTIC_APP_URL')
+    ?: 'https://app.insightistic.com'), '/');
 
 return [
     'postmark' => [
@@ -34,19 +36,19 @@ return [
     'google' => [
         'client_id' => env('GOOGLE_CLIENT_ID'),
         'client_secret' => env('GOOGLE_CLIENT_SECRET'),
-        'redirect' => env('GOOGLE_REDIRECT_URI', $redirectBase . '/api/auth/oauth/google/callback'),
+        'redirect' => env('GOOGLE_REDIRECT_URI') ?: $redirectBase . '/api/auth/oauth/google/callback',
     ],
 
     'github' => [
         'client_id' => env('GITHUB_CLIENT_ID'),
         'client_secret' => env('GITHUB_CLIENT_SECRET'),
-        'redirect' => env('GITHUB_REDIRECT_URI', $redirectBase . '/api/auth/oauth/github/callback'),
+        'redirect' => env('GITHUB_REDIRECT_URI') ?: $redirectBase . '/api/auth/oauth/github/callback',
     ],
 
     'microsoft' => [
         'client_id' => env('MICROSOFT_CLIENT_ID'),
         'client_secret' => env('MICROSOFT_CLIENT_SECRET'),
-        'redirect' => env('MICROSOFT_REDIRECT_URI', $redirectBase . '/api/auth/oauth/microsoft/callback'),
+        'redirect' => env('MICROSOFT_REDIRECT_URI') ?: $redirectBase . '/api/auth/oauth/microsoft/callback',
         // 'common' allows both work/school and personal Microsoft accounts.
         'tenant' => env('MICROSOFT_TENANT', 'common'),
     ],

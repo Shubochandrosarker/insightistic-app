@@ -98,3 +98,17 @@ curl https://app.insightistic.com/api/auth/oauth/providers
   dashboard, roles and billing all behave the same for social accounts.
 - To restrict the API's CORS in direct mode, also set
   `CORS_ALLOWED_ORIGINS=https://app.insightistic.com`.
+
+
+## Production checklist — GitHub (app.insightistic.com)
+
+1. GitHub OAuth App → **Authorization callback URL**:
+   `https://app.insightistic.com/api/auth/oauth/github/callback`
+   (Homepage URL: `https://app.insightistic.com`).
+2. Set on the **api** container (and queue/scheduler, which share the env block):
+   `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`. Leave `GITHUB_REDIRECT_URI` empty
+   unless you want a different callback — empty values now fall back correctly.
+3. Redeploy, then `curl https://app.insightistic.com/api/auth/oauth/providers`
+   should list `"github"`, and the button appears on /login and /register.
+
+Never commit the client secret; keep it in the hosting env / secret store.

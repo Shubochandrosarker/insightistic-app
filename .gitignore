@@ -39,6 +39,8 @@ bootstrap/cache/*.php
 # Local tooling
 .phpunit.result.cache
 coverage/
+playwright-report/
+test-results/
 tmp/
 temp/
 

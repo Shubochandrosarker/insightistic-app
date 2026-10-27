@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, act } from "@testing-library/react";
+import { render, act, waitFor } from "@testing-library/react";
 
 /**
  * The auth context value must be referentially stable across session state
@@ -11,20 +11,26 @@ import { render, act } from "@testing-library/react";
 const apiMocks = vi.hoisted(() => ({
   apiGet: vi.fn(),
   apiPost: vi.fn(),
+  getToken: vi.fn(),
   setToken: vi.fn(),
+  clearImpersonation: vi.fn(),
 }));
 
 vi.mock("@/lib/api", () => ({
   apiGet: apiMocks.apiGet,
   apiPost: apiMocks.apiPost,
+  getToken: apiMocks.getToken,
   setToken: apiMocks.setToken,
-  getToken: vi.fn(() => null),
+  clearImpersonation: apiMocks.clearImpersonation,
 }));
 
 import { AuthProvider, useAuth } from "@/lib/auth";
 
 describe("AuthProvider context stability", () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+    apiMocks.getToken.mockReturnValue(null);
+  });
 
   it("keeps applyToken/login/logout identities stable across a session state change", async () => {
     apiMocks.apiGet.mockResolvedValue({ user: null, organizations: [] });
@@ -60,5 +66,55 @@ describe("AuthProvider context stability", () => {
     // yet every function the context exposes must be the same reference.
     expect(applyIdentities.size).toBe(1);
     expect(loginIdentities.size).toBe(1);
+  });
+
+  it("preserves the shared token when session hydration hits a transient server error", async () => {
+    apiMocks.getToken.mockReturnValue("session-token");
+    apiMocks.apiGet.mockRejectedValue({ status: 520, message: "Request failed (HTTP 520)" });
+
+    let loading = true;
+    let sessionError: string | null = null;
+
+    function Probe() {
+      const auth = useAuth();
+      loading = auth.loading;
+      sessionError = auth.sessionError;
+      return <p>probe</p>;
+    }
+
+    render(
+      <AuthProvider>
+        <Probe />
+      </AuthProvider>
+    );
+
+    await waitFor(() => expect(loading).toBe(false));
+    expect(sessionError).toMatch(/temporarily unavailable/i);
+    expect(apiMocks.setToken).not.toHaveBeenCalledWith(null);
+  });
+
+  it("clears the shared token only after an authoritative 401", async () => {
+    apiMocks.getToken.mockReturnValue("expired-token");
+    apiMocks.apiGet.mockRejectedValue({ status: 401, message: "Unauthenticated." });
+
+    let loading = true;
+    let sessionError: string | null = null;
+
+    function Probe() {
+      const auth = useAuth();
+      loading = auth.loading;
+      sessionError = auth.sessionError;
+      return <p>probe</p>;
+    }
+
+    render(
+      <AuthProvider>
+        <Probe />
+      </AuthProvider>
+    );
+
+    await waitFor(() => expect(loading).toBe(false));
+    expect(sessionError).toBeNull();
+    expect(apiMocks.setToken).toHaveBeenCalledWith(null);
   });
 });

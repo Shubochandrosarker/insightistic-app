@@ -1,6 +1,6 @@
 "use client";
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, ReactNode } from "react";
-import { apiGet, apiPost, setToken, clearImpersonation } from "./api";
+import { apiGet, apiPost, getToken, setToken, clearImpersonation, type ApiError } from "./api";
 import { getAttributionBundle } from "./attribution";
 import { getMarketingConsent } from "./consent";
 import type { Org, User } from "./types";
@@ -21,6 +21,8 @@ interface AuthState {
   user: User | null;
   orgs: Org[];
   loading: boolean;
+  sessionError: string | null;
+  retrySession: () => void;
   /**
    * Resolves to the signed-in user, or to an MFA challenge when the account
    * has two-factor enabled — the password alone never yields a session.
@@ -45,23 +47,69 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [orgs, setOrgs] = useState<Org[]>([]);
   const [loading, setLoading] = useState(true);
+  const [sessionError, setSessionError] = useState<string | null>(null);
+
+  const hydrateSession = useCallback(async () => {
+    // Anonymous pages do not need an avoidable 401 on every new tab.
+    if (!getToken()) {
+      setUser(null);
+      setOrgs([]);
+      setSessionError(null);
+      setLoading(false);
+      return;
+    }
+
+    setLoading(true);
+    setSessionError(null);
+    try {
+      const me = await apiGet("/auth/me");
+      setUser(me.user);
+      setOrgs(me.organizations || []);
+    } catch (error) {
+      const apiError = error as ApiError;
+      if (apiError?.status === 401) {
+        // Only an authoritative authentication failure may destroy the shared
+        // browser session. A transient 5xx/network error in one tab must not
+        // sign every other tab out by deleting the localStorage token.
+        setToken(null);
+        setUser(null);
+        setOrgs([]);
+      } else {
+        setSessionError(
+          "The server is temporarily unavailable. Your sign-in is still safe; please retry.",
+        );
+      }
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
-    (async () => {
-      try {
-        const me = await apiGet("/auth/me");
-        setUser(me.user);
-        setOrgs(me.organizations || []);
-      } catch {
-        setToken(null);
-      } finally {
+    void hydrateSession();
+  }, [hydrateSession]);
+
+  // localStorage is shared by every tab. Keep logout, login, and impersonation
+  // changes synchronized without polling or racing separate in-memory states.
+  useEffect(() => {
+    const onStorage = (event: StorageEvent) => {
+      if (event.key !== "ins_token") return;
+      if (!event.newValue) {
+        setUser(null);
+        setOrgs([]);
+        setSessionError(null);
         setLoading(false);
+        return;
       }
-    })();
-  }, []);
+      void hydrateSession();
+    };
+
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, [hydrateSession]);
 
   /** Store the token and user from a successful sign-in response. */
   const adoptSession = useCallback((res: any): User => {
+    setSessionError(null);
     setToken(res.token);
     setUser(res.user);
     setOrgs(res.organizations || []);
@@ -82,6 +130,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [adoptSession]);
 
   const register = useCallback(async (p: RegisterInput) => {
+    setSessionError(null);
     // The form has a single password field; mirror it as the confirmation so
     // the backend's `confirmed` rule passes without a second input. The
     // attribution bundle (UTM/gclid first+last touch, spec §32) rides along.
@@ -105,6 +154,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   /** Adopt a token issued by the OAuth callback and hydrate the session. */
   const applyToken = useCallback(async (token: string): Promise<User> => {
+    setSessionError(null);
     setToken(token);
     const me = await apiGet("/auth/me");
     setUser(me.user);
@@ -113,6 +163,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const logout = useCallback(() => {
+    setSessionError(null);
     apiPost("/auth/logout").catch(() => {});
     setToken(null);
     setUser(null);
@@ -128,8 +179,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value = useMemo<AuthState>(
-    () => ({ user, orgs, loading, login, completeMfa, register, applyToken, logout }),
-    [user, orgs, loading, login, completeMfa, register, applyToken, logout],
+    () => ({
+      user,
+      orgs,
+      loading,
+      sessionError,
+      retrySession: hydrateSession,
+      login,
+      completeMfa,
+      register,
+      applyToken,
+      logout,
+    }),
+    [user, orgs, loading, sessionError, hydrateSession, login, completeMfa, register, applyToken, logout],
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

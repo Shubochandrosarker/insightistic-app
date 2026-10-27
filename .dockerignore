@@ -11,6 +11,8 @@ vendor
 **/node_modules
 **/vendor
 **/public/storage
+**/storage/framework/testing
+insightistic-api/storage/
 **/bootstrap/cache/*.php
 
 docs

@@ -6,6 +6,7 @@ use App\Models\DataSourceCredential;
 use App\Models\SeoDaily;
 use App\Models\Site;
 use App\Models\TrafficDaily;
+use App\Models\TrafficDimensionSnapshot;
 use App\Services\Integrations\GoogleOAuthService;
 use App\Services\Integrations\IntegrationManager;
 use Illuminate\Support\Facades\Cache;
@@ -206,6 +207,22 @@ it('syncs GA4 rows into traffic_daily under the ga4 source', function () {
                 ]],
             ])
             ->push(['rows' => [[
+                'dimensionValues' => [['value' => 'Organic Search']],
+                'metricValues'    => [['value' => '5'], ['value' => '4'], ['value' => '6'], ['value' => '1'], ['value' => '20']],
+            ]]])
+            ->push(['rows' => [[
+                'dimensionValues' => [['value' => 'google / organic']],
+                'metricValues'    => [['value' => '5'], ['value' => '4'], ['value' => '6'], ['value' => '1'], ['value' => '20']],
+            ]]])
+            ->push(['rows' => [[
+                'dimensionValues' => [['value' => 'Bangladesh']],
+                'metricValues'    => [['value' => '5'], ['value' => '4'], ['value' => '6'], ['value' => '1'], ['value' => '20']],
+            ]]])
+            ->push(['rows' => [[
+                'dimensionValues' => [['value' => 'desktop']],
+                'metricValues'    => [['value' => '5'], ['value' => '4'], ['value' => '6'], ['value' => '1'], ['value' => '20']],
+            ]]])
+            ->push(['rows' => [[
                 'dimensionValues' => [['value' => '/landing']],
                 'metricValues'    => [['value' => '5'], ['value' => '4'], ['value' => '6'], ['value' => '1'], ['value' => '20']],
             ]]]),
@@ -213,7 +230,19 @@ it('syncs GA4 rows into traffic_daily under the ga4 source', function () {
 
     $result = app(IntegrationManager::class)->sync($site, 'ga4', 7);
 
-    expect($result['days'])->toBe(1)->and($result['dimension_rows'])->toBe(1);
+    expect($result['days'])->toBe(1)->and($result['dimension_rows'])->toBe(5);
+
+    // Every Traffic page breakdown tab must get its own snapshot rows.
+    $byType = TrafficDimensionSnapshot::where('site_id', $site->id)->where('source', 'ga4')
+        ->pluck('dimension_value', 'dimension_type')->all();
+    expect($byType)->toEqualCanonicalizing([
+        'channel'       => 'Organic Search',
+        'source_medium' => 'google / organic',
+        'country'       => 'Bangladesh',
+        'device'        => 'desktop',
+        'landing_page'  => '/landing',
+    ]);
+    expect(TrafficDimensionSnapshot::where('dimension_type', 'channel')->value('url'))->toBeNull();
 
     $row = TrafficDaily::where('site_id', $site->id)->where('source', 'ga4')->firstOrFail();
     expect($row->sessions)->toBe(12)

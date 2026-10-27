@@ -72,15 +72,48 @@ class TrafficController extends Controller
         $range = $this->range($request, $site);
         $limit = min(50, max(1, (int) $request->query('limit', 10)));
 
+        // Snapshots are stored per sync window (GA4: [today-N, yesterday];
+        // connector: whatever window it posts), which almost never matches the
+        // dashboard range exactly — e.g. last_30_days is [today-29, today]
+        // while a 30-day GA4 sync is [today-30, today-1]. Requiring the
+        // snapshot to sit fully inside the range hid every row, so pick the
+        // most recent snapshot window that overlaps the range instead, and
+        // read only that window so rows are never double counted.
+        $window = TrafficDimensionSnapshot::where('site_id', $site->id)
+            ->where('dimension_type', $type)
+            ->where('period_start', '<=', $range->dateTo())
+            ->where('period_end', '>=', $range->dateFrom())
+            ->orderByDesc('period_end')
+            ->orderBy('period_start')
+            ->first(['period_start', 'period_end', 'source']);
+
+        if (! $window) {
+            return response()->json(['type' => $type, 'rows' => [], 'window' => null]);
+        }
+
+        $start = $this->dateString($window->period_start);
+        $end   = $this->dateString($window->period_end);
+
         $rows = TrafficDimensionSnapshot::where('site_id', $site->id)
             ->where('dimension_type', $type)
-            ->where('period_start', '>=', $range->dateFrom())
-            ->where('period_end', '<=', $range->dateTo())
+            ->where('source', $window->source)
+            ->where('period_start', $start)
+            ->where('period_end', $end)
             ->orderByDesc('sessions')
             ->limit($limit)
             ->get(['dimension_value', 'url', 'title', 'sessions', 'users', 'views', 'conversions', 'revenue', 'engagement_rate']);
 
-        return response()->json(['type' => $type, 'rows' => $rows]);
+        return response()->json([
+            'type' => $type,
+            'rows' => $rows,
+            'window' => ['from' => $start, 'to' => $end, 'source' => $window->source],
+        ]);
+    }
+
+    private function dateString(mixed $value): string
+    {
+        return $value instanceof \DateTimeInterface ? $value->format('Y-m-d') : substr((string) $value, 0, 10);
+
     }
 
     private function aggregate(int $siteId, DateRange $range): array

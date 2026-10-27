@@ -172,28 +172,44 @@ class Ga4Client
             }
         });
 
-        $dimensionRows = $this->syncLandingPages($site, $token, $propertyId, $start, $end);
+        $dimensionRows = 0;
+        foreach (self::BREAKDOWN_DIMENSIONS as $type => $ga4Dimension) {
+            $dimensionRows += $this->syncDimension($site, $token, $propertyId, $start, $end, $type, $ga4Dimension);
+        }
 
         return ['days' => $rows, 'dimension_rows' => $dimensionRows, 'latest_date' => $latestDate];
     }
 
-    /** Top landing pages for the window, replacing the previous snapshot. */
-    private function syncLandingPages(Site $site, string $token, string $propertyId, string $start, string $end): int
+    /**
+     * Dashboard breakdown tab => GA4 Data API dimension. Every tab on the
+     * Traffic page reads `traffic_dimension_snapshots` by dimension_type, so
+     * each one must be synced here or its tab stays empty.
+     */
+    public const BREAKDOWN_DIMENSIONS = [
+        'channel'       => 'sessionDefaultChannelGroup',
+        'source_medium' => 'sessionSourceMedium',
+        'country'       => 'country',
+        'device'        => 'deviceCategory',
+        'landing_page'  => 'landingPagePlusQueryString',
+    ];
+
+    /** Top rows of one breakdown dimension for the window, replacing the previous snapshot. */
+    private function syncDimension(Site $site, string $token, string $propertyId, string $start, string $end, string $type, string $ga4Dimension): int
     {
         $report = $this->runReport($token, $propertyId, [
             'dateRanges' => [['startDate' => $start, 'endDate' => $end]],
-            'dimensions' => [['name' => 'landingPagePlusQueryString']],
+            'dimensions' => [['name' => $ga4Dimension]],
             'metrics'    => array_map(fn ($m) => ['name' => $m], ['sessions', 'totalUsers', 'screenPageViews', 'conversions', 'totalRevenue']),
             'orderBys'   => [['metric' => ['metricName' => 'sessions'], 'desc' => true]],
             'limit'      => 50,
-        ], 'ga4_pages_failed');
+        ], $type === 'landing_page' ? 'ga4_pages_failed' : 'ga4_dimensions_failed');
 
-        return DB::transaction(function () use ($report, $site, $start, $end) {
+        return DB::transaction(function () use ($report, $site, $start, $end, $type) {
             // Snapshots are point-in-time for a window; clear the window first
             // so a re-sync replaces rather than duplicates.
             TrafficDimensionSnapshot::where('site_id', $site->id)
                 ->where('source', 'ga4')
-                ->where('dimension_type', 'landing_page')
+                ->where('dimension_type', $type)
                 ->where('period_start', $start)
                 ->where('period_end', $end)
                 ->delete();
@@ -212,9 +228,9 @@ class Ga4Client
                     'period_start'    => $start,
                     'period_end'      => $end,
                     'source'          => 'ga4',
-                    'dimension_type'  => 'landing_page',
+                    'dimension_type'  => $type,
                     'dimension_value' => mb_substr($value, 0, 255),
-                    'url'             => mb_substr($value, 0, 255),
+                    'url'             => $type === 'landing_page' ? mb_substr($value, 0, 255) : null,
                     'sessions'        => (int) ($m[0] ?? 0),
                     'users'           => (int) ($m[1] ?? 0),
                     'views'           => (int) ($m[2] ?? 0),

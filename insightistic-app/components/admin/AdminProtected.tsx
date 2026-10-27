@@ -5,16 +5,21 @@ import Link from "next/link";
 import { useAuth } from "@/lib/auth";
 import { BrandLoader } from "@/components/BrandLoader";
 import { ShieldAlert } from "lucide-react";
+import { SessionRecovery } from "@/components/auth/SessionRecovery";
 
 /** Gate the /admin area to platform super admins only. */
 export function AdminProtected({ children }: { children: ReactNode }) {
-  const { user, loading } = useAuth();
+  const { user, loading, sessionError, retrySession } = useAuth();
   const router = useRouter();
 
   useEffect(() => {
     if (loading) return;
-    if (!user) router.replace("/login");
-  }, [loading, user, router]);
+    if (!user && !sessionError) router.replace("/login");
+  }, [loading, user, sessionError, router]);
+
+  if (sessionError) {
+    return <SessionRecovery message={sessionError} onRetry={retrySession} />;
+  }
 
   if (loading || !user) return <BrandLoader message="Checking access…" />;
 

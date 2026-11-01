@@ -9,6 +9,12 @@ const ERRORS: Record<string, string> = {
   provider_unavailable: "That sign-in provider isn't available right now.",
   oauth_failed: "We couldn't complete sign-in with that provider. Please try again.",
   no_email: "Your provider didn't share an email address, so we can't create an account.",
+  invalid_state: "Your sign-in link expired or was already used. Please start again.",
+  access_denied: "Sign-in was cancelled or refused by the provider. Please try again.",
+  email_unverified: "Your provider hasn't verified that email address. Verify it there, or sign in with your password.",
+  account_exists: "An account with this email already uses a different sign-in method. Sign in that way first.",
+  invite_pending: "You've been invited — please accept the invitation email first.",
+  account_not_active: "This account isn't active. Contact your workspace owner or support.",
 };
 
 export default function OAuthCallback() {

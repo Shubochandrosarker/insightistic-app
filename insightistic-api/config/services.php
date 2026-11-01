@@ -36,7 +36,13 @@ return [
     'google' => [
         'client_id' => env('GOOGLE_CLIENT_ID'),
         'client_secret' => env('GOOGLE_CLIENT_SECRET'),
-        'redirect' => env('GOOGLE_REDIRECT_URI') ?: $redirectBase . '/api/auth/oauth/google/callback',
+        // Google only accepts redirect URIs registered on the OAuth client, and the
+        // integrations callback is the one registered for it. Social login reuses
+        // it; IntegrationsController::googleCallback hands login flows back to
+        // OAuthController (it recognises the login state nonce).
+        'redirect' => env('GOOGLE_REDIRECT_URI')
+            ?: env('INTEGRATIONS_GOOGLE_REDIRECT_URI')
+            ?: $redirectBase . '/api/auth/oauth/google/callback',
     ],
 
     'github' => [

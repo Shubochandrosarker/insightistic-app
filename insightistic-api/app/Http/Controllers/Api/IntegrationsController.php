@@ -281,6 +281,13 @@ class IntegrationsController extends Controller
         $app = rtrim((string) config('insightistic.app_url'), '/');
         $back = $app . '/dashboard/integrations';
 
+        // Social login shares this Google-registered redirect URI (see
+        // config/services.php). A login state nonce means this is a sign-in,
+        // not a data-source connect — hand the whole flow to OAuthController.
+        if (OAuthController::isLoginState((string) $request->query('state', ''), 'google')) {
+            return app(OAuthController::class)->callback('google', $request);
+        }
+
         if ($request->query('error')) {
             return redirect($back . '?integration=error&reason=access_denied');
         }

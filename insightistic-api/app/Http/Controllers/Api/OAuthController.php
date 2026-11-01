@@ -10,6 +10,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
 use Laravel\Socialite\Facades\Socialite;
@@ -60,7 +61,7 @@ class OAuthController extends Controller
         // burned on callback. We manage it ourselves because the API issues
         // no session cookie for Socialite's built-in state to live in.
         $state = Str::random(40);
-        Cache::put($this->stateCacheKey($state), $provider, self::STATE_TTL_SECONDS);
+        Cache::put(self::stateCacheKey($state), $provider, self::STATE_TTL_SECONDS);
 
         return Socialite::driver($provider)
             ->stateless()
@@ -79,9 +80,27 @@ class OAuthController extends Controller
         // Validate + burn the state nonce (single use). A missing or unknown
         // state means the flow didn't start on our redirect endpoint.
         $state = (string) $request->query('state', '');
-        $cachedProvider = $state !== '' ? Cache::pull($this->stateCacheKey($state)) : null;
+        $cachedProvider = $state !== '' ? Cache::pull(self::stateCacheKey($state)) : null;
         if ($cachedProvider !== $provider) {
+            Log::warning('OAuth callback rejected: invalid state', [
+                'provider' => $provider,
+                'has_state' => $state !== '',
+                'provider_error' => (string) $request->query('error', ''),
+            ]);
+
             return redirect($app . '/auth/callback#error=invalid_state');
+        }
+
+        // The user cancelled, or the provider refused the request (e.g. a
+        // redirect_uri mismatch) — there is no code to exchange.
+        if ($request->query('error')) {
+            Log::warning('OAuth provider returned an error', [
+                'provider' => $provider,
+                'error' => (string) $request->query('error'),
+                'description' => (string) $request->query('error_description', ''),
+            ]);
+
+            return redirect($app . '/auth/callback#error=access_denied');
         }
 
         try {
@@ -188,7 +207,13 @@ class OAuthController extends Controller
 
     // --- helpers -----------------------------------------------------------
 
-    private function stateCacheKey(string $state): string
+    /** True when $state is a live social-login nonce for $provider (not burned). */
+    public static function isLoginState(string $state, string $provider): bool
+    {
+        return $state !== '' && Cache::get(self::stateCacheKey($state)) === $provider;
+    }
+
+    private static function stateCacheKey(string $state): string
     {
         return 'oauth_state:' . hash('sha256', $state);
     }

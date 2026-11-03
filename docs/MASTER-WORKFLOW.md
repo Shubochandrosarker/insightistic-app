@@ -211,7 +211,7 @@ Queue-backed (Phase 0.5), every send recorded in `email_logs` (dedupe key: `emai
 
 | # | email_type | Trigger | CTA |
 |---|---|---|---|
-| 1 | welcome | register (exists — refresh copy, 14-day trial) | Go to dashboard |
+| 1 | welcome | register (exists — refresh copy, 7-day trial) | Go to dashboard |
 | 2 | verify_email | register (enable Laravel `MustVerifyEmail`) | Verify |
 | 3 | trial_started + license_generated | org bootstrap (one combined email: "Your trial is live — here's your license key setup") | Copy key / connect plugin |
 | 4 | plugin_install_guide | +1 day, if no activation | Install guide |
@@ -277,4 +277,4 @@ Staging first, then production. The full E2E script:
 | 6 | Phase 5 (marketing/docs) | S–M — 2–3 days |
 | 7 | Phase 6 (verification) | M — 2–3 days |
 
-Decisions locked by this plan (flag if you want them changed): 14-day trial; 4 public plans with Growth featured; license key in front of HMAC creds; one public plugin (connector retired from distribution); 72 h plugin grace; 7-day payment-failed grace.
+Decisions locked by this plan (flag if you want them changed): 7-day trial; 4 public plans with Growth featured; license key in front of HMAC creds; one public plugin (connector retired from distribution); 72 h plugin grace; 7-day payment-failed grace.

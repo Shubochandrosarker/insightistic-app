@@ -240,7 +240,7 @@ Implementation: one `LifecycleMailer` service + thin Mailable per template; even
 
 1. **Plugin landing page** (`template-plugin.php`): plugin hero → free features → locked advanced grid → how activation works (5 steps) → screenshots → pricing comparison strip → FAQ → "Create free account" CTA. Reuse existing section partials.
 2. **Docs page(s)**: installation, license activation, plugin connection, WooCommerce analytics, SEO analytics, email automation, troubleshooting, FAQ. Simplest robust option: a `docs` CPT + archive template (the theme already has `inc/cpt` scaffolding).
-3. **Pricing page alignment:** 4 tiers (Free plugin / Starter / Growth "Best Value" / Agency), monthly-yearly toggle already exists; numbers must match `PlanSeeder`; trial copy "14-day free trial, no card required".
+3. **Pricing page alignment:** 4 tiers (Free plugin / Starter / Growth "Best Value" / Agency), monthly-yearly toggle already exists; numbers must match `PlanSeeder`; trial copy "7-day free trial, no card required".
 4. Home page: add the license-activation workflow section + "Download free plugin" CTA next to trial CTA (both already exist as sections — verify copy against spec messaging: "Turn your WordPress data into business intelligence.").
 5. Retire/redirect the Lifetime Deal page or keep as lead-gen (decision: keep, it's harmless lead-gen).
 

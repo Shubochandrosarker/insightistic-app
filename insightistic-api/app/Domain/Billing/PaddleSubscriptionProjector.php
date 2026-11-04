@@ -120,6 +120,7 @@ final class PaddleSubscriptionProjector
         $sub->save();
 
         $org->status = $this->orgStatus($status);
+        $org->billing_provider = 'paddle';
         $org->save();
 
         // License status/limits are a projection of subscription state —

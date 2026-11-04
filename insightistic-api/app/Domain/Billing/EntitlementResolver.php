@@ -23,7 +23,7 @@ final class EntitlementResolver
     private const ACTIVE_SUBSCRIPTION_STATUSES = ['active', 'trialing', 'past_due', 'paused'];
 
     /** Grants apply in this order; later sources win a conflicting limit key. */
-    private const GRANT_SOURCE_ORDER = ['paddle_lifetime' => 0, 'manual' => 1, 'promotion' => 2];
+    private const GRANT_SOURCE_ORDER = ['paddle_lifetime' => 0, 'stripe_lifetime' => 0, 'manual' => 1, 'promotion' => 2];
 
     /** Roadmap limit keys backed by the legacy numeric plan columns. */
     private const LEGACY_LIMIT_COLUMNS = [
@@ -110,11 +110,11 @@ final class EntitlementResolver
 
                 if ($grantPlan) {
                     $plan = $grantPlan;
-                    $source = $grant->source === 'paddle_lifetime' ? 'lifetime' : 'grant';
+                    $source = EntitlementGrant::isLifetimeSource($grant->source) ? 'lifetime' : 'grant';
                     $features = $this->strings($plan->features_json);
                     $limits = $this->planLimits($plan);
                 }
-            } elseif ($source === 'none' && $grant->source === 'paddle_lifetime') {
+            } elseif ($source === 'none' && EntitlementGrant::isLifetimeSource($grant->source)) {
                 // A plan-less lifetime grant still owns the base payload.
                 $source = 'lifetime';
             }

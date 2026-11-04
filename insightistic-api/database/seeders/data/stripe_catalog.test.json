@@ -1,0 +1,18 @@
+{
+  "account": "acct_1UJdlgBUynykllDP",
+  "livemode": false,
+  "portal_configuration": "bpc_1UXtaSBUynykllDPng6hlqJF",
+  "prices": [
+    {"plan": "starter",      "kind": "monthly",  "product": "prod_VZ1aK6OUbwlIJS", "price": "price_1UXtZxBUynykllDPYxrTnBBz", "amount_minor": 2900,   "interval": "month"},
+    {"plan": "starter",      "kind": "yearly",   "product": "prod_VZ1aK6OUbwlIJS", "price": "price_1UXtZyBUynykllDPBM69k0gV", "amount_minor": 29000,  "interval": "year"},
+    {"plan": "growth",       "kind": "monthly",  "product": "prod_VZ1cU1fkohFQ0Y", "price": "price_1UXta0BUynykllDPyvxTMc9M", "amount_minor": 6900,   "interval": "month"},
+    {"plan": "growth",       "kind": "yearly",   "product": "prod_VZ1cU1fkohFQ0Y", "price": "price_1UXta2BUynykllDPHcXJC52r", "amount_minor": 69000,  "interval": "year"},
+    {"plan": "agency",       "kind": "monthly",  "product": "prod_VZ1d0G8iULJle5", "price": "price_1UXta4BUynykllDPfYnmVprr", "amount_minor": 14900,  "interval": "month"},
+    {"plan": "agency",       "kind": "yearly",   "product": "prod_VZ1d0G8iULJle5", "price": "price_1UXta7BUynykllDPZwUC5hTr", "amount_minor": 149000, "interval": "year"},
+    {"plan": "agency_pro",   "kind": "monthly",  "product": "prod_VZ1dC73AMjwXgF", "price": "price_1UXta9BUynykllDPyWmqYZdR", "amount_minor": 29900,  "interval": "month"},
+    {"plan": "agency_pro",   "kind": "yearly",   "product": "prod_VZ1dC73AMjwXgF", "price": "price_1UXtaBBUynykllDP7KoAw3Tn", "amount_minor": 299000, "interval": "year"},
+    {"plan": "angel_solo",   "kind": "lifetime", "product": "prod_VZ1dU5rtl0rvH9", "price": "price_1UXtaDBUynykllDP8GVdrKCg", "amount_minor": 14900,  "interval": null},
+    {"plan": "angel_studio", "kind": "lifetime", "product": "prod_VZ1dLcCbNhmg1L", "price": "price_1UXtaFBUynykllDPLUFNsa1g", "amount_minor": 29900,  "interval": null},
+    {"plan": "angel_agency", "kind": "lifetime", "product": "prod_VZ1dqUGYvtNCLF", "price": "price_1UXtaIBUynykllDPPKLjUpN7", "amount_minor": 69900,  "interval": null}
+  ]
+}

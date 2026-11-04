@@ -142,7 +142,7 @@ class OverviewController extends AdminController
             $db = 'down';
         }
 
-        $stripeSecret = (string) config('insightistic.stripe.secret');
+        $billingHealth = app(\App\Domain\Billing\BillingProviderHealth::class)->report();
 
         return [
             'app'      => ['status' => 'ok', 'url' => config('insightistic.app_url'), 'env' => app()->environment(), 'debug' => (bool) config('app.debug')],
@@ -153,9 +153,11 @@ class OverviewController extends AdminController
             'scheduler'=> ['status' => 'configured', 'detail' => 'nightly snapshots 02:00'],
             'storage'  => ['writable' => is_writable(storage_path()), 'reports_disk' => config('insightistic.reports.disk', 'public')],
             'mail'     => ['mailer' => config('mail.default'), 'configured' => ! empty(config('mail.mailers.smtp.host')) || config('mail.default') !== 'smtp'],
-            'stripe'   => ['configured' => $stripeSecret !== '', 'mode' => Str::startsWith($stripeSecret, 'sk_live') ? 'live' : 'test'],
+            // Both billing providers: configured / API reachable / webhook
+            // configured + last received. Status only, never key material.
+            'stripe'   => $billingHealth['stripe'],
             'cache'    => ['driver' => config('cache.default'), 'ok' => $this->cacheOk()],
-            'paddle'   => ['configured' => ! empty(config('billing.paddle.api_key')) && ! empty(config('billing.paddle.webhook_secret')), 'environment' => config('billing.paddle.sandbox') ? 'sandbox' : 'production'],
+            'paddle'   => $billingHealth['paddle'],
             'ai'       => $this->aiHealth(),
             'recent_failed_jobs' => Schema::hasTable('failed_jobs')
                 ? DB::table('failed_jobs')->latest('id')->limit(5)->get(['id', 'queue', 'exception', 'failed_at'])

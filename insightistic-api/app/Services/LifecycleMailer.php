@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Mail\LifecycleMail;
 use App\Models\EmailLog;
 use App\Models\Organization;
+use App\Support\MailRecipient;
 use Illuminate\Support\Facades\Mail;
 
 /**
@@ -32,21 +33,41 @@ class LifecycleMailer
             return false;
         }
 
+        // Reserved/undeliverable domains (test and E2E accounts): record the
+        // skip so the sweep stays idempotent, and never queue a send the
+        // relay is certain to reject (554 5.7.1 → failed job).
+        if (! MailRecipient::isDeliverable($recipient)) {
+            EmailLog::updateOrCreate(
+                ['organization_id' => $org->id, 'email_type' => $type, 'period_key' => $periodKey],
+                [
+                    'user_id'    => $org->owner_user_id,
+                    'recipient'  => $recipient,
+                    'subject'    => '',
+                    'status'     => 'skipped',
+                    'created_at' => now(),
+                ],
+            );
+
+            return false;
+        }
+
         $copy = $this->copyFor($type, $org, $data);
         if ($copy === null) {
             return false;
         }
 
-        $log = EmailLog::create([
-            'organization_id' => $org->id,
-            'user_id'         => $org->owner_user_id,
-            'email_type'      => $type,
-            'period_key'      => $periodKey,
-            'recipient'       => $recipient,
-            'subject'         => $copy['subject'],
-            'status'          => 'queued',
-            'created_at'      => now(),
-        ]);
+        // updateOrCreate: a previous 'failed' row for the same key must not
+        // turn the retry into a unique-key violation.
+        $log = EmailLog::updateOrCreate(
+            ['organization_id' => $org->id, 'email_type' => $type, 'period_key' => $periodKey],
+            [
+                'user_id'    => $org->owner_user_id,
+                'recipient'  => $recipient,
+                'subject'    => $copy['subject'],
+                'status'     => 'queued',
+                'created_at' => now(),
+            ],
+        );
 
         try {
             Mail::to($recipient)->send(new LifecycleMail($copy['subject'], $copy['body']));

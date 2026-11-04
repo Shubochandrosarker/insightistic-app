@@ -27,7 +27,7 @@ class EmailLog extends Model
         return static::where('organization_id', $organizationId)
             ->where('email_type', $type)
             ->where('period_key', $periodKey)
-            ->whereIn('status', ['queued', 'sent'])
+            ->whereIn('status', ['queued', 'sent', 'skipped'])
             ->exists();
     }
 }

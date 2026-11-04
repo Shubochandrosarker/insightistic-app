@@ -216,8 +216,11 @@ class CrawlRunExecutor
             // this run against the previous completed run now that the issue
             // lifecycle has settled. Separate service — must never be able
             // to fail an otherwise complete crawl.
+            // Nested transaction = SAVEPOINT. On PostgreSQL a failed
+            // statement aborts the whole transaction (25P02), so catching the
+            // PHP exception alone is not enough: roll back to the savepoint.
             try {
-                app(ChangeDetection::class)->detect($fresh, $fresh->site);
+                DB::transaction(fn () => app(ChangeDetection::class)->detect($fresh, $fresh->site));
             } catch (Throwable $e) {
                 logger()->warning('ChangeDetection failed for run '.$fresh->id.': '.$e->getMessage());
             }
@@ -231,7 +234,7 @@ class CrawlRunExecutor
 
             // Funnel event (spec §33) — the run truly finished.
             try {
-                app(\App\Services\Analytics\AttributionService::class)->event(
+                DB::transaction(fn () => app(\App\Services\Analytics\AttributionService::class)->event(
                     'crawler_completed',
                     $fresh->site?->organization,
                     null,
@@ -240,10 +243,30 @@ class CrawlRunExecutor
                         'trigger'    => $fresh->trigger,
                         'page_count' => $fresh->pages_crawled,
                     ],
-                );
+                ));
             } catch (Throwable) {
             }
         });
+    }
+
+    /**
+     * Restart a chain whose hop died (worker killed, attempts exhausted).
+     * Rows left 'crawling' by the dead hop are returned to the frontier.
+     */
+    public function recoverChain(CrawlRun $run): void
+    {
+        DB::table('crawl_frontier')
+            ->where('run_id', $run->id)
+            ->where('status', CrawlFrontier::STATUS_CRAWLING)
+            ->update(['status' => CrawlFrontier::STATUS_PENDING]);
+
+        if ($this->frontierCount($run, CrawlFrontier::STATUS_PENDING) > 0 && $run->pages_crawled < $run->max_pages) {
+            CrawlUrlJob::dispatch($run->id);
+
+            return;
+        }
+
+        $this->nextStep($run);
     }
 
     // ------------------------------------------------------------------

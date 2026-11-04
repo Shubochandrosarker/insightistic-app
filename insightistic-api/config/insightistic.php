@@ -123,6 +123,14 @@ return [
     // Trial length for new organizations. Keep this aligned with public pricing.
     'trial_days' => (int) env('INSIGHTISTIC_TRIAL_DAYS', 7),
 
+    /*
+     * Skip outbound mail to RFC 2606 / RFC 6761 reserved domains
+     * (example.com, *.test, ...). The relay rejects them (554 5.7.1) and
+     * each attempt becomes a failed job. Disabled in phpunit.xml because the
+     * test suite uses example.com fixtures with Mail::fake().
+     */
+    'skip_reserved_mail_domains' => (bool) env('MAIL_SKIP_RESERVED_DOMAINS', true),
+
     'license' => [
         // Seconds between plugin-side validation calls (daily WP-Cron).
         'validate_interval' => (int) env('INSIGHTISTIC_LICENSE_VALIDATE_INTERVAL', 86400),

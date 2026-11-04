@@ -111,8 +111,8 @@ class ChangeDetection
                     'url'         => $after->url,
                     'field'       => $field,
                     'severity'    => $severity,
-                    'old_value'   => $oldValue,
-                    'new_value'   => $newValue,
+                    'old_value'   => self::clip($oldValue),
+                    'new_value'   => self::clip($newValue),
                 ];
             }
         }
@@ -369,5 +369,17 @@ class ChangeDetection
     private static function pathOf(string $url): string
     {
         return (string) (parse_url($url, PHP_URL_PATH) ?: '/');
+    }
+
+    /** crawl_changes.old_value/new_value are varchar(500); long meta descriptions overflowed. */
+    public const MAX_VALUE_LENGTH = 500;
+
+    private static function clip(mixed $value): ?string
+    {
+        if ($value === null) {
+            return null;
+        }
+
+        return mb_substr((string) $value, 0, self::MAX_VALUE_LENGTH);
     }
 }

@@ -68,6 +68,10 @@ class LoginNotifier
             'footnote' => 'We send this only when the device is new to us, so it stays worth reading.',
         ];
 
+        if (! \App\Support\MailRecipient::isDeliverable($user->email)) {
+            return; // reserved test domain: the relay would reject it.
+        }
+
         $log = EmailLog::create([
             'organization_id' => $user->organizations()->first()?->id,
             'user_id'         => $user->id,

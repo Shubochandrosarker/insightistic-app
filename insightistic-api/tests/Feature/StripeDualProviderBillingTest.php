@@ -136,6 +136,21 @@ it('creates a one-time LTD checkout (mode=payment, no trial) holding a shared Fo
         ->and($reservation->status)->toBe('reserved');
 });
 
+it('releases an LTD reservation when Stripe customer creation fails', function () {
+    dpPlan('angel_solo', 'lifetime', 'price_test_angel_solo', 14900, false);
+    [, $org, $token] = dpOwner('dp-ltd-customer-failure@example.com');
+
+    $mock = Mockery::mock(StripeService::class)->makePartial();
+    $mock->shouldReceive('customerId')->andThrow(new RuntimeException('stripe unavailable'));
+    app()->instance(StripeService::class, $mock);
+
+    $this->withToken($token)->postJson('/api/billing/stripe/checkout', [
+        'plan' => 'angel_solo', 'kind' => 'lifetime',
+    ])->assertStatus(502);
+
+    expect(LtdCheckoutReservation::where('organization_id', $org->id)->first()?->status)->toBe('released');
+});
+
 it('refuses a Stripe LTD checkout once the 100 spots are sold across both providers', function () {
     dpPlan('angel_solo', 'lifetime', 'price_test_angel_solo', 14900, false);
     [, , $token] = dpOwner('dp-soldout@example.com');
@@ -222,6 +237,28 @@ it('acknowledges a duplicate event id without processing it twice', function () 
         ->and(BillingTransaction::withoutGlobalScope('organization')->where('provider_transaction_id', 'in_dupe')->count())->toBe(1);
 });
 
+it('leaves a failed webhook retryable instead of permanently claiming its event id', function () {
+    $attempts = 0;
+    $processor = Mockery::mock(\App\Services\StripeWebhookProcessor::class, [
+        app(\App\Services\LicenseService::class),
+        app(\App\Services\LifecycleMailer::class),
+    ])->makePartial();
+    $processor->shouldReceive('process')->twice()->andReturnUsing(function () use (&$attempts): void {
+        if (++$attempts === 1) {
+            throw new RuntimeException('temporary projection failure');
+        }
+    });
+    $event = \Stripe\Event::constructFrom([
+        'id' => 'evt_retryable', 'object' => 'event', 'type' => 'test.noop',
+        'data' => ['object' => []],
+    ]);
+
+    expect(fn () => $processor->processOnce($event))->toThrow(RuntimeException::class, 'temporary projection failure')
+        ->and(StripeWebhookEvent::where('stripe_event_id', 'evt_retryable')->exists())->toBeFalse()
+        ->and($processor->processOnce($event))->toBeTrue()
+        ->and(StripeWebhookEvent::where('stripe_event_id', 'evt_retryable')->whereNotNull('processed_at')->exists())->toBeTrue();
+});
+
 it('marks past_due on invoice.payment_failed and clears it on invoice.paid', function () {
     [, $org] = dpOwner('dp-dunning@example.com');
     $org->forceFill(['stripe_customer_id' => 'cus_dun'])->save();
@@ -269,6 +306,29 @@ it('fulfils a Stripe LTD purchase into the shared cap, is idempotent, and revoke
 
     expect(EntitlementGrant::withoutGlobalScope('organization')->where('source', 'stripe_lifetime')->whereNull('revoked_at')->count())->toBe(0)
         ->and(BillingTransaction::withoutGlobalScope('organization')->where('provider_transaction_id', 'cs_test_ltd')->value('status'))->toBe('refunded');
+});
+
+it('fulfils an asynchronous Stripe LTD payment and releases failed async payments', function () {
+    $plan = dpPlan('angel_studio', 'lifetime', 'price_test_angel_studio', 29900, false);
+    [, $org] = dpOwner('dp-wh-async-ltd@example.com');
+    $reservation = app(LtdCampaignService::class)->reserve($org, 'angel_studio', (string) \Illuminate\Support\Str::uuid());
+    $session = ['id' => 'cs_test_async_ltd', 'object' => 'checkout.session', 'mode' => 'payment', 'payment_status' => 'paid',
+        'customer' => 'cus_async_ltd', 'payment_intent' => 'pi_async_ltd', 'currency' => 'usd',
+        'amount_subtotal' => 29900, 'amount_total' => 29900, 'total_details' => ['amount_tax' => 0],
+        'metadata' => ['organization_id' => (string) $org->id, 'plan_id' => (string) $plan->id,
+            'ltd_reservation_id' => (string) $reservation->id]];
+
+    dpWebhook($this, 'evt_async_ltd', 'checkout.session.async_payment_succeeded', $session)->assertOk();
+    expect($reservation->fresh()->status)->toBe('consumed')
+        ->and(EntitlementGrant::withoutGlobalScope('organization')->where('source', 'stripe_lifetime')->count())->toBe(1);
+
+    [, $failedOrg] = dpOwner('dp-wh-async-failed@example.com');
+    $failedReservation = app(LtdCampaignService::class)->reserve($failedOrg, 'angel_studio', (string) \Illuminate\Support\Str::uuid());
+    dpWebhook($this, 'evt_async_ltd_failed', 'checkout.session.async_payment_failed', [
+        'id' => 'cs_test_async_failed', 'object' => 'checkout.session', 'mode' => 'payment',
+        'metadata' => ['ltd_reservation_id' => (string) $failedReservation->id],
+    ])->assertOk();
+    expect($failedReservation->fresh()->status)->toBe('released');
 });
 
 it('releases the Founding Angel slot when an LTD checkout session expires', function () {

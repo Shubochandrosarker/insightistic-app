@@ -64,58 +64,59 @@ final class StripeBillingService
             throw new BillingConfigurationException('price_not_configured', 'This plan/kind has no Stripe price configured yet.');
         }
 
-        $reservation = $recurring ? null : $this->ltdCampaign->reserve($org, $planSlug, (string) Str::uuid());
-
-        $metadata = [
-            'organization_id' => (string) $org->id,
-            'plan_id'         => (string) $plan->id,
-            'plan_slug'       => $plan->slug,
-            'purchase_kind'   => $kind,
-            'app'             => 'insightistic',
-        ];
-        if ($reservation) {
-            $metadata['ltd_reservation_id'] = (string) $reservation->id;
-            $metadata['ltd_campaign_id'] = (string) $reservation->campaign_id;
-        }
-
-        $params = [
-            'mode'                 => $recurring ? 'subscription' : 'payment',
-            'customer'             => $this->stripe->customerId($org),
-            'line_items'           => [['price' => $price->provider_price_id, 'quantity' => 1]],
-            'automatic_tax'        => ['enabled' => true],
-            'customer_update'      => ['address' => 'auto', 'name' => 'auto'],
-            'tax_id_collection'    => ['enabled' => true],
-            'billing_address_collection' => 'required',
-            'client_reference_id'  => (string) $org->id,
-            'success_url'          => $successUrl,
-            'cancel_url'           => $cancelUrl,
-            'metadata'             => $metadata,
-        ];
-
-        $trialDays = 0;
-        if ($recurring) {
-            $subscriptionData = ['metadata' => $metadata];
-            [$trialDays, $trialEnd] = $this->trialFor($org);
-            if ($trialEnd) {
-                $subscriptionData['trial_end'] = $trialEnd;
-            } elseif ($trialDays > 0) {
-                $subscriptionData['trial_period_days'] = $trialDays;
-            }
-            if ($trialDays > 0 || $trialEnd) {
-                $subscriptionData['trial_settings'] = ['end_behavior' => ['missing_payment_method' => 'cancel']];
-                $params['metadata']['trial_days'] = (string) $trialDays;
-            }
-            $params['subscription_data'] = $subscriptionData;
-        } else {
-            $params['payment_intent_data'] = ['metadata' => $metadata];
-            $params['invoice_creation'] = ['enabled' => true, 'invoice_data' => ['metadata' => $metadata]];
-            // A Stripe session lives ≥30 min; the reservation is 15. Expire
-            // the session with the reservation so a slot can't be paid late.
-            $params['expires_at'] = now()->addMinutes(30)->getTimestamp();
-            $reservation->forceFill(['expires_at' => now()->addMinutes(31)])->save();
-        }
-
+        $reservation = null;
         try {
+            $reservation = $recurring ? null : $this->ltdCampaign->reserve($org, $planSlug, (string) Str::uuid());
+
+            $metadata = [
+                'organization_id' => (string) $org->id,
+                'plan_id'         => (string) $plan->id,
+                'plan_slug'       => $plan->slug,
+                'purchase_kind'   => $kind,
+                'app'             => 'insightistic',
+            ];
+            if ($reservation) {
+                $metadata['ltd_reservation_id'] = (string) $reservation->id;
+                $metadata['ltd_campaign_id'] = (string) $reservation->campaign_id;
+            }
+
+            $params = [
+                'mode'                 => $recurring ? 'subscription' : 'payment',
+                'customer'             => $this->stripe->customerId($org),
+                'line_items'           => [['price' => $price->provider_price_id, 'quantity' => 1]],
+                'automatic_tax'        => ['enabled' => true],
+                'customer_update'      => ['address' => 'auto', 'name' => 'auto'],
+                'tax_id_collection'    => ['enabled' => true],
+                'billing_address_collection' => 'required',
+                'client_reference_id'  => (string) $org->id,
+                'success_url'          => $successUrl,
+                'cancel_url'           => $cancelUrl,
+                'metadata'             => $metadata,
+            ];
+
+            $trialDays = 0;
+            if ($recurring) {
+                $subscriptionData = ['metadata' => $metadata];
+                [$trialDays, $trialEnd] = $this->trialFor($org);
+                if ($trialEnd) {
+                    $subscriptionData['trial_end'] = $trialEnd;
+                } elseif ($trialDays > 0) {
+                    $subscriptionData['trial_period_days'] = $trialDays;
+                }
+                if ($trialDays > 0 || $trialEnd) {
+                    $subscriptionData['trial_settings'] = ['end_behavior' => ['missing_payment_method' => 'cancel']];
+                    $params['metadata']['trial_days'] = (string) $trialDays;
+                }
+                $params['subscription_data'] = $subscriptionData;
+            } else {
+                $params['payment_intent_data'] = ['metadata' => $metadata];
+                $params['invoice_creation'] = ['enabled' => true, 'invoice_data' => ['metadata' => $metadata]];
+                // A Stripe session lives ≥30 min; the reservation is 15. Expire
+                // the session with the reservation so a slot can't be paid late.
+                $params['expires_at'] = now()->addMinutes(30)->getTimestamp();
+                $reservation->forceFill(['expires_at' => now()->addMinutes(31)])->save();
+            }
+
             $session = $this->stripe->createCheckoutSession($params);
         } catch (\Throwable $e) {
             $this->ltdCampaign->release($reservation);

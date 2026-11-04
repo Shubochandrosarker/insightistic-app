@@ -65,18 +65,21 @@ class LifecycleMailer
                 'recipient'  => $recipient,
                 'subject'    => $copy['subject'],
                 'status'     => 'queued',
+                'error'      => null,
+                'sent_at'    => null,
                 'created_at' => now(),
             ],
         );
 
+        // LifecycleMail is ShouldQueue: this only dispatches. The row stays
+        // 'queued' until the mailable reports 'sent' or 'failed' itself.
         try {
-            Mail::to($recipient)->send(new LifecycleMail($copy['subject'], $copy['body']));
-            $log->update(['status' => 'sent', 'sent_at' => now()]);
+            Mail::to($recipient)->send((new LifecycleMail($copy['subject'], $copy['body']))->trackedBy($log));
 
             return true;
         } catch (\Throwable $e) {
             report($e);
-            $log->update(['status' => 'failed']);
+            EmailLog::markFailed($log->id, $e);
 
             return false;
         }

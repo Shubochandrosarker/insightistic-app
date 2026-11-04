@@ -100,7 +100,7 @@ export function PricingCards() {
           </div>
         ))}
       </div>
-      <p className="mt-8 text-center text-sm text-slate-600">Every paid plan starts with a 7-day free trial — no credit card required. 30-day money-back guarantee, no questions asked.</p>
+      <p className="mt-8 text-center text-sm text-slate-600">Every subscription plan starts with a free 7-day trial. Subscription charges are not refundable, so cancel before your renewal date to avoid the next charge.</p>
       <p className="mt-2 text-center text-sm text-slate-500">Annual prices are billed once per year: Starter $290, Growth $690, Agency $1,490, Agency Pro $2,990.</p>
     </div>
   );

@@ -43,39 +43,51 @@ class StripeWebhookProcessor
      */
     public function processOnce(\Stripe\Event $event): bool
     {
-        // insertOrIgnore rather than create()-and-catch: on PostgreSQL a
-        // failed INSERT aborts the surrounding transaction, so catching the
-        // unique violation would leave every later query failing with 25P02.
-        // ON CONFLICT DO NOTHING never raises, and the returned row count
-        // still tells us who won the race between concurrent deliveries.
-        $inserted = \Illuminate\Support\Facades\DB::table('stripe_webhook_events')->insertOrIgnore([
-            'stripe_event_id' => $event->id,
-            'type'            => $event->type,
-            'created_at'      => now(),
-        ]);
+        return \Illuminate\Support\Facades\DB::transaction(function () use ($event): bool {
+            // insertOrIgnore rather than create()-and-catch: on PostgreSQL a
+            // failed INSERT aborts the surrounding transaction. Keeping the
+            // projection in this transaction also means a failed delivery is
+            // rolled back, so Stripe's retry can process it again.
+            $inserted = \Illuminate\Support\Facades\DB::table('stripe_webhook_events')->insertOrIgnore([
+                'stripe_event_id' => $event->id,
+                'type'            => $event->type,
+                'created_at'      => now(),
+            ]);
 
-        if ($inserted === 0) {
-            return false;
-        }
+            if ($inserted === 0) {
+                $existing = \Illuminate\Support\Facades\DB::table('stripe_webhook_events')
+                    ->where('stripe_event_id', $event->id)
+                    ->lockForUpdate()
+                    ->first();
 
-        $this->process($event);
+                if ($existing?->processed_at !== null) {
+                    return false;
+                }
+            }
 
-        \App\Models\StripeWebhookEvent::where('stripe_event_id', $event->id)
-            ->update(['processed_at' => now()]);
+            $this->process($event);
 
-        return true;
+            \App\Models\StripeWebhookEvent::where('stripe_event_id', $event->id)
+                ->update(['processed_at' => now()]);
+
+            return true;
+        });
     }
 
     public function process(\Stripe\Event $event): void
     {
         switch ($event->type) {
             case 'checkout.session.completed':
+            case 'checkout.session.async_payment_succeeded':
                 if (($event->data->object->mode ?? null) === 'payment') {
                     $this->fulfillLifetime($event->data->object);
                     break;
                 }
                 $this->syncSubscription($event);
                 $this->markTrialConsumed($event->data->object);
+                break;
+            case 'checkout.session.async_payment_failed':
+                $this->releaseReservation($event->data->object);
                 break;
             case 'customer.subscription.created':
             case 'customer.subscription.updated':

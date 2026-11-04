@@ -85,12 +85,12 @@ class LoginNotifier
         ]);
 
         try {
-            Mail::to($user->email)->send(new LifecycleMail($subject, $body));
-            $log->update(['status' => 'sent', 'sent_at' => now()]);
+            // Queued mailable: it marks the row sent/failed when it actually runs.
+            Mail::to($user->email)->send((new LifecycleMail($subject, $body))->trackedBy($log));
         } catch (\Throwable $e) {
             // A mail outage must never block a legitimate sign-in.
             report($e);
-            $log->update(['status' => 'failed']);
+            EmailLog::markFailed($log->id, $e);
         }
     }
 

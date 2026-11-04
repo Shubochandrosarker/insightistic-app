@@ -6,7 +6,7 @@ export default function Terms() {
       <Nav />
       <article className="mx-auto max-w-3xl px-6 py-12 text-slate-700">
         <h1 className="text-3xl font-bold text-slate-900">Terms of Service</h1>
-        <p className="mt-4 text-sm text-slate-500">Last updated: 23 September 2026.</p>
+        <p className="mt-4 text-sm text-slate-500">Last updated: 4 November 2026.</p>
 
         <h2 className="mt-8 text-lg font-semibold text-slate-900">1. The Service</h2>
         <p className="mt-2">
@@ -45,11 +45,25 @@ export default function Terms() {
 
         <h2 className="mt-6 text-lg font-semibold text-slate-900">5. Refunds &amp; Cancellation</h2>
         <p className="mt-2">
-          Subscriptions can be cancelled at any time from your billing page; access continues to
-          the end of the paid period. Every regular plan starts with a 7-day free trial and no
-          payment details are required to start it. Every purchase — subscriptions, Founding Angel
-          lifetime plans and credit packs — is covered by a 30-day money-back guarantee, no
-          questions asked: contact support or use the Paddle receipt within 30 days of payment.
+          Every subscription plan (Starter, Growth, Agency and Agency Pro, billed monthly or yearly) starts
+          with a free 7-day trial, so you can test Insightistic before you pay. You can cancel a subscription
+          at any time from your billing page; cancelling stops all future renewals and access continues to the
+          end of the paid period. Subscription charges are not refundable, including monthly and yearly
+          renewals and any unused part of a billing period. To avoid the next charge, cancel before your
+          renewal date.
+        </p>
+        <p className="mt-2">
+          The one-time Founding Angel Lifetime Deal has no free trial and is paid once up front. It comes with
+          a 30-day money-back guarantee: ask for a refund within 30 calendar days of the purchase date and we
+          refund the full amount to the original payment method. After 30 days, a Lifetime Deal purchase is
+          final. To request one, email hello@wordpressistic.com with the account email and transaction
+          reference.
+        </p>
+        <p className="mt-2">
+          Insight Credit packs are one-time purchases and are not refundable. Nothing in this section limits
+          any rights you have under applicable law. If a billing error or duplicate charge occurs, contact us
+          so we can investigate. The full rules are in our{" "}
+          <a href="https://insightistic.com/refunds" className="underline">Refund &amp; Cancellation Policy</a>.
         </p>
 
         <h2 className="mt-8 text-lg font-semibold text-slate-900">6. Insightistic Founding Angel lifetime terms</h2>

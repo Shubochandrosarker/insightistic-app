@@ -48,7 +48,14 @@ class BillingController extends Controller
         return response()->json([
             'organization' => $org->only(['id', 'name', 'status', 'trial_ends_at', 'trial_started_at', 'trial_plan_slug']),
             'trial'        => app(TrialService::class)->eligibility($org),
-            'refund_policy' => ['money_back_days' => (int) config('commercial.refund_window_days', 30), 'no_questions_asked' => true],
+            'refund_policy' => [
+                'money_back_days' => (int) config('commercial.refund_window_days', 30),
+                'no_questions_asked' => true,
+                // Policy (Nov 2026): only the one-time Lifetime Deal is refundable.
+                'applies_to' => ['lifetime'],
+                'subscriptions_refundable' => false,
+                'credit_packs_refundable' => false,
+            ],
             'plan'         => $effectivePlan ? array_merge($effectivePlan->toArray(), [
                 'effective_source' => $resolved['source'], 'effective_status' => $resolved['status'],
                 'features' => $resolved['features'], 'limits' => $resolved['limits'],

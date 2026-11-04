@@ -9,7 +9,8 @@ return [
     'version' => '2026-10-14',
     'currency' => 'USD',
     'trial_days' => (int) env('INSIGHTISTIC_TRIAL_DAYS', 7),
-    // 30-day money-back guarantee, no questions asked (all purchases).
+    // 30-day money-back guarantee: Lifetime Deal (Founding Angel) ONLY.
+    // Subscriptions (7-day free trial) and credit packs are non-refundable.
     'refund_window_days' => 30,
     'ltd_campaign' => [
         'slug' => 'founding-angel-2026',

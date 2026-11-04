@@ -539,7 +539,7 @@ export default function BillingPage() {
               ) : (
                 <>
                   <Button onClick={checkout} disabled={busy || !selectedPlanAvailable}>{busy ? "Opening checkout…" : planOptions.length ? "Continue to checkout" : "No upgrade available"}</Button>
-                  <p className="mt-2 text-xs text-muted">Secure checkout via {provider === "stripe" ? "Stripe" : "Paddle"}. 30-day money-back guarantee, no questions asked.</p>
+                  <p className="mt-2 text-xs text-muted">Secure checkout via {provider === "stripe" ? "Stripe" : "Paddle"}. Subscription charges are not refundable — cancel any time before your renewal date to stop the next charge.</p>
                 </>
               )}
             </>
@@ -601,7 +601,7 @@ export default function BillingPage() {
           </div>
         )}
         <p className="mt-3 text-xs text-muted">
-          Lifetime access applies to the purchased core plan and feature family while Insightistic operates. Monthly allowances are shared across connected sites and do not roll over. See <Link href="/terms" className="underline hover:text-fg">the terms</Link> for details.
+          Lifetime access applies to the purchased core plan and feature family while Insightistic operates. Monthly allowances are shared across connected sites and do not roll over. No free trial; 30-day money-back guarantee from the purchase date. See <Link href="/terms" className="underline hover:text-fg">the terms</Link> for details.
         </p>
       </Card>
 
@@ -628,7 +628,7 @@ export default function BillingPage() {
           ))}
         </div>
         <p className="mt-3 text-xs text-muted">
-          Credits power AI visibility runs, AI inference and SERP checks. Core syncs never consume credits.
+          Credits power AI visibility runs, AI inference and SERP checks. Core syncs never consume credits. Credit packs are non-refundable.
         </p>
       </Card>
     </div>

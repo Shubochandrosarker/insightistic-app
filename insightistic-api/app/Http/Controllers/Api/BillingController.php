@@ -7,6 +7,7 @@ use App\Domain\Billing\Exceptions\PaddleApiException;
 use App\Domain\Billing\PaddleBillingService;
 use App\Domain\Billing\CreditWallet;
 use App\Domain\Billing\EntitlementResolver;
+use App\Domain\Billing\StripeBillingService;
 use App\Domain\Billing\TrialService;
 use App\Http\Controllers\Controller;
 use App\Models\EntitlementGrant;
@@ -116,34 +117,114 @@ class BillingController extends Controller
         ]);
     }
 
-    /** Start a Stripe Checkout session for a plan. */
-    public function checkout(Request $request)
+    /**
+     * POST /billing/checkout and /billing/stripe/checkout — Stripe Checkout
+     * Session. Accepts {plan, kind: monthly|yearly|lifetime} (or the legacy
+     * {plan, interval}). Trials come from TrialService only.
+     */
+    public function checkout(Request $request, StripeBillingService $stripeBilling)
     {
         $org = $this->tenancy->organization();
 
         $data = $request->validate([
             'plan'     => ['required', 'string', 'exists:plans,slug'],
-            'interval' => ['required', 'in:monthly,yearly'],
+            'kind'     => ['required_without:interval', 'nullable', 'in:monthly,yearly,lifetime,credit_pack'],
+            'interval' => ['required_without:kind', 'nullable', 'in:monthly,yearly'],
         ]);
-
-        $plan = Plan::where('slug', $data['plan'])->first();
-        $priceId = $data['interval'] === 'yearly' ? $plan->stripe_price_id_yearly : $plan->stripe_price_id_monthly;
-
-        if (! $priceId) {
-            return response()->json([
-                'message' => 'This plan/interval has no Stripe price configured yet.',
-                'code'    => 'price_not_configured',
-            ], 422);
-        }
+        $kind = $data['kind'] ?? $data['interval'];
 
         $app = rtrim(config('insightistic.app_url'), '/');
-        $url = $this->stripe->checkoutUrl(
-            $org, $plan, $priceId,
-            $app . '/billing/success?session_id={CHECKOUT_SESSION_ID}',
-            $app . '/billing/cancel',
-        );
+        try {
+            $result = $stripeBilling->createCheckout(
+                $org, $data['plan'], $kind,
+                $app . '/dashboard/billing?checkout=success&provider=stripe&session_id={CHECKOUT_SESSION_ID}',
+                $app . '/dashboard/billing?checkout=cancel&provider=stripe',
+            );
+        } catch (BillingConfigurationException $e) {
+            return response()->json(['message' => $e->getMessage(), 'code' => $e->errorCode], 422);
+        } catch (\Throwable $e) {
+            Log::warning('Stripe checkout failed', ['org' => $org->id, 'error' => class_basename($e)]);
 
-        return response()->json(['url' => $url]);
+            return response()->json(['message' => 'Billing provider is temporarily unavailable.', 'code' => 'billing_provider_error'], 502);
+        }
+
+        return response()->json($result);
+    }
+
+    /** GET /billing/providers — which checkout providers the customer may choose. */
+    public function providers(StripeBillingService $stripeBilling)
+    {
+        $offered = (array) config('billing.checkout_providers', []);
+
+        return response()->json([
+            'providers' => array_values(array_filter([
+                in_array('paddle', $offered, true) && $this->paddleEnabled() ? ['id' => 'paddle', 'label' => 'Paddle', 'kinds' => ['monthly', 'yearly', 'lifetime', 'credit_pack']] : null,
+                $stripeBilling->enabled() ? ['id' => 'stripe', 'label' => 'Stripe', 'kinds' => ['monthly', 'yearly', 'lifetime']] : null,
+            ])),
+            'current' => $this->providerFor($this->tenancy->organization()),
+        ]);
+    }
+
+    /**
+     * GET /billing/summary — one provider-neutral shape for the billing page:
+     * provider, plan, status, next renewal, portal kind, invoices.
+     */
+    public function summary()
+    {
+        $org = $this->tenancy->organization()->load(['plan', 'subscription']);
+        $sub = $org->subscription;
+        $provider = $this->providerFor($org);
+        $resolved = $this->entitlements->resolve($org);
+
+        $invoices = \App\Models\BillingTransaction::withoutGlobalScope('organization')
+            ->where('organization_id', $org->id)
+            ->orderByDesc('occurred_at')->orderByDesc('id')->limit(24)->get()
+            ->map(fn ($t) => [
+                'id'          => $t->id,
+                'provider'    => $t->provider,
+                'number'      => $t->invoice_number,
+                'kind'        => $t->kind,
+                'status'      => $t->status,
+                'currency'    => $t->currency,
+                'total_minor' => (int) $t->total_minor,
+                'tax_minor'   => (int) $t->tax_minor,
+                'date'        => ($t->completed_at ?? $t->occurred_at)?->toIso8601String(),
+                // Stripe hosted invoice link (safe, customer-scoped). Paddle
+                // invoices are reached through the Paddle portal.
+                'url'         => is_array($t->summary_json) ? ($t->summary_json['hosted_invoice_url'] ?? null) : null,
+            ])->values();
+
+        return response()->json([
+            'provider'             => $provider,
+            'plan'                 => ['slug' => $resolved['plan']['slug'] ?? null, 'name' => $resolved['plan']['name'] ?? null, 'source' => $resolved['source']],
+            'status'               => $sub?->status ?? $org->status,
+            'next_renewal_at'      => ($sub?->cancel_at_period_end ? null : ($sub?->next_billed_at ?? $sub?->current_period_end))?->toIso8601String(),
+            'current_period_end'   => $sub?->current_period_end?->toIso8601String(),
+            'cancel_at_period_end' => (bool) $sub?->cancel_at_period_end,
+            'trial_ends_at'        => $org->trial_ends_at?->toIso8601String(),
+            'portal'               => match ($provider) {
+                'paddle' => ['type' => 'paddle_portal', 'available' => (bool) ($sub?->provider_customer_id || $org->paddle_customer_id)],
+                'stripe' => ['type' => 'stripe_portal', 'available' => (bool) ($org->stripe_customer_id || $sub?->stripe_customer_id)],
+                default  => ['type' => null, 'available' => false],
+            },
+            'invoices' => $invoices,
+        ]);
+    }
+
+    private function providerFor($org): ?string
+    {
+        $sub = $org->subscription;
+        if ($sub && in_array($sub->billing_provider, ['paddle', 'stripe'], true)) {
+            return $sub->billing_provider;
+        }
+        if (in_array($org->billing_provider, ['paddle', 'stripe'], true)) {
+            return $org->billing_provider;
+        }
+        if ($sub?->stripe_subscription_id) {
+            return 'stripe';
+        }
+
+        return $org->paddle_customer_id ? 'paddle' : null;
     }
 
     /** Open the Stripe customer portal. */
@@ -154,7 +235,7 @@ class BillingController extends Controller
         // Provider-aware: Paddle orgs get a temporary Paddle customer-portal
         // link, Stripe orgs keep the Stripe portal. Paddle links are generated
         // per request and never persisted.
-        if ($org->subscription?->billing_provider === 'paddle') {
+        if ($this->providerFor($org) === 'paddle') {
             $url = $this->paddleBilling->portalUrl($org);
 
             if (! $url) {
@@ -164,13 +245,19 @@ class BillingController extends Controller
             return response()->json(['url' => $url]);
         }
 
-        $customerId = $org->subscription?->stripe_customer_id;
+        $customerId = $org->stripe_customer_id ?: $org->subscription?->stripe_customer_id;
 
         if (! $customerId) {
             return response()->json(['message' => 'No billing account yet. Start a checkout first.'], 422);
         }
 
-        $url = $this->stripe->portalUrl($customerId, rtrim(config('insightistic.app_url'), '/') . '/billing');
+        try {
+            $url = $this->stripe->portalUrl($customerId, rtrim(config('insightistic.app_url'), '/') . '/dashboard/billing');
+        } catch (\Throwable $e) {
+            Log::warning('Stripe portal failed', ['org' => $org->id, 'error' => class_basename($e)]);
+
+            return response()->json(['message' => 'Could not open the Stripe portal. Contact support if this persists.'], 502);
+        }
 
         return response()->json(['url' => $url]);
     }
@@ -395,7 +482,7 @@ class BillingController extends Controller
 
         $grant = EntitlementGrant::withoutGlobalScope('organization')
             ->where('organization_id', $org->id)
-            ->where('source', 'paddle_lifetime')
+            ->whereIn('source', \App\Models\EntitlementGrant::LIFETIME_SOURCES)
             ->whereNull('revoked_at')
             ->orderByDesc('id')
             ->first();

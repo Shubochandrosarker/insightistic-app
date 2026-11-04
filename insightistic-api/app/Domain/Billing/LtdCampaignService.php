@@ -15,7 +15,7 @@ use Illuminate\Support\Facades\DB;
 /** Atomic, provider-independent inventory for the global Founding Angel cap. */
 final class LtdCampaignService
 {
-    public function campaign(): LtdCampaign
+    public function campaign(?string $excludeReference = null): LtdCampaign
     {
         $cfg = config('commercial.ltd_campaign');
 
@@ -24,7 +24,7 @@ final class LtdCampaignService
             ['name' => $cfg['name'], 'maximum_sales' => $cfg['maximum_sales'], 'state' => 'active', 'opened_at' => now()],
         );
 
-        $this->synchroniseHistoricalSales($campaign);
+        $this->synchroniseHistoricalSales($campaign, $excludeReference);
 
         return $campaign->fresh();
     }
@@ -42,7 +42,7 @@ final class LtdCampaignService
 
             $existingGrant = EntitlementGrant::withoutGlobalScope('organization')
                 ->where('organization_id', $organization->id)->whereNull('revoked_at')
-                ->where('source', 'paddle_lifetime')->exists();
+                ->whereIn('source', \App\Models\EntitlementGrant::LIFETIME_SOURCES)->exists();
             if ($existingGrant) {
                 throw new BillingConfigurationException('ltd_already_owned', 'This organization already has a lifetime entitlement. Contact support for an upgrade review.');
             }
@@ -85,7 +85,7 @@ final class LtdCampaignService
         }
 
         DB::transaction(function () use ($transaction, $customData) {
-            $campaign = LtdCampaign::whereKey($this->campaign()->id)->lockForUpdate()->firstOrFail();
+            $campaign = LtdCampaign::whereKey($this->campaign((string) $transaction->provider_transaction_id)->id)->lockForUpdate()->firstOrFail();
             $reservationId = $customData['ltd_reservation_id'] ?? null;
             $reservation = $reservationId
                 ? LtdCheckoutReservation::whereKey($reservationId)->lockForUpdate()->first()
@@ -164,7 +164,13 @@ final class LtdCampaignService
         }
     }
 
-    private function synchroniseHistoricalSales(LtdCampaign $campaign): void
+    /**
+     * $excludeReference: the sale confirmSale() is about to count itself.
+     * Without it, a completed transaction row written before confirmSale()
+     * was counted here AND incremented there — every LTD sale used two of
+     * the 100 spots (found 2026-11-04 while adding Stripe).
+     */
+    private function synchroniseHistoricalSales(LtdCampaign $campaign, ?string $excludeReference = null): void
     {
         $transactionRefs = BillingTransaction::withoutGlobalScope('organization')
             ->where('kind', 'lifetime')
@@ -172,13 +178,13 @@ final class LtdCampaignService
             ->pluck('provider_transaction_id');
 
         $grantRefs = EntitlementGrant::withoutGlobalScope('organization')
-            ->where('source', 'paddle_lifetime')
+            ->whereIn('source', \App\Models\EntitlementGrant::LIFETIME_SOURCES)
             ->whereNull('revoked_at')
             ->pluck('source_reference');
 
         $sales = collect($transactionRefs)
             ->merge($grantRefs)
-            ->filter(fn ($reference) => is_string($reference) && $reference !== '')
+            ->filter(fn ($reference) => is_string($reference) && $reference !== '' && $reference !== $excludeReference)
             ->unique()
             ->count();
 

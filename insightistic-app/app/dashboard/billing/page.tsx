@@ -128,6 +128,12 @@ function checkoutErrorMessage(e: any): string {
 export default function BillingPage() {
   const { data, loading, error, reload } = useApi<any>("/billing/subscription");
   const { data: plansData } = useApi<any>("/public/plans");
+  // Which processors this org can check out with, and a provider-agnostic
+  // summary (next renewal, invoices, portal). Both are optional: an older
+  // API without them leaves the page on its Paddle-only behaviour.
+  const { data: providersData } = useApi<any>("/billing/providers");
+  const { data: summary } = useApi<any>("/billing/summary");
+  const [checkoutProvider, setCheckoutProvider] = useState<"paddle" | "stripe">("paddle");
   const { sites } = useDashboard();
   const [plan, setPlan] = useState("growth");
   const [interval, setIntervalSel] = useState("monthly");
@@ -201,7 +207,19 @@ export default function BillingPage() {
     }
   }
 
+  async function stripeCheckout() {
+    setBusy(true); setMsg(null);
+    try {
+      const r: any = await apiPost("/billing/stripe/checkout", { plan, kind: interval });
+      window.location.href = r.url;
+    } catch (e: any) {
+      setMsg(e?.message || "Stripe checkout could not be started. Try again or choose Paddle.");
+      setBusy(false);
+    }
+  }
+
   async function checkout() {
+    if (checkoutProvider === "stripe") return stripeCheckout();
     setBusy(true); setMsg(null);
     const beforePlanName = data?.plan?.name;
     try {
@@ -385,6 +403,9 @@ export default function BillingPage() {
       : data.organization?.status === "expired"
         ? "trial ended"
         : null;
+  const stripeOffered: boolean = (providersData?.providers ?? []).some((p: any) => p.id === "stripe");
+  const portalInfo: { type?: string; available?: boolean } = summary?.portal ?? {};
+  const invoices: any[] = summary?.invoices ?? [];
   const hasSubscription = !!data.subscription?.stripe_subscription_id || !!provider;
   const lifetimeGrant = lifetimeGrantOf(data);
   const currentSlug = String(lifetimeGrant?.plan_slug || planObj.slug || "free");
@@ -461,21 +482,27 @@ export default function BillingPage() {
                 : " the end of the billing period."}
             </p>
           )}
+          {summary?.provider && (
+            <div className="mt-1 text-sm text-muted">
+              Billed via {summary.provider === "stripe" ? "Stripe" : "Paddle"}
+              {summary.next_renewal_at && !cancelPending && ` · renews ${new Date(summary.next_renewal_at).toLocaleDateString()}`}
+            </div>
+          )}
           <div className="mt-5 flex flex-wrap gap-2">
             <Button onClick={() => document.getElementById("change-plan")?.scrollIntoView({ behavior: "smooth" })}>Upgrade</Button>
             <Button variant="ghost" onClick={portal} disabled={busy}>Manage in portal</Button>
-            {/* Paddle customer portal — the link of record. The button above
+            {/* Paddle customer portal — the link of record (Paddle orgs only). The button above
                 mints a fresh session for active Paddle subscriptions; this
                 link always reaches Paddle's portal (email lookup) even
                 without a subscription. */}
-            <a
+            {portalInfo.type !== "stripe_portal" && <a
               href="https://customer-portal.paddle.com/cpl_01m1ycy6ry01sg09dgnyt31pd1"
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex h-9 items-center rounded-xl px-4 text-sm font-medium text-brand-700 underline-offset-2 hover:underline"
             >
               Manage subscription ↗
-            </a>
+            </a>}
             {hasSubscription && !cancelPending && (
               <Button variant="danger" onClick={cancelSub} disabled={busy}>Cancel subscription</Button>
             )}
@@ -526,6 +553,19 @@ export default function BillingPage() {
             </select>
           </label>
         </div>
+        {stripeOffered && !trialEligible && (
+          <fieldset className="mt-4">
+            <legend className="mb-1.5 text-xs font-semibold text-fg">Pay with</legend>
+            <div className="flex flex-wrap gap-4 text-sm text-fg">
+              {(["paddle", "stripe"] as const).map((p) => (
+                <label key={p} className="inline-flex items-center gap-2">
+                  <input type="radio" name="checkout-provider" value={p} checked={checkoutProvider === p} onChange={() => setCheckoutProvider(p)} />
+                  {p === "stripe" ? "Card via Stripe" : "Paddle (cards, PayPal, local methods)"}
+                </label>
+              ))}
+            </div>
+          </fieldset>
+        )}
         <div className="mt-4">
           {phase === "processing" ? (
             <Spinner label={finishLabel} />
@@ -539,13 +579,26 @@ export default function BillingPage() {
               ) : (
                 <>
                   <Button onClick={checkout} disabled={busy || !selectedPlanAvailable}>{busy ? "Opening checkout…" : planOptions.length ? "Continue to checkout" : "No upgrade available"}</Button>
-                  <p className="mt-2 text-xs text-muted">Secure checkout via {provider === "stripe" ? "Stripe" : "Paddle"}. Subscription charges are not refundable — cancel any time before your renewal date to stop the next charge.</p>
+                  <p className="mt-2 text-xs text-muted">Secure checkout via {checkoutProvider === "stripe" ? "Stripe" : "Paddle"}. Subscription charges are not refundable — cancel any time before your renewal date to stop the next charge.</p>
                 </>
               )}
             </>
           )}
         </div>
       </Card>
+
+      {invoices.length > 0 && (
+        <Card className="mt-5" title="Invoices">
+          <ul className="divide-y divide-line text-sm">
+            {invoices.map((inv: any) => (
+              <li key={inv.id} className="flex items-center justify-between py-2">
+                <span className="text-fg">{inv.date ? new Date(inv.date).toLocaleDateString() : "—"} · {money0(Number(inv.total_minor ?? 0) / 100)} <Badge>{inv.status}</Badge></span>
+                {inv.url ? <a href={inv.url} target="_blank" rel="noopener noreferrer" className="text-brand-700 hover:underline">View ↗</a> : <span className="text-muted">—</span>}
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
 
       {/* The lifetime deal is sold from /ltd (direct, one-time checkout).
           In-app it appears only when the user arrives from /ltd with an

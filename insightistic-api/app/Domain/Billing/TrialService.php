@@ -32,7 +32,7 @@ final class TrialService
         $reason = null;
         $sub = $org->subscription;
         $hasLifetime = EntitlementGrant::withoutGlobalScope('organization')
-            ->where('organization_id', $org->id)->where('source', 'paddle_lifetime')
+            ->where('organization_id', $org->id)->whereIn('source', \App\Models\EntitlementGrant::LIFETIME_SOURCES)
             ->whereNull('revoked_at')->exists();
 
         if ($org->trial_started_at !== null) {

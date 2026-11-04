@@ -15,6 +15,7 @@ class Organization extends Model
         'archived_at', 'internal_notes', 'first_touch_json', 'last_touch_json',
         'marketing_consent', 'marketing_consent_at',
         'trial_started_at', 'trial_plan_slug', 'paddle_customer_id',
+        'billing_provider', 'stripe_customer_id',
     ];
 
     protected function casts(): array

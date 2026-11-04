@@ -57,7 +57,7 @@ export default function AdminSubscriptions() {
   return (
     <AdminListPage
       title="Subscriptions"
-      subtitle="Stripe subscription state across the platform. Secret keys are never exposed."
+      subtitle="Subscription state across Paddle and Stripe. Secret keys are never exposed."
       endpoint="/admin/subscriptions"
       rowKey={(s: any) => s.id}
       searchPlaceholder="Search…"
@@ -65,6 +65,7 @@ export default function AdminSubscriptions() {
       headerActions={(reload) => <CreateSubscription onCreated={reload} />}
       filters={[
         { key: "status", label: "Any status", options: ["active", "trialing", "past_due", "canceled", "incomplete"].map((v) => ({ value: v, label: v })) },
+        { key: "provider", label: "Any provider", options: ["paddle", "stripe", "manual"].map((v) => ({ value: v, label: v })) },
         { key: "canceled", label: "Cancellation", options: [{ value: "1", label: "Cancels at period end" }] },
       ]}
       columns={[
@@ -78,7 +79,8 @@ export default function AdminSubscriptions() {
         },
         { key: "plan", label: "Plan", render: (s: any) => s.plan?.name || "—" },
         { key: "status", label: "Status", render: (s: any) => <Badge tone={TONE[s.status] || "slate"} dot>{s.status}</Badge> },
-        { key: "stripe_customer_id", label: "Stripe customer", render: (s: any) => <span className="font-mono text-[11px] text-muted">{s.stripe_customer_id || "—"}</span> },
+        { key: "billing_provider", label: "Provider", render: (s: any) => <Badge tone={s.billing_provider === "stripe" ? "violet" : s.billing_provider === "paddle" ? "green" : "slate"}>{s.billing_provider || "—"}</Badge> },
+        { key: "customer", label: "Customer", render: (s: any) => <span className="font-mono text-[11px] text-muted">{s.billing_provider === "paddle" ? (s.provider_customer_id || s.organization?.paddle_customer_id || "—") : (s.organization?.stripe_customer_id || s.stripe_customer_id || "—")}</span> },
         { key: "current_period_end", label: "Renews", align: "right", render: (s: any) => fmtDate(s.current_period_end) },
         { key: "cancel_at_period_end", label: "Cancels", align: "right", render: (s: any) => s.cancel_at_period_end ? <Badge tone="red">yes</Badge> : "—" },
       ]}

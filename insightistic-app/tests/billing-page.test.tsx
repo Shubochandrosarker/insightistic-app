@@ -152,6 +152,37 @@ describe("Billing page checkout", () => {
     expect(screen.queryByRole("option", { name: "Growth — Best Value" })).not.toBeInTheDocument();
   });
 
+  it("offers Stripe when the API lists it and redirects to a Stripe Checkout Session", async () => {
+    apiMocks.apiGet.mockImplementation((path: string) =>
+      path === "/billing/subscription" ? Promise.resolve(freeOrg)
+      : path === "/public/plans" ? Promise.resolve(livePlans)
+      : path === "/billing/providers" ? Promise.resolve({ providers: [{ id: "paddle" }, { id: "stripe" }] })
+      : path === "/billing/summary" ? Promise.resolve({ provider: "stripe", portal: { type: "stripe_portal", available: true },
+          invoices: [{ id: 1, date: "2026-11-04T00:00:00Z", total_minor: 6900, status: "completed", url: "https://invoice.stripe.com/i/test" }] })
+      : Promise.resolve({}),
+    );
+    apiMocks.apiPost.mockImplementation((path: string) =>
+      path === "/billing/stripe/checkout" ? Promise.resolve({ url: "https://checkout.stripe.com/c/pay/cs_test_x" }) : Promise.resolve({}),
+    );
+    const assign = vi.fn();
+    const originalLocation = window.location;
+    Object.defineProperty(window, "location", { configurable: true, value: { ...window.location, search: "", set href(v: string) { assign(v); } } });
+
+    try {
+    render(<BillingPage />);
+    await userEvent.click(await screen.findByLabelText("Card via Stripe"));
+    expect(await screen.findByText("View ↗")).toHaveAttribute("href", "https://invoice.stripe.com/i/test");
+    expect(screen.queryByText("Manage subscription ↗")).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Continue to checkout" }));
+
+    await waitFor(() => expect(apiMocks.apiPost).toHaveBeenCalledWith("/billing/stripe/checkout", { plan: "growth", kind: "monthly" }));
+    expect(apiMocks.apiPost).not.toHaveBeenCalledWith("/billing/checkout-config", expect.anything());
+    expect(assign).toHaveBeenCalledWith("https://checkout.stripe.com/c/pay/cs_test_x");
+    } finally {
+      Object.defineProperty(window, "location", { configurable: true, value: originalLocation });
+    }
+  });
+
   it("keeps the legacy Stripe redirect when Paddle is not enabled (501)", async () => {
     apiMocks.apiPost.mockImplementation((path: string) =>
       path === "/billing/checkout-config"

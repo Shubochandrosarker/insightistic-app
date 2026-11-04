@@ -41,8 +41,11 @@ class SubscriptionController extends AdminController
     public function index(Request $request)
     {
         $query = Subscription::withoutGlobalScope('organization')
-            ->with(['organization:id,name,slug', 'plan:id,name,slug,price_monthly']);
+            ->with(['organization:id,name,slug,billing_provider,stripe_customer_id,paddle_customer_id', 'plan:id,name,slug,price_monthly']);
 
+        if ($provider = $request->query('provider')) {
+            $query->where('billing_provider', $provider);
+        }
         if ($status = $request->query('status')) {
             $query->where('status', $status);
         }

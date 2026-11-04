@@ -70,6 +70,13 @@ class StripeWebhookProcessor
     {
         switch ($event->type) {
             case 'checkout.session.completed':
+                if (($event->data->object->mode ?? null) === 'payment') {
+                    $this->fulfillLifetime($event->data->object);
+                    break;
+                }
+                $this->syncSubscription($event);
+                $this->markTrialConsumed($event->data->object);
+                break;
             case 'customer.subscription.created':
             case 'customer.subscription.updated':
                 $this->syncSubscription($event);
@@ -79,6 +86,15 @@ class StripeWebhookProcessor
                 break;
             case 'invoice.payment_failed':
                 $this->markPastDue($event);
+                break;
+            case 'checkout.session.expired':
+                $this->releaseReservation($event->data->object);
+                break;
+            case 'invoice.paid':
+                $this->markPaid($event->data->object);
+                break;
+            case 'charge.refunded':
+                $this->handleRefund($event->data->object);
                 break;
         }
     }
@@ -105,6 +121,7 @@ class StripeWebhookProcessor
             $stripeSub,
             $metaPlan,
             $event->type === 'checkout.session.completed',
+            $object->payment_status ?? null,
         );
     }
 
@@ -121,23 +138,38 @@ class StripeWebhookProcessor
         $stripeSub,
         $metaPlan,
         bool $isCheckout,
+        ?string $paymentStatus = null,
     ): void {
         $sub = Subscription::withoutGlobalScope('organization')
             ->firstOrNew(['organization_id' => $org->id]);
 
         $sub->organization_id        = $org->id;
+        $sub->billing_provider       = 'stripe';
         $sub->stripe_customer_id     = $customerId ?: $sub->stripe_customer_id;
         $sub->stripe_subscription_id = $subscriptionId ?: $sub->stripe_subscription_id;
+        $sub->provider_customer_id   = $sub->stripe_customer_id;
 
         if ($stripeSub) {
+            $item = $stripeSub->items->data[0] ?? null;
+            // API ≥ 2025-03 moved the period onto the subscription item.
+            $periodStart = $stripeSub->current_period_start ?? ($item->current_period_start ?? null);
+            $periodEnd   = $stripeSub->current_period_end ?? ($item->current_period_end ?? null);
             $sub->status               = $stripeSub->status;
-            $sub->current_period_start = $this->ts($stripeSub->current_period_start ?? null);
-            $sub->current_period_end   = $this->ts($stripeSub->current_period_end ?? null);
+            $sub->provider_status      = $stripeSub->status;
+            $sub->current_period_start = $this->ts($periodStart);
+            $sub->current_period_end   = $this->ts($periodEnd);
             $sub->cancel_at_period_end = (bool) ($stripeSub->cancel_at_period_end ?? false);
-            $priceId = $stripeSub->items->data[0]->price->id ?? null;
+            $sub->next_billed_at       = $sub->cancel_at_period_end ? null : $this->ts($periodEnd);
+            $priceId = $item->price->id ?? null;
+            $sub->provider_price_id    = $priceId;
             $plan = $this->planFromPrice($priceId) ?? ($metaPlan ? Plan::find($metaPlan) : null);
         } else {
-            $sub->status = 'active';
+            // checkout.session.completed (subscription mode): the session has
+            // no status; the customer.subscription.* event carries the truth.
+            // Trial checkouts complete with payment_status=no_payment_required.
+            if (! $sub->exists || ! $sub->status || $sub->status === 'incomplete') {
+                $sub->status = $paymentStatus === 'no_payment_required' ? 'trialing' : 'active';
+            }
             $plan = $metaPlan ? Plan::find($metaPlan) : null;
         }
 
@@ -157,6 +189,13 @@ class StripeWebhookProcessor
         $sub->save();
 
         $org->status = $this->orgStatus($sub->status);
+        $org->billing_provider = 'stripe';
+        if ($stripeSub && ($stripeSub->status ?? null) === 'trialing' && ! empty($stripeSub->trial_end)) {
+            $org->trial_ends_at = $this->ts($stripeSub->trial_end);
+        }
+        if ($customerId && ! $org->stripe_customer_id) {
+            $org->stripe_customer_id = $customerId;
+        }
         $org->save();
 
         // License status/limits are a projection of subscription state.
@@ -200,9 +239,191 @@ class StripeWebhookProcessor
         }
     }
 
+    /**
+     * invoice.paid — a renewal/first charge succeeded. Clears past_due and
+     * records the invoice as a provider-neutral billing transaction.
+     */
+    public function markPaid($invoice): void
+    {
+        $org = $this->resolveOrg($invoice->metadata->organization_id ?? null, $invoice->customer ?? null);
+        if (! $org) {
+            return;
+        }
+
+        $subscriptionId = $invoice->subscription
+            ?? ($invoice->parent->subscription_details->subscription ?? null);
+        if (! $subscriptionId) {
+            // One-time (LTD) invoice: checkout.session.completed owns the
+            // transaction + fulfilment. Recording it here too would count the
+            // sale twice against the shared 100-spot cap.
+            return;
+        }
+
+        $this->recordTransaction($org, (string) $invoice->id, 'subscription', 'completed', $invoice, [
+            'invoice_number' => $invoice->number ?? null,
+            'hosted_invoice_url' => $invoice->hosted_invoice_url ?? null,
+            'invoice_pdf' => $invoice->invoice_pdf ?? null,
+        ], $subscriptionId);
+
+        $sub = Subscription::withoutGlobalScope('organization')->where('organization_id', $org->id)->first();
+        if ($sub && in_array($sub->status, ['past_due', 'unpaid', 'incomplete'], true)) {
+            $sub->update(['status' => 'active', 'provider_status' => 'active']);
+        }
+        if (in_array($org->status, ['past_due', 'incomplete'], true)) {
+            $org->update(['status' => 'active']);
+        }
+        $this->licenses->syncForOrganization($org->fresh());
+    }
+
+    /**
+     * checkout.session.completed with mode=payment — the Founding Angel LTD.
+     * Shares the 100-spot cap with Paddle via LtdCampaignService::confirmSale
+     * and grants the same entitlement shape (source stripe_lifetime).
+     */
+    public function fulfillLifetime($session): void
+    {
+        if (($session->payment_status ?? null) !== 'paid') {
+            return; // async payment methods complete later via checkout.session.async_payment_succeeded
+        }
+        $meta = $session->metadata ?? null;
+        $org = $this->resolveOrg($meta->organization_id ?? null, $session->customer ?? null);
+        $plan = isset($meta->plan_id) ? Plan::find($meta->plan_id) : null;
+        if (! $org || ! $plan) {
+            \Illuminate\Support\Facades\Log::warning('Stripe LTD session without org/plan metadata', ['session' => $session->id ?? null]);
+
+            return;
+        }
+
+        $price = \App\Models\PlanPrice::where('plan_id', $plan->id)->where('provider', 'stripe')->where('kind', 'lifetime')->first();
+        // Recorded as 'pending' until confirmSale() binds the reservation:
+        // campaign() resyncs successful_sales from COMPLETED lifetime rows,
+        // so a completed row written first would be counted twice.
+        $txn = $this->recordTransaction($org, (string) $session->id, 'lifetime', 'pending', $session, [
+            'payment_intent' => $session->payment_intent ?? null,
+            'custom_data' => ['ltd_reservation_id' => $meta->ltd_reservation_id ?? null],
+        ], null, $price?->provider_price_id);
+
+        app(\App\Domain\Billing\LtdCampaignService::class)->confirmSale($txn, ['ltd_reservation_id' => $meta->ltd_reservation_id ?? null], $price);
+        if ($txn->status === 'pending') {
+            $txn->forceFill(['status' => 'completed', 'completed_at' => now()])->save();
+        }
+
+        EntitlementGrant::withoutGlobalScope('organization')->firstOrCreate(
+            ['organization_id' => $org->id, 'source' => 'stripe_lifetime', 'source_reference' => $txn->provider_transaction_id],
+            ['plan_id' => $plan->id, 'features_json' => null, 'limits_json' => null],
+        );
+
+        $org->forceFill([
+            'plan_id' => $plan->id,
+            'status' => 'active',
+            'billing_provider' => 'stripe',
+            'stripe_customer_id' => $org->stripe_customer_id ?: ($session->customer ?? null),
+        ])->save();
+        $this->licenses->syncForOrganization($org->fresh(['plan']));
+        $this->mailer->send($org->fresh('plan'), 'subscription_started', [], 'ltd:' . $txn->provider_transaction_id);
+    }
+
+    /**
+     * charge.refunded — a FULL refund of an LTD payment revokes the lifetime
+     * grant (30-day money-back). Subscriptions are non-refundable by policy;
+     * if one is refunded manually anyway we only record it — access follows
+     * the subscription events.
+     */
+    public function handleRefund($charge): void
+    {
+        $paymentIntent = $charge->payment_intent ?? null;
+        $full = (bool) ($charge->refunded ?? false);
+        $txn = \App\Models\BillingTransaction::withoutGlobalScope('organization')
+            ->where('provider', 'stripe')
+            ->where(function ($q) use ($paymentIntent, $charge) {
+                $q->where('summary_json->payment_intent', $paymentIntent)
+                  ->orWhere('summary_json->charge', $charge->id ?? '__none__');
+            })
+            ->where('kind', 'lifetime')
+            ->first();
+
+        if (! $txn) {
+            \Illuminate\Support\Facades\Log::info('Stripe charge.refunded with no local lifetime transaction', ['charge' => $charge->id ?? null]);
+
+            return;
+        }
+
+        $summary = is_array($txn->summary_json) ? $txn->summary_json : [];
+        $summary['refund'] = ['charge' => $charge->id ?? null, 'amount_refunded' => $charge->amount_refunded ?? null, 'full' => $full];
+        $txn->forceFill(['status' => $full ? 'refunded' : 'partially_refunded', 'summary_json' => $summary])->save();
+
+        if (! $full) {
+            return;
+        }
+
+        EntitlementGrant::withoutGlobalScope('organization')
+            ->where('organization_id', $txn->organization_id)
+            ->where('source', 'stripe_lifetime')
+            ->where('source_reference', $txn->provider_transaction_id)
+            ->whereNull('revoked_at')
+            ->update(['revoked_at' => now()]);
+
+        if ($org = Organization::find($txn->organization_id)) {
+            $this->licenses->syncForOrganization($org->fresh());
+        }
+    }
+
+    /** An abandoned LTD checkout frees its Founding Angel slot right away. */
+    public function releaseReservation($session): void
+    {
+        $id = $session->metadata->ltd_reservation_id ?? null;
+        if ($id && ($reservation = \App\Models\LtdCheckoutReservation::find($id))) {
+            app(\App\Domain\Billing\LtdCampaignService::class)->release($reservation);
+        }
+    }
+
+    /** A Stripe trial checkout uses up the org's one trial (TrialService is the single source). */
+    private function markTrialConsumed($session): void
+    {
+        if ((int) ($session->metadata->trial_days ?? 0) <= 0) {
+            return;
+        }
+        $org = $this->resolveOrg($session->metadata->organization_id ?? null, $session->customer ?? null);
+        if ($org && $org->trial_started_at === null) {
+            $org->forceFill([
+                'trial_started_at' => now(),
+                'trial_plan_slug' => $session->metadata->plan_slug ?? null,
+                'trial_ends_at' => now()->addDays((int) $session->metadata->trial_days),
+            ])->save();
+        }
+    }
+
+    private function recordTransaction(Organization $org, string $id, string $kind, string $status, $object, array $extra, ?string $subscriptionId = null, ?string $priceId = null): \App\Models\BillingTransaction
+    {
+        $tax = $object->total_details->amount_tax ?? ($object->tax ?? 0);
+
+        return \App\Models\BillingTransaction::withoutGlobalScope('organization')->firstOrCreate(
+            ['provider_transaction_id' => $id],
+            [
+                'organization_id' => $org->id,
+                'provider' => 'stripe',
+                'provider_subscription_id' => $subscriptionId,
+                'provider_price_id' => $priceId ?? ($object->lines->data[0]->pricing->price_details->price ?? ($object->lines->data[0]->price->id ?? null)),
+                'kind' => $kind,
+                'status' => $status,
+                'currency' => strtoupper((string) ($object->currency ?? 'usd')),
+                'subtotal_minor' => (int) ($object->amount_subtotal ?? ($object->subtotal ?? 0)),
+                'tax_minor' => (int) $tax,
+                'total_minor' => (int) ($object->amount_total ?? ($object->total ?? ($object->amount_paid ?? 0))),
+                'invoice_number' => $extra['invoice_number'] ?? null,
+                'occurred_at' => now(),
+                'completed_at' => $status === 'completed' ? now() : null,
+                'summary_json' => array_filter($extra, fn ($v) => $v !== null),
+            ],
+        );
+    }
+
     private function resolveOrg($metaOrgId, $customerId): ?Organization
     {
         if ($metaOrgId && ($org = Organization::find($metaOrgId))) {
+            return $org;
+        }
+        if ($customerId && ($org = Organization::where('stripe_customer_id', $customerId)->first())) {
             return $org;
         }
         if ($customerId) {
@@ -217,6 +438,10 @@ class StripeWebhookProcessor
     {
         if (! $priceId) {
             return null;
+        }
+        $mapped = \App\Models\PlanPrice::where('provider', 'stripe')->where('provider_price_id', $priceId)->first();
+        if ($mapped) {
+            return Plan::find($mapped->plan_id);
         }
         return Plan::where('stripe_price_id_monthly', $priceId)
             ->orWhere('stripe_price_id_yearly', $priceId)

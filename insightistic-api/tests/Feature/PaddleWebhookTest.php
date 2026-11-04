@@ -340,3 +340,15 @@ it('stores a subscription with an unmapped price without failing', function () {
 
     Log::assertLogged('warning');
 });
+
+/** Regression (2026-11-04): each Paddle LTD sale used to consume two of the 100 spots. */
+it('counts one Paddle LTD sale as exactly one Founding Angel spot, even on replay', function () {
+    $plan = \App\Models\Plan::create(['name'=>'A','slug'=>'angel_solo','is_active'=>false]);
+    \App\Models\PlanPrice::create(['plan_id'=>$plan->id,'provider'=>'paddle','kind'=>'lifetime','provider_price_id'=>'pri_pdl_lifetime','currency'=>'USD','amount_minor'=>14900,'is_active'=>true]);
+    [, $org] = makeOrgUser('probe@example.com');
+    $r = app(\App\Domain\Billing\LtdCampaignService::class)->reserve($org, 'angel_solo', (string) \Illuminate\Support\Str::uuid());
+    $data = paddleTransactionData('lifetime', ['custom_data' => ['organization_id' => $org->id, 'ltd_reservation_id' => $r->id]]);
+    app(\App\Domain\Billing\PaddleEventProcessor::class)->process('transaction.completed', $data);
+    app(\App\Domain\Billing\PaddleEventProcessor::class)->process('transaction.completed', $data);
+    expect(app(\App\Domain\Billing\LtdCampaignService::class)->campaign()->successful_sales)->toBe(1);
+});

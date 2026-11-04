@@ -28,5 +28,17 @@ return [
     'stripe' => [
         'secret' => env('STRIPE_SECRET'),
         'webhook_secret' => env('STRIPE_WEBHOOK_SECRET'),
+        // Customer Portal configuration (bpc_…). Null = Stripe's default config.
+        'portal_configuration' => env('STRIPE_PORTAL_CONFIGURATION'),
+        // Safety latch: live keys (sk_live_/rk_live_) are refused unless this
+        // is explicitly true. Flip only after Shuvo signs off on go-live.
+        'allow_live' => (bool) env('STRIPE_ALLOW_LIVE', false),
+        // A webhook received within this many hours counts as "recent" on
+        // Admin → System Health.
+        'webhook_recent_hours' => (int) env('STRIPE_WEBHOOK_RECENT_HOURS', 72),
     ],
+
+    // Providers offered at checkout (customer chooses). Credit packs stay
+    // Paddle-only for now (see docs/billing-providers.md).
+    'checkout_providers' => array_values(array_filter(array_map('trim', explode(',', (string) env('BILLING_CHECKOUT_PROVIDERS', 'paddle,stripe'))))),
 ];

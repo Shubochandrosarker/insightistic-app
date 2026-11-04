@@ -63,7 +63,19 @@ export default function AdminSystemHealth() {
         <Health title="Scheduler" ok detail={data.scheduler?.detail || "configured"} />
         <Health title="Storage" ok={!!data.storage?.writable} detail={`${data.storage?.writable ? "writable" : "not writable"} · disk: ${data.storage?.reports_disk}`} />
         <Health title="Mail" ok={!!data.mail?.configured} warn={!data.mail?.configured} detail={`Mailer: ${data.mail?.mailer}`} />
-        <Health title="Paddle" ok={data.paddle?.configured ?? false} warn={!(data.paddle?.configured ?? false)} detail={`${data.paddle?.configured ? "configured" : "not configured"} · ${data.paddle?.environment || "—"}`} />
+        {(["paddle", "stripe"] as const).map((id) => {
+          const p = data[id] || {};
+          const label = id === "paddle" ? "Paddle" : "Stripe";
+          const ok = !!p.configured && p.api === "ok" && !!p.webhook_signing_configured;
+          const parts = [
+            p.configured ? (p.mode || p.environment || "configured") : "not configured",
+            p.api && p.api !== "not_configured" ? `API ${p.api}${p.api_error ? ` (${p.api_error})` : ""}` : null,
+            p.configured ? `webhook ${p.webhook_signing_configured ? "signed" : "secret missing"}` : null,
+            p.last_webhook_at ? `last event ${new Date(p.last_webhook_at).toLocaleString()}${p.webhook_recent ? "" : " (stale)"}` : p.configured ? "no events yet" : null,
+            p.offered_at_checkout === false ? "hidden at checkout" : null,
+          ].filter(Boolean);
+          return <Health key={id} title={label} ok={ok} warn={!ok} detail={parts.join(" · ")} />;
+        })}
         <Health title="AI provider" ok={!!data.ai?.configured && data.ai?.reachable !== false} warn={!data.ai?.configured || data.ai?.reachable === false} detail={`Provider: ${data.ai?.provider}${data.ai?.reachable === false ? " · unreachable (check API key/quota)" : data.ai?.reachable === true ? " · reachable" : ""}`} />
       </div>
 

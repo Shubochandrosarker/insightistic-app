@@ -95,6 +95,20 @@ class PaddleClient
         return $data['urls']['general']['overview'] ?? null;
     }
 
+    /** Cheap authenticated probe for System Health; null on success, else a short reason (never the key). */
+    public function ping(): ?string
+    {
+        try {
+            $this->call('get', '/event-types');
+
+            return null;
+        } catch (PaddleApiException $e) {
+            return $e->getCode() ? 'http_' . $e->getCode() : 'unreachable';
+        } catch (\Throwable $e) {
+            return class_basename($e);
+        }
+    }
+
     // ------------------------------------------------------------------
 
     /**

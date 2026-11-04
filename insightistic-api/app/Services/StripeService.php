@@ -13,32 +13,78 @@ use App\Models\Subscription;
  */
 class StripeService
 {
-    private function client(): \Stripe\StripeClient
+    public static function secret(): string
     {
-        return new \Stripe\StripeClient(config('insightistic.stripe.secret'));
+        return (string) (config('billing.stripe.secret') ?: config('insightistic.stripe.secret'));
     }
 
-    /** Get-or-create the Stripe customer for an org; persists the id locally. */
+    public static function webhookSecret(): string
+    {
+        return (string) (config('billing.stripe.webhook_secret') ?: config('insightistic.stripe.webhook_secret'));
+    }
+
+    /** test | live | unconfigured — derived from the key prefix, never the key itself. */
+    public static function mode(): string
+    {
+        $secret = self::secret();
+        if ($secret === '') {
+            return 'unconfigured';
+        }
+
+        return preg_match('/^(sk|rk)_live_/', $secret) ? 'live' : 'test';
+    }
+
+    protected function client(): \Stripe\StripeClient
+    {
+        if (self::mode() === 'live' && ! config('billing.stripe.allow_live')) {
+            throw new \RuntimeException('Stripe live keys are disabled (set STRIPE_ALLOW_LIVE=true after go-live sign-off).');
+        }
+
+        return new \Stripe\StripeClient(self::secret());
+    }
+
+    /**
+     * Get-or-create the Stripe customer for an org. The id lives on the org
+     * (organizations.stripe_customer_id); the legacy subscriptions column is
+     * still read for orgs created before dual-provider billing.
+     */
     public function customerId(Organization $org): string
     {
-        $sub = $org->subscription;
-        if ($sub && $sub->stripe_customer_id) {
-            return $sub->stripe_customer_id;
+        if ($org->stripe_customer_id) {
+            return $org->stripe_customer_id;
+        }
+        if ($legacy = $org->subscription?->stripe_customer_id) {
+            $org->forceFill(['stripe_customer_id' => $legacy])->save();
+
+            return $legacy;
         }
 
         $customer = $this->client()->customers->create([
             'name'     => $org->name,
             'email'    => $org->owner?->email,
-            'metadata' => ['organization_id' => $org->id],
+            'metadata' => ['organization_id' => (string) $org->id, 'app' => 'insightistic'],
         ]);
-
-        $sub ??= Subscription::create([
-            'organization_id' => $org->id,
-            'status'          => 'incomplete',
-        ]);
-        $sub->update(['stripe_customer_id' => $customer->id]);
+        $org->forceFill(['stripe_customer_id' => $customer->id])->save();
 
         return $customer->id;
+    }
+
+    /** @return object{id:string,url:string} */
+    public function createCheckoutSession(array $params)
+    {
+        return $this->client()->checkout->sessions->create($params);
+    }
+
+    /** Cheap authenticated probe for System Health; returns null on success, else a short error class. */
+    public function ping(): ?string
+    {
+        try {
+            $this->client()->balance->retrieve();
+
+            return null;
+        } catch (\Throwable $e) {
+            return class_basename($e);
+        }
     }
 
     public function checkoutUrl(Organization $org, $plan, string $priceId, string $successUrl, string $cancelUrl): string
@@ -66,10 +112,11 @@ class StripeService
 
     public function portalUrl(string $customerId, string $returnUrl): string
     {
-        $session = $this->client()->billingPortal->sessions->create([
-            'customer'   => $customerId,
-            'return_url' => $returnUrl,
-        ]);
+        $params = ['customer' => $customerId, 'return_url' => $returnUrl];
+        if ($config = config('billing.stripe.portal_configuration')) {
+            $params['configuration'] = $config;
+        }
+        $session = $this->client()->billingPortal->sessions->create($params);
 
         return $session->url;
     }
@@ -80,7 +127,7 @@ class StripeService
         return \Stripe\Webhook::constructEvent(
             $payload,
             (string) $signature,
-            config('insightistic.stripe.webhook_secret')
+            self::webhookSecret()
         );
     }
 

@@ -9,6 +9,14 @@ class EntitlementGrant extends Model
 {
     use BelongsToOrganization;
 
+    /** One-time lifetime purchases, one source per billing provider. */
+    public const LIFETIME_SOURCES = ['paddle_lifetime', 'stripe_lifetime'];
+
+    public static function isLifetimeSource(?string $source): bool
+    {
+        return in_array($source, self::LIFETIME_SOURCES, true);
+    }
+
     protected $fillable = [
         'organization_id', 'plan_id', 'source', 'source_reference',
         'features_json', 'limits_json', 'starts_at', 'ends_at', 'revoked_at',

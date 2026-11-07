@@ -16,6 +16,22 @@ return [
         'slug' => 'founding-angel-2026',
         'name' => 'Founding Angel Plans',
         'maximum_sales' => 100,
+        'sold_out_message' => 'Our first 100 Founding Angel licenses have been claimed. Lifetime plans are now closed.',
+    ],
+    // AppSumo-exclusive LTD (Option A, founder-locked 2026-11): $79/$149/$269
+    // with site-count entitlements (3/10/25) and NO AI credits — the AI
+    // allowance is the plan-based standard_ai_requests (Solo=Growth's 200,
+    // Studio/Agency=Agency's 600). Gated by FEATURE_LTD_APPSUMO (config/
+    // feature-flags.php, disabled by default); Founding Angel stays the
+    // direct-from-site offer. Activation runbook: docs/LTD-APPSUMO-2026-LAUNCH.md.
+    'appsumo_campaign' => [
+        'slug' => 'appsumo_2026',
+        'name' => 'AppSumo 2026',
+        // doc 33 scarcity ceiling. maximum_sales is read once when the
+        // campaign row is created (LtdCampaignService firstOrCreate); adjust
+        // here BEFORE the first sale, or update the ltd_campaigns row directly.
+        'maximum_sales' => 500,
+        'sold_out_message' => 'The AppSumo 2026 licenses have been claimed. The deal is sold out.',
     ],
     'ai_action_costs' => [
         'basic_wordpress_dashboard_insight' => 100,
@@ -33,10 +49,13 @@ return [
     // plan rows remain in the database so old webhooks and entitlements can
     // still be resolved, but they are not new offers.
     'recurring_plan_slugs' => ['starter', 'growth', 'agency', 'agency_pro'],
+    // Stripe lifetime allow-list (StripeBillingService): Founding Angel only —
+    // the AppSumo tiers are Paddle-only by design.
     'ltd_plan_slugs' => ['angel_solo', 'angel_studio', 'angel_agency'],
     'admin_plan_slugs' => [
         'free', 'starter', 'growth', 'agency', 'agency_pro',
         'angel_solo', 'angel_studio', 'angel_agency',
+        'appsumo_solo', 'appsumo_studio', 'appsumo_agency',
     ],
     // A single upgrade order for the dashboard. This is intentionally a
     // product hierarchy rather than a price sort: lifetime and recurring
@@ -45,10 +64,13 @@ return [
         'free' => 0,
         'starter' => 10,
         'angel_solo' => 20,
+        'appsumo_solo' => 25,
         'growth' => 30,
         'angel_studio' => 40,
         'agency' => 50,
+        'appsumo_studio' => 55,
         'angel_agency' => 60,
+        'appsumo_agency' => 65,
         'agency_pro' => 70,
     ],
     'regular_plans' => [
@@ -116,6 +138,35 @@ return [
             'name' => 'Angel Agency', 'price' => 699, 'sites' => 15, 'seats' => 10,
             'crawl_pages' => 100000, 'browser_minutes' => 180, 'keywords' => 1500,
             'standard_ai_requests' => 250, 'monthly_credits' => 20000, 'reports' => 100,
+            'features' => ['basic_analytics', 'woocommerce_analytics', 'seo_analytics',
+                'email_audit_automation', 'ai_insights', 'advanced_reports',
+                'scheduled_reports', 'multi_site', 'white_label_reports',
+                'white_label_dashboard', 'custom_domain', 'team_access'],
+        ],
+    ],
+
+    // AppSumo-exclusive LTD tiers (Option A). Capacities follow the matching
+    // Founding Angel tier shape; monthly_credits stays 0 on purpose — these
+    // buyers get the plan-based standard AI allowance, never AI credits.
+    'appsumo_plans' => [
+        'appsumo_solo' => [
+            'name' => 'AppSumo Solo', 'price' => 79, 'sites' => 3, 'seats' => 1,
+            'crawl_pages' => 10000, 'browser_minutes' => 15, 'keywords' => 150,
+            'standard_ai_requests' => 200, 'monthly_credits' => 0, 'reports' => 5,
+            'features' => ['basic_analytics', 'seo_analytics', 'ai_insights'],
+        ],
+        'appsumo_studio' => [
+            'name' => 'AppSumo Studio', 'price' => 149, 'sites' => 10, 'seats' => 3,
+            'crawl_pages' => 40000, 'browser_minutes' => 60, 'keywords' => 500,
+            'standard_ai_requests' => 600, 'monthly_credits' => 0, 'reports' => 25,
+            'features' => ['basic_analytics', 'woocommerce_analytics', 'seo_analytics',
+                'email_audit_automation', 'ai_insights', 'advanced_reports',
+                'scheduled_reports', 'multi_site', 'white_label_reports', 'team_access'],
+        ],
+        'appsumo_agency' => [
+            'name' => 'AppSumo Agency', 'price' => 269, 'sites' => 25, 'seats' => 10,
+            'crawl_pages' => 100000, 'browser_minutes' => 180, 'keywords' => 1500,
+            'standard_ai_requests' => 600, 'monthly_credits' => 0, 'reports' => 100,
             'features' => ['basic_analytics', 'woocommerce_analytics', 'seo_analytics',
                 'email_audit_automation', 'ai_insights', 'advanced_reports',
                 'scheduled_reports', 'multi_site', 'white_label_reports',

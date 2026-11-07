@@ -117,3 +117,57 @@ it('maps configured Angel Paddle IDs to the new lifetime plans', function () {
         unset($_ENV['PADDLE_PRICE_ANGEL_AGENCY'], $_SERVER['PADDLE_PRICE_ANGEL_AGENCY']);
     }
 });
+
+/**
+ * AppSumo 2026 LTD (Option A): env-mapped price IDs and the hidden plan
+ * shapes — site-count entitlements (3/10/25), plan-based AI allowance
+ * (standard_ai_requests, Growth/Agency levels), NO AI credits.
+ */
+it('maps configured AppSumo Paddle IDs to hidden site-based lifetime plans', function () {
+    $this->seed(PlanSeeder::class);
+    putenv('PADDLE_PRICE_LTD_APPSUMO_SOLO=pri_test_appsumo_solo');
+    $_ENV['PADDLE_PRICE_LTD_APPSUMO_SOLO'] = $_SERVER['PADDLE_PRICE_LTD_APPSUMO_SOLO'] = 'pri_test_appsumo_solo';
+    putenv('PADDLE_PRICE_LTD_APPSUMO_STUDIO=pri_test_appsumo_studio');
+    $_ENV['PADDLE_PRICE_LTD_APPSUMO_STUDIO'] = $_SERVER['PADDLE_PRICE_LTD_APPSUMO_STUDIO'] = 'pri_test_appsumo_studio';
+    putenv('PADDLE_PRICE_LTD_APPSUMO_AGENCY=pri_test_appsumo_agency');
+    $_ENV['PADDLE_PRICE_LTD_APPSUMO_AGENCY'] = $_SERVER['PADDLE_PRICE_LTD_APPSUMO_AGENCY'] = 'pri_test_appsumo_agency';
+
+    try {
+        $this->seed(PaddleCatalogSeeder::class);
+
+        $solo = PlanPrice::where('provider_price_id', 'pri_test_appsumo_solo')->first();
+        $studio = PlanPrice::where('provider_price_id', 'pri_test_appsumo_studio')->first();
+        $agency = PlanPrice::where('provider_price_id', 'pri_test_appsumo_agency')->first();
+
+        expect($solo->plan->slug)->toBe('appsumo_solo')
+            ->and($solo->kind)->toBe('lifetime')
+            ->and($solo->amount_minor)->toBe(7900)
+            ->and($solo->metadata_json['campaign'])->toBe('appsumo_2026')
+            ->and($studio->plan->slug)->toBe('appsumo_studio')
+            ->and($studio->amount_minor)->toBe(14900)
+            ->and($agency->plan->slug)->toBe('appsumo_agency')
+            ->and($agency->amount_minor)->toBe(26900);
+
+        $soloPlan = Plan::query()->where('slug', 'appsumo_solo')->first();
+        $studioPlan = Plan::query()->where('slug', 'appsumo_studio')->first();
+        $agencyPlan = Plan::query()->where('slug', 'appsumo_agency')->first();
+
+        expect($soloPlan->is_active)->toBeFalse()
+            ->and($soloPlan->site_limit)->toBe(3)
+            ->and($soloPlan->limit('standard_ai_requests_monthly'))->toBe(200)
+            ->and($soloPlan->limit('monthly_ai_credits'))->toBe(0)
+            ->and($studioPlan->site_limit)->toBe(10)
+            ->and($studioPlan->limit('standard_ai_requests_monthly'))->toBe(600)
+            ->and($studioPlan->limit('monthly_ai_credits'))->toBe(0)
+            ->and($agencyPlan->site_limit)->toBe(25)
+            ->and($agencyPlan->limit('standard_ai_requests_monthly'))->toBe(600)
+            ->and($agencyPlan->limit('monthly_ai_credits'))->toBe(0);
+    } finally {
+        putenv('PADDLE_PRICE_LTD_APPSUMO_SOLO');
+        unset($_ENV['PADDLE_PRICE_LTD_APPSUMO_SOLO'], $_SERVER['PADDLE_PRICE_LTD_APPSUMO_SOLO']);
+        putenv('PADDLE_PRICE_LTD_APPSUMO_STUDIO');
+        unset($_ENV['PADDLE_PRICE_LTD_APPSUMO_STUDIO'], $_SERVER['PADDLE_PRICE_LTD_APPSUMO_STUDIO']);
+        putenv('PADDLE_PRICE_LTD_APPSUMO_AGENCY');
+        unset($_ENV['PADDLE_PRICE_LTD_APPSUMO_AGENCY'], $_SERVER['PADDLE_PRICE_LTD_APPSUMO_AGENCY']);
+    }
+});

@@ -126,7 +126,8 @@ class PaddleCatalogSeeder extends Seeder
 
         $plans = Plan::query()
             ->whereIn('slug', array_merge(
-                ['starter', 'growth', 'agency', 'agency_pro', 'angel_solo', 'angel_studio', 'angel_agency'],
+                ['starter', 'growth', 'agency', 'agency_pro', 'angel_solo', 'angel_studio', 'angel_agency',
+                    'appsumo_solo', 'appsumo_studio', 'appsumo_agency'],
                 array_keys(self::HIDDEN_PLANS),
             ))
             ->pluck('id', 'slug');
@@ -183,12 +184,21 @@ class PaddleCatalogSeeder extends Seeder
             'PADDLE_PRICE_ANGEL_SOLO' => ['angel_solo', 14900],
             'PADDLE_PRICE_ANGEL_STUDIO' => ['angel_studio', 29900],
             'PADDLE_PRICE_ANGEL_AGENCY' => ['angel_agency', 69900],
+            // AppSumo 2026 LTD (Option A): IDs are created at launch per
+            // docs/LTD-APPSUMO-2026-LAUNCH.md and stay empty until then.
+            // Empty defaults keep the campaign dormant even with the flag on.
+            'PADDLE_PRICE_LTD_APPSUMO_SOLO' => ['appsumo_solo', 7900],
+            'PADDLE_PRICE_LTD_APPSUMO_STUDIO' => ['appsumo_studio', 14900],
+            'PADDLE_PRICE_LTD_APPSUMO_AGENCY' => ['appsumo_agency', 26900],
         ];
 
         foreach ($env as $key => [$plan, $amount]) {
             $id = trim((string) env($key, ''));
             if ($id !== '' && ! array_key_exists($id, self::PRICES)) {
-                $prices[$id] = [$plan, 'lifetime', $amount, ['campaign' => 'founding-angel-2026']];
+                $metadata = str_starts_with($key, 'PADDLE_PRICE_LTD_APPSUMO_')
+                    ? ['campaign' => 'appsumo_2026', 'catalog_product' => 'insightistic_ltd_appsumo']
+                    : ['campaign' => 'founding-angel-2026'];
+                $prices[$id] = [$plan, 'lifetime', $amount, $metadata];
             }
         }
 

@@ -50,7 +50,10 @@ final class PaddleBillingService
             throw new BillingConfigurationException('plan_not_available', 'This plan is not available.');
         }
 
-        if ($kind === 'lifetime' && str_starts_with($planSlug, 'angel_')) {
+        // Lifetime campaign tiers: Founding Angel always; AppSumo tiers pass
+        // through the service, which rejects the slug while FEATURE_LTD_APPSUMO
+        // is off (the campaign is disabled by default).
+        if ($kind === 'lifetime' && (str_starts_with($planSlug, 'angel_') || str_starts_with($planSlug, 'appsumo_'))) {
             $reservation = $this->ltdCampaign->reserve($org, $planSlug, (string) Str::uuid());
         }
 

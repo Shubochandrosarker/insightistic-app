@@ -89,8 +89,8 @@ class LifecycleMailer
     private function copyFor(string $type, Organization $org, array $data): ?array
     {
         $app  = rtrim(config('insightistic.app_url'), '/');
-        $name = $org->owner?->name ?: 'there';
-        $plan = $org->plan?->name ?: 'Starter';
+        $name = e($org->owner?->name ?: 'there');
+        $plan = e($org->plan?->name ?: 'Starter');
 
         return match ($type) {
             'trial_started' => [
@@ -211,6 +211,33 @@ class LifecycleMailer
                         'Upgrade for more slots, or deactivate a site you no longer need from the Licenses tab.',
                     ],
                     'cta' => ['label' => 'Manage websites', 'url' => $app . '/dashboard/licenses'],
+                ],
+            ],
+            'lifetime_purchased' => [
+                'subject' => 'Your Insightistic Founding Angel purchase is confirmed',
+                'body' => [
+                    'preview' => 'Your lifetime access is active and your workspace is ready.',
+                    'heading' => 'Your Founding Angel access is active',
+                    'lines' => [
+                        "Hi {$name}, your <strong>" . e($data['plan_name'] ?? $plan) . "</strong> lifetime purchase is confirmed. Your account is active now and the plan limits are available immediately.",
+                        'Keep this email for your purchase record. Your WordPress license and connected-site access are available from the dashboard.',
+                    ],
+                    'details' => array_values(array_filter([
+                        ['label' => 'Plan', 'value' => e($data['plan_name'] ?? $plan)],
+                        ['label' => 'Payment provider', 'value' => e($data['provider'] ?? 'Payment provider')],
+                        ['label' => 'Amount', 'value' => isset($data['amount_minor']) ? number_format(((int) $data['amount_minor']) / 100, 2) . ' ' . e(strtoupper((string) ($data['currency'] ?? 'USD'))) : null],
+                        ['label' => 'Purchase reference', 'value' => e($data['transaction_id'] ?? '—')],
+                        ['label' => 'Invoice number', 'value' => ! empty($data['invoice_number']) ? e((string) $data['invoice_number']) : null],
+                        ['label' => 'Purchased on', 'value' => e($data['purchase_date'] ?? now()->format('M j, Y'))],
+                        ['label' => '30-day guarantee until', 'value' => e($data['refund_deadline'] ?? now()->addDays((int) config('commercial.refund_window_days', 30))->format('M j, Y'))],
+                    ], fn (array $row): bool => $row['value'] !== null)),
+                    'steps' => [
+                        'Open your dashboard and connect a WordPress or WooCommerce site.',
+                        'Copy the license key from <strong>Dashboard → Licenses</strong> into the Insightistic WordPress plugin.',
+                        'Use <strong>Dashboard → Billing</strong> to review your lifetime plan and purchase record.',
+                    ],
+                    'cta' => ['label' => 'Open your dashboard', 'url' => $app . '/dashboard'],
+                    'footnote' => 'This one-time Founding Angel purchase includes a 30-day money-back guarantee from the purchase date. Regular monthly and yearly subscription charges and credit packs are not covered by this LTD guarantee.',
                 ],
             ],
             'subscription_started' => [

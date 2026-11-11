@@ -39,6 +39,41 @@ it('seeds all eight current account tiers with the approved commercial limits', 
     }
 });
 
+it('seeds the approved tracked-keyword caps and rank cadence for every tier', function () {
+    $this->seed(PlanSeeder::class);
+
+    // Approved pricing grid (2026-11-11): keyword tracking is metered far
+    // below the old "capacity" numbers because every check is a paid SERP
+    // call; lifetime/free tiers also run weekly, not nightly.
+    $expected = [
+        'free' => [3, 'weekly'],
+        'starter' => [30, 'daily'],
+        'growth' => [100, 'daily'],
+        'agency' => [250, 'daily'],
+        'agency_pro' => [600, 'daily'],
+        'angel_solo' => [20, 'weekly'],
+        'angel_studio' => [60, 'weekly'],
+        'angel_agency' => [150, 'weekly'],
+        'appsumo_solo' => [20, 'weekly'],
+        'appsumo_studio' => [40, 'weekly'],
+        'appsumo_agency' => [100, 'weekly'],
+    ];
+
+    $catalog = array_merge(
+        config('commercial.regular_plans'),
+        config('commercial.angel_plans'),
+        config('commercial.appsumo_plans'),
+    );
+
+    foreach ($expected as $slug => [$keywords, $cadence]) {
+        expect($catalog[$slug]['keywords'])->toBe($keywords)
+            ->and($catalog[$slug]['rank_cadence'])->toBe($cadence)
+            ->and(Plan::where('slug', $slug)->firstOrFail()->limit('tracked_keywords'))->toBe($keywords);
+    }
+
+    expect(count($catalog))->toBe(count($expected));
+});
+
 it('reconciles completed lifetime sales and active grants into the Angel cap once', function () {
     config()->set('commercial.ltd_campaign.maximum_sales', 2);
 

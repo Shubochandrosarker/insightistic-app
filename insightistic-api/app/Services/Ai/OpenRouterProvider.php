@@ -6,9 +6,17 @@ use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
 /** OpenRouter's OpenAI-compatible chat endpoint with ordered model fallback. */
-class OpenRouterProvider implements AiProvider
+class OpenRouterProvider implements AiProvider, ReportsUsage
 {
     private ?string $actualModel = null;
+
+    /** Usage OpenRouter returned for the last call (always included in responses). */
+    private ?array $lastUsage = null;
+
+    public function lastUsage(): ?array
+    {
+        return $this->lastUsage;
+    }
 
     public function __construct(private array $config) {}
 
@@ -19,6 +27,8 @@ class OpenRouterProvider implements AiProvider
 
     public function generate(string $system, array $context, ?int $identityId = null): ?array
     {
+        $this->lastUsage = null;
+
         try {
             $payload = [
                 'model'           => $this->config['model'],
@@ -62,6 +72,17 @@ class OpenRouterProvider implements AiProvider
             }
 
             $this->actualModel = $response->json('model') ?: ($this->config['model'] ?? 'unknown');
+
+            // OpenRouter returns usage (native-tokenizer counts + cost in USD
+            // credits) on every chat completion. Recorded as reported.
+            $usage = $response->json('usage');
+            if (is_array($usage)) {
+                $this->lastUsage = [
+                    'tokens_in'  => isset($usage['prompt_tokens']) ? (int) $usage['prompt_tokens'] : null,
+                    'tokens_out' => isset($usage['completion_tokens']) ? (int) $usage['completion_tokens'] : null,
+                    'cost_usd'   => isset($usage['cost']) && is_numeric($usage['cost']) ? (float) $usage['cost'] : null,
+                ];
+            }
             $content = $response->json('choices.0.message.content');
 
             if (! is_string($content) || trim($content) === '') {

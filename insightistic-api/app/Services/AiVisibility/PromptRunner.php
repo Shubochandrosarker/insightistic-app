@@ -97,8 +97,8 @@ TXT;
                 'model'           => mb_substr($resolved->model(), 0, 64),
                 'status'          => AiVisibilityRun::STATUS_SUCCESS,
                 'response_hash'   => md5($answer),
-                'tokens_used'     => $this->tokensFrom($raw),
-                'cost_units'      => $this->costFrom($raw),
+                'tokens_used'     => $this->tokensFrom($raw, $resolved),
+                'cost_units'      => $this->costFrom($raw, $resolved),
                 'brand_mentioned' => $extracted['brand_mentioned'],
                 'checked_at'      => $now,
                 'created_at'      => $now,
@@ -154,20 +154,30 @@ TXT;
         return 'openai';
     }
 
-    /** Usage reported in the provider payload, or an honest 0. */
-    private function tokensFrom(array $raw): int
+    /** Usage reported in the provider payload or by the provider (ReportsUsage), or an honest 0. */
+    private function tokensFrom(array $raw, ?AiProvider $provider = null): int
     {
         $usage = $raw['usage'] ?? null;
+        if (is_array($usage) && isset($usage['total_tokens'])) {
+            return max(0, (int) $usage['total_tokens']);
+        }
 
-        return is_array($usage) ? max(0, (int) ($usage['total_tokens'] ?? 0)) : 0;
+        $reported = $provider instanceof \App\Services\Ai\ReportsUsage ? $provider->lastUsage() : null;
+
+        return $reported ? max(0, (int) ($reported['tokens_in'] ?? 0) + (int) ($reported['tokens_out'] ?? 0)) : 0;
     }
 
-    /** Cost units reported in the provider payload, or an honest 0. */
-    private function costFrom(array $raw): float
+    /** Cost reported in the provider payload or by the provider (ReportsUsage), or an honest 0. */
+    private function costFrom(array $raw, ?AiProvider $provider = null): float
     {
         $cost = $raw['cost_usd'] ?? null;
+        if (is_numeric($cost)) {
+            return max(0.0, (float) $cost);
+        }
 
-        return is_numeric($cost) ? max(0.0, (float) $cost) : 0.0;
+        $reported = $provider instanceof \App\Services\Ai\ReportsUsage ? $provider->lastUsage() : null;
+
+        return is_numeric($reported['cost_usd'] ?? null) ? max(0.0, (float) $reported['cost_usd']) : 0.0;
     }
 
     /** The failed-run row a provider outage or exception leaves behind. */

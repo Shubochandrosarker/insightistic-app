@@ -2,6 +2,8 @@
 
 namespace App\Providers;
 
+use App\Domain\Billing\AiAllowanceContext;
+use App\Domain\Billing\AiAllowanceGuard;
 use App\Metrics\MetricRegistry;
 use App\Query\QueryConcurrencyLimiter;
 use App\Services\Ai\AiProvider;
@@ -37,6 +39,13 @@ class AppServiceProvider extends ServiceProvider
     {
         // One Tenancy context per request.
         $this->app->scoped(Tenancy::class, fn () => new Tenancy);
+
+        // One armed AI tariff scope per request/job: the billing call site
+        // declares which action the next paid-model call is, and the provider
+        // chain reserves its cost before spending anything.
+        $this->app->scoped(AiAllowanceContext::class, fn () => new AiAllowanceContext(
+            $this->app->make(AiAllowanceGuard::class),
+        ));
 
         // Observability (spec Phase 2.3). Singletons because Tracing holds the
         // exporter's batch processor — one per process, not one per resolve,
@@ -98,7 +107,12 @@ class AppServiceProvider extends ServiceProvider
             $free[] = $rule;
             $paid[] = $rule;
 
-            return new PlanAwareAiProvider($free, $paid, $this->app->make(AiTierResolver::class));
+            return new PlanAwareAiProvider(
+                $free,
+                $paid,
+                $this->app->make(AiTierResolver::class),
+                $this->app->make(AiAllowanceContext::class),
+            );
         });
 
         // Embedding provider for the knowledge base. 'none' (or a missing

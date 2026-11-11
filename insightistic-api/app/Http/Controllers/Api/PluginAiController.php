@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Domain\Billing\AiAllowanceContext;
 use App\Domain\Billing\AiCreditService;
 use App\Domain\Billing\Exceptions\InsufficientCreditsException;
 use App\Http\Controllers\Controller;
@@ -13,6 +14,7 @@ use App\Services\Ai\RuleProvider;
 use App\Services\LicenseService;
 use App\Services\UsageService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 
 /**
  * Serves the WordPress plugin's "Insightistic Cloud AI" provider — see
@@ -37,6 +39,7 @@ class PluginAiController extends Controller
         private ProviderResolver $providerResolver,
         private AiCreditService $credits,
         private AiAvailability $availability,
+        private AiAllowanceContext $allowance,
     ) {}
 
     public function generate(Request $request)
@@ -93,12 +96,15 @@ class PluginAiController extends Controller
         $action = 'basic_wordpress_dashboard_insight';
         $eligibleForStandard = $this->credits->standardEligible($org, $action);
 
-        if ($creditModel && ! $this->credits->canCharge($org, $action, $eligibleForStandard)) {
-            return $this->error(
-                'insufficient_credits',
-                'This AI action needs more Insight Credits. Buy a credit pack or upgrade your plan.',
-                402,
-            );
+        $usesStandardRequest = $creditModel
+            && $this->credits->willUseStandardRequest($org, $action, $eligibleForStandard);
+
+        if ($creditModel && ! $usesStandardRequest) {
+            // Hold the tariff before the paid call. The plugin's own operation
+            // id is the idempotency key, so a retried request charges once; a
+            // short balance falls through to the free-tier models instead of
+            // a 402 the plugin cannot act on.
+            $this->allowance->for($org->id, $action, $this->operationReference($request, $data));
         }
 
         if (! $creditModel && ! $this->usage->canGenerateInsight($org)) {
@@ -130,30 +136,39 @@ class PluginAiController extends Controller
             );
         }
 
-        if ($creditModel) {
+        if ($usesStandardRequest) {
             try {
-                $operationId = $data['operation_id']
-                    ?? $request->header('Idempotency-Key')
-                    ?? $request->header('X-Insightistic-Operation-Id');
-                $operationReference = $operationId
-                    ? 'plugin_ai:' . $request->attributes->get('connector_site')?->id . ':' . $operationId
-                    : 'plugin_ai:' . $request->attributes->get('connector_site')?->id . ':' . sha1(json_encode([
-                        $data['model'], $data['skill_profile'] ?? 'basic', $data['system_prompt'], $data['prompt'],
-                    ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
-
-                $this->credits->charge($org, $action, $operationReference, $eligibleForStandard);
+                $this->credits->charge($org, $action, $this->operationReference($request, $data), true);
             } catch (InsufficientCreditsException) {
-                return $this->error(
-                    'insufficient_credits',
-                    'This AI action needs more Insight Credits. Buy a credit pack or upgrade your plan.',
-                    402,
-                );
+                // Standard slots ran out after the preflight; the answer is
+                // already delivered, so log the shortfall rather than fail
+                // a plugin call the user just paid attention to.
+                Log::warning('plugin_ai.standard_charge_shortfall', [
+                    'organization_id' => $org->id,
+                ]);
             }
-        } else {
+        } elseif (! $creditModel) {
             $this->usage->recordInsight($org);
         }
+        // Credit-priced answers were settled by AiAllowanceGuard::commit()
+        // around the provider call.
 
         return response()->json(['content' => json_encode($result)]);
+    }
+
+    /** Stable per plugin operation: the caller's operation id when it sends one, else the request fingerprint. */
+    private function operationReference(Request $request, array $data): string
+    {
+        $operationId = $data['operation_id']
+            ?? $request->header('Idempotency-Key')
+            ?? $request->header('X-Insightistic-Operation-Id');
+        $siteId = $request->attributes->get('connector_site')?->id;
+
+        return $operationId
+            ? 'plugin_ai:' . $siteId . ':' . $operationId
+            : 'plugin_ai:' . $siteId . ':' . sha1(json_encode([
+                $data['model'], $data['skill_profile'] ?? 'basic', $data['system_prompt'], $data['prompt'],
+            ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
     }
 
     private function error(string $code, string $message, int $status)

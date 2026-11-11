@@ -3,8 +3,8 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Domain\Billing\AiAllowanceContext;
 use App\Domain\Billing\AiCreditService;
-use App\Domain\Billing\Exceptions\InsufficientCreditsException;
 use App\Mail\ClientReportMail;
 use App\Models\ClientReport;
 use App\Models\Site;
@@ -14,6 +14,7 @@ use App\Support\Tenancy;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 
 class ReportController extends Controller
 {
@@ -22,6 +23,7 @@ class ReportController extends Controller
         private UsageService $usage,
         private Tenancy $tenancy,
         private AiCreditService $credits,
+        private AiAllowanceContext $allowance,
     ) {}
 
     /** GET /sites/{site}/reports — site.access middleware applied. */
@@ -60,36 +62,20 @@ class ReportController extends Controller
         $action = 'advanced_multi_source_ai_report';
         $includeAi = ! $creditModel || $this->credits->entitledForAction($org, $action);
 
-        if ($creditModel && $includeAi && ! $this->credits->canCharge($org, $action)) {
-            return response()->json([
-                'message' => 'This report needs more Insight Credits. Buy a credit pack or upgrade your plan.',
-                'code'    => 'insufficient_credits',
-                'action'  => $action,
-                'cost'    => $this->credits->cost($action),
-                'available' => $this->credits->walletSummary($org)['total_usable'],
-            ], 402);
+        if ($creditModel && $includeAi) {
+            // Hold the tariff before the report's AI summary runs. A retried
+            // request settles one charge (the caller's idempotency key is the
+            // run key when present); a short balance yields the report without
+            // the AI summary instead of a 402 the plan already allows.
+            $this->allowance->for($org->id, $action, $request->header('Idempotency-Key')
+                ?? $request->header('X-Insightistic-Operation-Id')
+                ?? 'report:' . Str::uuid()->toString());
         }
 
         $report = $this->builder->generate($site, $data['type'], $includeAi);
 
-        if ($creditModel && $this->builder->aiSummaryGenerated()) {
-            try {
-                $operationId = $request->header('Idempotency-Key')
-                    ?? $request->header('X-Insightistic-Operation-Id')
-                    ?? ('report:' . $report->id);
-                $this->credits->charge($org, $action, $operationId, false);
-            } catch (InsufficientCreditsException $e) {
-                $this->builder->discard($report);
-
-                return response()->json([
-                    'message' => 'This report needs more Insight Credits. Buy a credit pack or upgrade your plan.',
-                    'code'    => 'insufficient_credits',
-                    'action'  => $action,
-                    'cost'    => $this->credits->cost($action),
-                    'available' => $e->available,
-                ], 402);
-            }
-        }
+        // Any credit charge for the AI summary was settled by
+        // AiAllowanceGuard::commit() inside the provider call.
 
         $this->usage->recordReport($org);
 

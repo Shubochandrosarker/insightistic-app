@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Api\Admin\AppSumoLicenseController as AdminAppSumoLicenseController;
 use App\Http\Controllers\Api\Admin\AuditLogController as AdminAuditLogController;
 use App\Http\Controllers\Api\Admin\ImpersonationController as AdminImpersonationController;
 use App\Http\Controllers\Api\Admin\LicenseController as AdminLicenseController;
@@ -16,6 +17,8 @@ use App\Http\Controllers\Api\Admin\SyncLogController as AdminSyncLogController;
 use App\Http\Controllers\Api\Admin\UsageController as AdminUsageController;
 use App\Http\Controllers\Api\Admin\UserController as AdminUserController;
 use App\Http\Controllers\Api\AlertController;
+use App\Http\Controllers\Api\AppSumoOAuthController;
+use App\Http\Controllers\Api\AppSumoWebhookController;
 use App\Http\Controllers\Api\AnalyticsController;
 use App\Http\Controllers\Api\AnalyticsQueryController;
 use App\Http\Controllers\Api\ActionProposalController;
@@ -748,6 +751,10 @@ Route::prefix('admin')->middleware(['auth:sanctum', 'super_admin'])->group(funct
     Route::patch('licenses/{id}/activation-limit', [AdminLicenseController::class, 'overrideActivationLimit']);
     Route::delete('activations/{id}', [AdminLicenseController::class, 'revokeActivation']);
 
+    // AppSumo Licensing API v2 intake records (partner guide: keys must be
+    // searchable by support).
+    Route::get('appsumo/licenses', [AdminAppSumoLicenseController::class, 'index']);
+
     // External/plugin/vendor entitlements are kept separate from the
     // Insightistic license lifecycle, with encrypted key storage.
     Route::get('managed-licenses', [AdminManagedLicenseController::class, 'index']);
@@ -840,6 +847,17 @@ Route::post('billing/webhook/stripe', [BillingController::class, 'webhook'])->mi
 // Deliberately outside every middleware group — Paddle retries with its own
 // schedule and its servers carry no bearer token.
 Route::post('billing/webhook/paddle', [PaddleWebhookController::class, '__invoke'])->middleware('throttle:webhooks');
+
+// ---- AppSumo Licensing API v2 (partner guide: webhooks + OAuth) ------------
+// Webhook: no auth, no tenant — the HMAC signature (X-Appsumo-Signature over
+// timestamp + raw body under the licensing API key) is the authentication;
+// the endpoint always acks 200 {"event": …, "success": true}.
+Route::post('appsumo/webhook', [AppSumoWebhookController::class, '__invoke'])->middleware('throttle:webhooks');
+
+// OAuth redirect URL: browser navigation from AppSumo after purchase. Same
+// throttle as the other OAuth callbacks; it answers 200 OK (no code) for the
+// Partner Portal validation ping.
+Route::get('appsumo/oauth/callback', [AppSumoOAuthController::class, 'callback'])->middleware('throttle:auth');
 
 // ---- Uptime monitoring (Phase 12, docs/roadmap-2026/16-PERFORMANCE-UPTIME.md)
 // Appended as its own group rather than spliced into the site.access group

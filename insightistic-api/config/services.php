@@ -59,6 +59,26 @@ return [
         'tenant' => env('MICROSOFT_TENANT', 'common'),
     ],
 
+    // AppSumo Licensing API v2 (partner guide). The API key is the partner
+    // secret for BOTH the Licensing API header (X-AppSumo-Licensing-Key) and
+    // the webhook HMAC (X-Appsumo-Signature over timestamp + raw body) — it
+    // lives in production env only, never in the repo.
+    'appsumo' => [
+        'base_url' => env('APPSUMO_LICENSING_BASE_URL', 'https://api.licensing.appsumo.com/v2'),
+        'key' => env('APPSUMO_LICENSING_API_KEY'),
+        // Optional alternate HMAC secret if AppSumo ever splits one from the
+        // API key; verification prefers 'key' and falls back to this.
+        'webhook_secret' => env('APPSUMO_LICENSING_WEBHOOK_SECRET'),
+        'oauth' => [
+            'client_id' => env('APPSUMO_OAUTH_CLIENT_ID'),
+            'client_secret' => env('APPSUMO_OAUTH_CLIENT_SECRET'),
+            // Must match the Partner Portal redirect URL exactly (guide: 403
+            // troubleshooting). Defaults to the callback route's own URL.
+            'redirect' => env('APPSUMO_OAUTH_REDIRECT_URI'),
+        ],
+        'token_url' => env('APPSUMO_OAUTH_TOKEN_URL', 'https://appsumo.com/openid/token/'),
+    ],
+
     // DataForSEO SERP API (rank tracking, Phase 10) — HTTP Basic auth.
     // Rank checks are skipped entirely while either value is empty, so an
     // install without credentials costs nothing.

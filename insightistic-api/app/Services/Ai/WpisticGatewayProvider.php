@@ -5,8 +5,16 @@ namespace App\Services\Ai;
 use Illuminate\Support\Facades\Log;
 
 /** Insightistic AI provider backed by WordPressistic's product-key gateway. */
-class WpisticGatewayProvider implements AiProvider
+class WpisticGatewayProvider implements AiProvider, ReportsUsage
 {
+    /** Token counts the gateway reported. Cost is null: the gateway does not return a price. */
+    private ?array $lastUsage = null;
+
+    public function lastUsage(): ?array
+    {
+        return $this->lastUsage;
+    }
+
     public function __construct(
         private WpisticGatewayClient $gateway,
         private ?AiRuntimeSettings $runtime = null,
@@ -21,6 +29,8 @@ class WpisticGatewayProvider implements AiProvider
 
     public function generate(string $system, array $context, ?int $identityId = null): ?array
     {
+        $this->lastUsage = null;
+
         try {
             $result = $this->gateway->complete([
                 ['role' => 'system', 'content' => $system],
@@ -30,6 +40,10 @@ class WpisticGatewayProvider implements AiProvider
                         . json_encode($context, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
                 ],
             ], $identityId);
+
+            if (($result['tokens_in'] ?? null) !== null || ($result['tokens_out'] ?? null) !== null) {
+                $this->lastUsage = ['tokens_in' => $result['tokens_in'] ?? null, 'tokens_out' => $result['tokens_out'] ?? null, 'cost_usd' => null];
+            }
 
             return $this->parseObject((string) $result['content']);
         } catch (\Throwable $e) {

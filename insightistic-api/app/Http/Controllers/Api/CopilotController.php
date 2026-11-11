@@ -334,6 +334,7 @@ class CopilotController extends Controller
                     'latency_ms'      => (int) ((microtime(true) - $startedAt) * 1000),
                     'tokens_in'       => $result['tokens_in'],
                     'tokens_out'      => $result['tokens_out'],
+                    'cost_usd'        => $result['cost_usd'] ?? null,
                     'status'          => 'completed',
                 ]);
 

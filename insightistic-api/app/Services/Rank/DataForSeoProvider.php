@@ -6,47 +6,63 @@ use App\Models\RankKeyword;
 use App\Models\Site;
 use App\Services\Integrations\IntegrationFailure;
 use Illuminate\Support\Collection;
+use Illuminate\Http\Client\Pool;
+use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 
 /**
- * DataForSEO SERP provider (Phase 10, doc 13). One implementation of
- * RankProvider: POSTs a live Google organic SERP task per keyword to
- * /v3/serp/google/organic/live/regular with HTTP Basic auth
- * (DATAFORSEO_LOGIN / DATAFORSEO_PASSWORD via config('services.dataforseo')).
+ * DataForSEO SERP provider: the default RankProvider (RANK_PROVIDER=dataforseo).
  *
- * Batching: the live regular endpoint accepts a TASKS ARRAY — one task per
- * keyword inside a single POST, capped here at MAX_TASKS_PER_CALL = 100
- * (DataForSEO's documented per-call limit). Bigger batches are simply split
- * into more POSTs.
+ * Live Google Organic endpoint, /v3/serp/google/organic/live/regular, with
+ * HTTP Basic auth (DATAFORSEO_LOGIN / DATAFORSEO_PASSWORD).
  *
- * Location handling — deliberately name-based, not location_code-based:
- * DataForSEO location_code numbers are cryptic (2840 = United States) and
- * easy to get wrong, so we send `location_name` resolved from a tiny,
- * deliberately extensible COUNTRY_NAMES map for the ISO-2 codes we support
- * today (us, in, gb, au, ca, de) plus `language_name` => 'English'. An ISO-2
- * code missing from the map (or a NULL country) omits the location and
- * inherits DataForSEO's default market (United States). A keyword's free-text
- * `location` column (e.g. "New York") wins over the country map because it
- * is the most specific request the user made.
+ * Request rules, per DataForSEO's v3 docs (checked 2026-11-11):
+ * - **One task per POST.** Live calls accept a single task each. Keywords are
+ *   sent as parallel requests (Http::pool, DATAFORSEO_CONCURRENCY at a time,
+ *   far below DataForSEO's per-minute call limit).
+ * - **depth.** DataForSEO's default depth is 10 results. We send
+ *   DATAFORSEO_DEPTH (default 100) so "not found" really means "not in the
+ *   top 100". Billing is per 10 results, rounded up: depth 100 = 10 SERPs.
+ *   Pages Google doesn't return are refunded by DataForSEO automatically.
+ * - **device.** desktop|mobile comes from the keyword. Mobile keywords used
+ *   to be checked as desktop.
+ * - **tag.** Set to the rank_keywords id, so each answer maps back to its
+ *   keyword exactly. Duplicate phrases in different markets can't collide.
+ * - **Status codes.** 20000 = Ok, both on the envelope and on each task.
+ *   40000+ = error.
  *
- * Result semantics (mirrors RankProvider's contract): position is the first
- * ORGANIC item whose host matches the tracked site's domain; items of other
- * types (featured_snippet, paid, local_pack, ...) are collected as
- * serp_features. No matching organic item inside the top 100 → position null
- * (tracked but not ranking). Task-level provider errors (status_code >=
- * 40000) throw — a failed call never turns into fake "not found" rows.
+ * Location: a free-text `location` on the keyword wins. Otherwise the ISO-2
+ * country goes through COUNTRY_NAMES. If neither is set, DataForSEO's default
+ * market (United States) applies.
  *
- * Credentials are Basic-auth headers only and are NEVER echoed into error
- * messages (same rule as the Bing client).
+ * Results: position = the first ORGANIC item whose host matches the tracked
+ * site (rank_absolute, 1..depth). Other item types are collected as
+ * serp_features. cost_units = the task's own reported cost in USD (measured,
+ * not estimated).
+ *
+ * Failures:
+ * - Any failed keyword is left out of the result. RankChecker then writes no
+ *   observation for it, so it stays due.
+ * - If every keyword fails, an IntegrationFailure is thrown.
+ * - Partial failures are logged once per batch.
+ * - A failed call never becomes a fake "not ranking" row.
+ * - Credentials are never echoed into errors or logs.
  */
 class DataForSeoProvider implements RankProvider
 {
     public const PROVIDER_NAME = 'dataforseo';
 
-    private const ENDPOINT = 'https://api.dataforseo.com/v3/serp/google/organic/live/regular';
+    public const ENDPOINT = 'https://api.dataforseo.com/v3/serp/google/organic/live/regular';
 
-    /** DataForSEO hard per-call task cap. */
-    public const MAX_TASKS_PER_CALL = 100;
+    public const USER_DATA_ENDPOINT = 'https://api.dataforseo.com/v3/appendix/user_data';
+
+    /** Published Live price per SERP (10 results), USD, used ONLY for pre-flight estimates. */
+    public const LIVE_PRICE_PER_SERP_USD = 0.002;
+
+    public const DEFAULT_DEPTH = 100;
+
+    public const MAX_DEPTH = 200;
 
     /** ISO-2 → DataForSEO location_name. Extensible: add a line, done. */
     public const COUNTRY_NAMES = [
@@ -56,21 +72,55 @@ class DataForSeoProvider implements RankProvider
         'au' => 'Australia',
         'ca' => 'Canada',
         'de' => 'Germany',
+        'bd' => 'Bangladesh',
+        'fr' => 'France',
+        'es' => 'Spain',
+        'nl' => 'Netherlands',
     ];
 
     /** ISO-2-ish language code → DataForSEO language_name. */
     public const LANGUAGE_NAMES = [
         'en' => 'English',
+        'de' => 'German',
+        'fr' => 'French',
+        'es' => 'Spanish',
+        'nl' => 'Dutch',
+        'bn' => 'Bengali',
+        'hi' => 'Hindi',
     ];
 
-    /** Envelope status_code meaning "Ok" in the DataForSEO v3 envelope. */
-    private const STATUS_OK = 10000;
+    /** DataForSEO v3 "Ok." (envelope and task level). */
+    public const STATUS_OK = 20000;
+
+    public function name(): string
+    {
+        return self::PROVIDER_NAME;
+    }
 
     public function available(): bool
     {
         $config = (array) config('services.dataforseo');
 
         return filled($config['login'] ?? null) && filled($config['password'] ?? null);
+    }
+
+    public function depth(): int
+    {
+        $depth = (int) config('services.dataforseo.depth', self::DEFAULT_DEPTH);
+
+        return max(10, min(self::MAX_DEPTH, $depth ?: self::DEFAULT_DEPTH));
+    }
+
+    /** SERPs billed per keyword check (depth rounded up to the next ten). */
+    public function serpsPerCheck(): int
+    {
+        return (int) ceil($this->depth() / 10);
+    }
+
+    /** Published-price estimate for one keyword check (pre-flight only; real cost is measured). */
+    public function estimatedCostPerCheckUsd(): float
+    {
+        return round($this->serpsPerCheck() * self::LIVE_PRICE_PER_SERP_USD, 4);
     }
 
     public function checkBatch(array $keywords): array
@@ -86,30 +136,113 @@ class DataForSeoProvider implements RankProvider
             ->get()
             ->keyBy('id');
 
-        $results = [];
+        $concurrency = max(1, min(20, (int) config('services.dataforseo.concurrency', 5)));
 
-        foreach (array_chunk($keywords, self::MAX_TASKS_PER_CALL) as $chunk) {
-            $results += $this->runChunk($chunk, $sites);
+        $results = [];
+        $failures = [];
+
+        foreach (array_chunk($keywords, $concurrency) as $chunk) {
+            [$ok, $failed] = $this->runConcurrent($chunk, $sites);
+            $results += $ok;
+            $failures = array_merge($failures, $failed);
+        }
+
+        if ($results === [] && $failures !== []) {
+            // Nothing usable: surface the first failure (retryable if any was).
+            $retryable = collect($failures)->contains(fn ($f) => $f->retryable);
+            throw new IntegrationFailure($failures[0]->errorCode, $failures[0]->getMessage(), retryable: $retryable);
+        }
+
+        if ($failures !== []) {
+            Log::warning('rank.dataforseo.partial_failure', [
+                'failed'  => count($failures),
+                'ok'      => count($results),
+                'reasons' => collect($failures)->map(fn ($f) => $f->getMessage())->countBy()->all(),
+            ]);
         }
 
         return $results;
     }
 
     /**
-     * One POST: up to MAX_TASKS_PER_CALL tasks, one per keyword.
+     * Credential + balance probe (free endpoint). Never returns credentials.
+     *
+     * @return array{ok: bool, balance_usd: ?float, error: ?string}
+     */
+    public function userData(): array
+    {
+        if (! $this->available()) {
+            return ['ok' => false, 'balance_usd' => null, 'error' => 'not_configured'];
+        }
+
+        try {
+            $response = Http::withBasicAuth($this->login(), $this->password())
+                ->timeout($this->timeout())
+                ->acceptJson()
+                ->get(self::USER_DATA_ENDPOINT);
+        } catch (\Throwable $e) {
+            return ['ok' => false, 'balance_usd' => null, 'error' => 'connection_failed'];
+        }
+
+        $body = $response->json() ?? [];
+        if (! $response->successful() || (int) ($body['status_code'] ?? 0) !== self::STATUS_OK) {
+            return ['ok' => false, 'balance_usd' => null, 'error' => sprintf('http_%d_status_%s', $response->status(), $body['status_code'] ?? 'none')];
+        }
+
+        $balance = $body['tasks'][0]['result'][0]['money']['balance'] ?? null;
+
+        return ['ok' => true, 'balance_usd' => $balance !== null ? (float) $balance : null, 'error' => null];
+    }
+
+    /**
+     * One live POST per keyword, sent in parallel.
      *
      * @param  list<RankKeyword>  $chunk
      * @param  Collection<int, Site>  $sites
-     * @return array<int, array{position: ?int, ranking_url: ?string, serp_features: ?array, provider_request_id: ?string, cost_units: float}>
+     * @return array{0: array<int, array>, 1: list<IntegrationFailure>}
      */
-    private function runChunk(array $chunk, Collection $sites): array
+    private function runConcurrent(array $chunk, Collection $sites): array
     {
-        [$tasks, $expected] = $this->buildTasks($chunk, $sites);
+        $login = $this->login();
+        $password = $this->password();
+        $timeout = $this->timeout();
 
-        $response = Http::withBasicAuth($this->login(), $this->password())
-            ->timeout((int) config('insightistic.integrations.timeout', 20))
-            ->asJson()
-            ->post(self::ENDPOINT, $tasks);
+        $responses = Http::pool(function (Pool $pool) use ($chunk, $login, $password, $timeout) {
+            $requests = [];
+            foreach ($chunk as $keyword) {
+                $requests[] = $pool->as((string) $keyword->id)
+                    ->withBasicAuth($login, $password)
+                    ->timeout($timeout)
+                    ->asJson()
+                    ->post(self::ENDPOINT, [$this->buildTask($keyword)]);
+            }
+
+            return $requests;
+        });
+
+        $ok = [];
+        $failed = [];
+
+        foreach ($chunk as $keyword) {
+            $response = $responses[(string) $keyword->id] ?? null;
+
+            try {
+                $ok[$keyword->id] = $this->parseResponse($response, $keyword, $sites->get($keyword->site_id));
+            } catch (IntegrationFailure $e) {
+                $failed[] = $e;
+            }
+        }
+
+        return [$ok, $failed];
+    }
+
+    /** @return array{position: ?int, ranking_url: ?string, serp_features: ?array, provider_request_id: ?string, cost_units: float} */
+    private function parseResponse(mixed $response, RankKeyword $keyword, ?Site $site): array
+    {
+        if (! $response instanceof Response) {
+            // Connection error / timeout inside the pool.
+            throw new IntegrationFailure('rank_provider_failed', 'DataForSEO request failed (connection error).', retryable: true);
+        }
 
         if (! $response->successful()) {
             throw new IntegrationFailure(
@@ -124,125 +257,67 @@ class DataForSeoProvider implements RankProvider
         if ((int) ($envelope['status_code'] ?? 0) !== self::STATUS_OK) {
             throw new IntegrationFailure(
                 'rank_provider_failed',
-                sprintf('DataForSEO rejected the batch: %s.', $envelope['status_message'] ?? 'unknown error'),
+                sprintf('DataForSEO rejected the request: %s.', $envelope['status_message'] ?? 'unknown error'),
                 retryable: false,
             );
         }
 
-        // Distribute the batch's billable cost evenly across its keywords
-        // (DataForSEO reports cost per task; per-keyword attribution beyond
-        // "even share" is not worth the coupling to their pricing model).
-        $totalCost = 0.0;
-        foreach ($envelope['tasks'] ?? [] as $task) {
-            $totalCost += (float) ($task['cost'] ?? 0);
-        }
-        $perKeyword = round($totalCost / max(1, count($chunk)), 4);
+        $task = collect($envelope['tasks'] ?? [])
+            ->first(fn ($t) => (string) ($t['data']['tag'] ?? '') === (string) $keyword->id)
+            ?? (($envelope['tasks'] ?? [])[0] ?? null);
 
-        // Response tasks come back in submission order; duplicate keyword
-        // TEXTS (same phrase, different market) are matched FIFO per text so
-        // every task lands on its own keyword row.
-        $queues = [];
-        $sitesByKeywordId = [];
-        foreach ($expected as $expectedKeyword) {
-            $queues[$expectedKeyword['text']][] = $expectedKeyword['id'];
-            $sitesByKeywordId[$expectedKeyword['id']] = $sites->get($expectedKeyword['site_id']);
+        if (! is_array($task)) {
+            throw new IntegrationFailure('rank_provider_failed', 'DataForSEO returned no task.', retryable: true);
         }
 
-        $results = [];
-
-        foreach ($envelope['tasks'] ?? [] as $task) {
-            $text = mb_strtolower(trim((string) ($task['data']['keyword'] ?? '')));
-            $keywordId = empty($queues[$text]) ? null : array_shift($queues[$text]);
-
-            if ($keywordId === null) {
-                continue; // A task for a keyword we never sent — ignore it.
-            }
-
-            // Hard task errors (bad location, insufficient funds, ...) must
-            // NOT be recorded as "not ranking" observations — that would
-            // trigger false rank_not_found alerts. Fail the whole batch.
-            $taskStatus = (int) ($task['status_code'] ?? 0);
-            if ($taskStatus >= 40000) {
-                throw new IntegrationFailure(
-                    'rank_provider_failed',
-                    sprintf('DataForSEO task failed: %s.', $task['status_message'] ?? 'unknown error'),
-                    retryable: $taskStatus >= 40600,
-                );
-            }
-
-            $items = $task['result'][0]['items'] ?? [];
-
-            // Position and ranking_url come from the same matched organic
-            // item (the tracked site's own listing); no match = not found.
-            $matched = $this->matchOrganicItem($items, $sitesByKeywordId[$keywordId] ?? null);
-
-            $results[$keywordId] = [
-                'position'            => $matched['rank'] ?? null,
-                'ranking_url'         => $matched['url'] ?? null,
-                'serp_features'       => $this->featuresOf($items),
-                'provider_request_id' => isset($task['id']) ? mb_substr((string) $task['id'], 0, 64) : null,
-                'cost_units'          => $perKeyword,
-            ];
+        // Hard task errors (bad location, insufficient funds, ...) must NOT
+        // be recorded as "not ranking" observations.
+        $taskStatus = (int) ($task['status_code'] ?? 0);
+        if ($taskStatus !== self::STATUS_OK) {
+            throw new IntegrationFailure(
+                'rank_provider_failed',
+                sprintf('DataForSEO task failed: %s.', $task['status_message'] ?? 'unknown error'),
+                retryable: $taskStatus >= 50000,
+            );
         }
 
-        // Keywords whose task never came back count against cost but have no
-        // observation — return them as explicit not-found so RankChecker's
-        // accounting (last_checked_at) stays consistent with the call made.
-        foreach ($expected as $expectedKeyword) {
-            if (! isset($results[$expectedKeyword['id']])) {
-                $results[$expectedKeyword['id']] = [
-                    'position'            => null,
-                    'ranking_url'         => null,
-                    'serp_features'       => null,
-                    'provider_request_id' => null,
-                    'cost_units'          => $perKeyword,
-                ];
-            }
-        }
+        $items = $task['result'][0]['items'] ?? [];
+        $matched = $this->matchOrganicItem($items, $site);
 
-        return $results;
+        return [
+            'position'            => $matched['rank'] ?? null,
+            'ranking_url'         => $matched['url'] ?? null,
+            'serp_features'       => $this->featuresOf($items),
+            'provider_request_id' => isset($task['id']) ? mb_substr((string) $task['id'], 0, 64) : null,
+            'cost_units'          => round((float) ($task['cost'] ?? $envelope['cost'] ?? 0), 4),
+        ];
     }
 
-    /**
-     * Build the POST body (one task per keyword) plus the expected
-     * keyword-id ↔ keyword-text mapping used to read the response back.
-     *
-     * @param  list<RankKeyword>  $chunk
-     * @return array{0: list<array<string, mixed>>, 1: list<array{id: int, text: string, site_id: int}>}
-     */
-    private function buildTasks(array $chunk, Collection $sites): array
+    /** @return array<string, mixed> */
+    private function buildTask(RankKeyword $keyword): array
     {
-        $tasks = [];
-        $expected = [];
+        $task = [
+            'keyword' => trim((string) $keyword->keyword),
+            'depth'   => $this->depth(),
+            'device'  => $keyword->device === RankKeyword::DEVICE_MOBILE ? 'mobile' : 'desktop',
+            'tag'     => (string) $keyword->id,
+        ];
 
-        foreach ($chunk as $keyword) {
-            $site = $sites->get($keyword->site_id);
-            $text = trim((string) $keyword->keyword);
-
-            $task = ['keyword' => $text];
-
-            $locationName = $this->locationNameFor($keyword);
-            if ($locationName !== null) {
-                $task['location_name'] = $locationName;
-            }
-
-            $languageName = $this->languageNameFor($keyword);
-            if ($languageName !== null) {
-                $task['language_name'] = $languageName;
-            }
-
-            $tasks[] = $task;
-            $expected[] = [
-                'id'      => $keyword->id,
-                'text'    => mb_strtolower($text),
-                'site_id' => (int) $keyword->site_id,
-            ];
+        $locationName = $this->locationNameFor($keyword);
+        if ($locationName !== null) {
+            $task['location_name'] = $locationName;
         }
 
-        return [$tasks, $expected];
+        $task['language_name'] = $this->languageNameFor($keyword) ?? 'English';
+
+        return $task;
     }
 
-    /** location column (free text) → country map → null (provider default = US). */
+    private function timeout(): int
+    {
+        return max(5, (int) config('services.dataforseo.timeout', 60));
+    }
+
     private function locationNameFor(RankKeyword $keyword): ?string
     {
         $location = trim((string) $keyword->location);
@@ -266,7 +341,7 @@ class DataForSeoProvider implements RankProvider
      * First organic item belonging to the tracked site's own domain.
      *
      * @param  array<int, array<string, mixed>>  $items
-     * @return array{rank: int, url: ?string}|null  null = no site listing inside the top 100
+     * @return array{rank: int, url: ?string}|null  null = no site listing inside the requested depth
      */
     private function matchOrganicItem(array $items, ?Site $site): ?array
     {
@@ -292,8 +367,8 @@ class DataForSeoProvider implements RankProvider
                 $rank = (int) ($item['rank_absolute'] ?? $item['rank_position'] ?? 0);
 
                 // Items are ordered by rank: the site's best listing decides.
-                // Outside the observable top 100 (or bogus rank) = not found.
-                if ($rank < 1 || $rank > 100) {
+                // Outside the requested depth (or bogus rank) = not found.
+                if ($rank < 1 || $rank > $this->depth()) {
                     return null;
                 }
 

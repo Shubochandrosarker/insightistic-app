@@ -159,11 +159,36 @@ class OverviewController extends AdminController
             'cache'    => ['driver' => config('cache.default'), 'ok' => $this->cacheOk()],
             'paddle'   => $billingHealth['paddle'],
             'ai'       => $this->aiHealth(),
+            'rank'     => $this->rankHealth(),
             'recent_failed_jobs' => Schema::hasTable('failed_jobs')
                 ? DB::table('failed_jobs')->latest('id')->limit(5)->get(['id', 'queue', 'exception', 'failed_at'])
                     ->map(fn ($r) => ['id' => $r->id, 'queue' => $r->queue, 'failed_at' => $r->failed_at, 'error' => Str::limit((string) $r->exception, 160)])
                 : [],
         ];
+    }
+
+    /** Rank tracker provider status + measured cost. Status only, never credentials. */
+    private function rankHealth(): array
+    {
+        try {
+            $provider = app(\App\Services\Rank\RankProvider::class);
+            $since = now()->subDays(30);
+            $obs = \App\Models\RankObservation::query()->where('checked_at', '>=', $since)
+                ->selectRaw('count(*) as n, coalesce(sum(cost_units), 0) as cost, max(checked_at) as last')
+                ->first();
+
+            return [
+                'provider'            => $provider->name(),
+                'configured'          => $provider->available(),
+                'depth'               => $provider instanceof \App\Services\Rank\DataForSeoProvider ? $provider->depth() : null,
+                'active_keywords'     => \App\Models\RankKeyword::query()->where('active', true)->count(),
+                'checks_30d'          => (int) ($obs->n ?? 0),
+                'measured_cost_30d'   => round((float) ($obs->cost ?? 0), 4),
+                'last_observation_at' => $obs->last ?? null,
+            ];
+        } catch (\Throwable $e) {
+            return ['provider' => config('insightistic.rank.provider'), 'configured' => false, 'error' => 'unavailable'];
+        }
     }
 
     /** AI routing readiness and a no-generation OpenRouter credential probe. */

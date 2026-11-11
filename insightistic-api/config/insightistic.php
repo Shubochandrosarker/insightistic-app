@@ -156,6 +156,12 @@ return [
      * its own redirect URI and read-only analytics scopes, so consent for
      * "sign in with Google" never silently grants analytics access.
      */
+    // Rank tracker SERP backend (RankProviderFactory). DataForSEO is the
+    // default and only adapter today; credentials live in services.dataforseo.
+    'rank' => [
+        'provider' => env('RANK_PROVIDER', 'dataforseo'),
+    ],
+
     'integrations' => [
         'google' => [
             'client_id' => env('GOOGLE_CLIENT_ID'),

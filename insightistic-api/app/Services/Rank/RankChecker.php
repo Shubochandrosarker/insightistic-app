@@ -53,12 +53,10 @@ class RankChecker
 
     public function __construct(?RankProvider $provider = null, ?AutomationDispatcher $dispatcher = null)
     {
-        // The RankProvider interface has no container binding (the app keeps
-        // provider wiring self-contained): an unbound interface falls through
-        // to the default null here, which resolves the shipped implementation.
-        // Tests pass a fake directly — or bind RankProvider, which the
-        // container then injects ahead of the default.
-        $this->provider = $provider ?? app(DataForSeoProvider::class);
+        // RankProvider is bound in AppServiceProvider through
+        // RankProviderFactory (RANK_PROVIDER, default dataforseo). Tests pass
+        // a fake directly or rebind the interface.
+        $this->provider = $provider ?? app(RankProvider::class);
         $this->dispatcher = $dispatcher ?? app(AutomationDispatcher::class);
     }
 
@@ -128,7 +126,7 @@ class RankChecker
                 'position'            => $result['position'],
                 'ranking_url'         => $result['ranking_url'],
                 'serp_features_json'  => $result['serp_features'],
-                'provider'            => DataForSeoProvider::PROVIDER_NAME,
+                'provider'            => $this->provider->name(),
                 'provider_request_id' => $result['provider_request_id'],
                 'cost_units'          => $result['cost_units'],
                 'created_at'          => $now,

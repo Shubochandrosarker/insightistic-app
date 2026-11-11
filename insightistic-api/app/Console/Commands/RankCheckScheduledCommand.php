@@ -5,7 +5,7 @@ namespace App\Console\Commands;
 use App\Jobs\RankCheckJob;
 use App\Models\RankKeyword;
 use App\Models\Site;
-use App\Services\Rank\DataForSeoProvider;
+use App\Services\Rank\RankProvider;
 use Illuminate\Console\Command;
 
 /**
@@ -32,10 +32,10 @@ class RankCheckScheduledCommand extends Command
 
     public function handle(): int
     {
-        $provider = app(DataForSeoProvider::class);
+        $provider = app(RankProvider::class);
 
         if (! $provider->available()) {
-            $this->warn('Rank tracking provider is not configured (DATAFORSEO_LOGIN / DATAFORSEO_PASSWORD) — skipping rank checks.');
+            $this->warn(sprintf('Rank tracking provider "%s" is not configured (credentials missing) — skipping rank checks.', $provider->name()));
 
             return self::SUCCESS;
         }

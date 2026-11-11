@@ -91,6 +91,16 @@ dying silently an hour later.
 | `INSIGHTISTIC_KNOWLEDGE_MAX_CONTENT_BYTES` | extracted-text cap, default 2 000 000 |
 | `INSIGHTISTIC_KNOWLEDGE_CRAWL_TIMEOUT` / `_CRAWL_MAX_BYTES` | crawler caps |
 
+## Rank tracking provider
+
+| Variable | Default | Notes |
+|---|---|---|
+| `RANK_PROVIDER` | `dataforseo` | Rank tracker SERP adapter (see docs/RANK-TRACKING-PROVIDER.md). |
+| `DATAFORSEO_LOGIN` / `DATAFORSEO_PASSWORD` | empty | Checks are skipped (no cost) while empty. Verify with `php artisan insightistic:rank-provider-check`. |
+| `DATAFORSEO_DEPTH` | `100` | Results per keyword check (10..200). Billed per 10 results. |
+| `DATAFORSEO_CONCURRENCY` | `5` | Parallel live requests (one keyword each). |
+| `DATAFORSEO_TIMEOUT` | `60` | Seconds per live request. |
+
 ## Object storage (S3-compatible, optional)
 
 `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_DEFAULT_REGION`,

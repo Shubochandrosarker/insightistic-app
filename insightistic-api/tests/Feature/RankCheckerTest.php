@@ -56,6 +56,11 @@ class ScriptableRankProvider implements RankProvider
     {
         return $this->available;
     }
+
+    public function name(): string
+    {
+        return 'dataforseo';
+    }
 }
 
 function rankCheckerSite(Organization $org, string $domain = 'checker.example'): Site

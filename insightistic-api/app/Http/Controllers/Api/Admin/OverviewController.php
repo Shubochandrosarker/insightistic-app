@@ -159,6 +159,13 @@ class OverviewController extends AdminController
             'cache'    => ['driver' => config('cache.default'), 'ok' => $this->cacheOk()],
             'paddle'   => $billingHealth['paddle'],
             'ai'       => $this->aiHealth(),
+            // Trial alignment check: one value everywhere, no card.
+            'trial'    => [
+                'days'                        => (int) config('commercial.trial_days', 7),
+                'card_required'               => (bool) config('commercial.trial_card_required', false),
+                'stripe_trial_period_days'    => (int) config('commercial.trial_days', 7),
+                'legacy_signup_trial_days_env' => config('commercial.legacy_signup_trial_days_env'),
+            ],
             'recent_failed_jobs' => Schema::hasTable('failed_jobs')
                 ? DB::table('failed_jobs')->latest('id')->limit(5)->get(['id', 'queue', 'exception', 'failed_at'])
                     ->map(fn ($r) => ['id' => $r->id, 'queue' => $r->queue, 'failed_at' => $r->failed_at, 'error' => Str::limit((string) $r->exception, 160)])

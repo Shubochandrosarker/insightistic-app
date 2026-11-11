@@ -72,3 +72,18 @@ Copy: the org columns + backfill migration, `plan_prices` provider mapping,
 `StripeBillingService`, `StripeWebhookProcessor`, `BillingProviderHealth`, the
 providers/summary endpoints and the catalog seeder. Keep the trial and cap
 logic app-side so processors stay interchangeable.
+
+
+## Trial alignment (settled 2026-11-11: 7 days, no card)
+- **One value:** `INSIGHTISTIC_TRIAL_DAYS` → `commercial.trial_days` (default 7).
+- **Where it's used:**
+  - TrialService (start-trial from Billing)
+  - Stripe `subscription_data.trial_period_days` (only for eligible or mid-trial orgs)
+  - `/public/plans.trial_days`
+  - the `/billing` payload
+  - the trial-started email heading (the org's real trial length)
+  - Admin → System Health → `trial`
+- **No card:** the regular-plan trial starts in the app without checkout. Stripe gets a trial period only if the customer chooses to subscribe early.
+- **Paddle:** no Insightistic Paddle price has a `trial_period` (checked 2026-11-11), so Paddle can't add its own trial.
+- **Site / app copy:** `insightistic-app/lib/trial.ts` (`NEXT_PUBLIC_TRIAL_DAYS`, default 7). It's used by the pricing cards, register and the auth stats. The billing page prefers the API value. insightistic.com already says 7 days everywhere.
+- **Prod clean-up at release:** delete `INSIGHTISTIC_SIGNUP_TRIAL_DAYS=14` from `.env.ai`. Nothing reads it, and the live value is already `INSIGHTISTIC_TRIAL_DAYS=7`.

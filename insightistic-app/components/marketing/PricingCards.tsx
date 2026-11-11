@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { apiGet } from "@/lib/api";
+import { TRIAL_DAYS } from "@/lib/trial";
 
 /**
  * Target lineup (roadmap 24). Slugs must match the API's plan slugs — the
@@ -95,12 +96,12 @@ export function PricingCards() {
               {p.feats.map((f) => <li key={f}>• {f}</li>)}
             </ul>
             <Link href={`/register?plan=${p.slug}&interval=${annual ? "yearly" : "monthly"}`} className={`mt-6 block rounded-lg py-2 text-center text-sm font-medium ${p.highlight ? "bg-brand text-white hover:bg-brand2" : "border border-slate-300 text-slate-700 hover:border-slate-400"}`}>
-              {p.isFree ? "Create free account" : "Start 7-day free trial"}
+              {p.isFree ? "Create free account" : `Start ${TRIAL_DAYS}-day free trial`}
             </Link>
           </div>
         ))}
       </div>
-      <p className="mt-8 text-center text-sm text-slate-600">Every subscription plan starts with a free 7-day trial. Subscription charges are not refundable, so cancel before your renewal date to avoid the next charge.</p>
+      <p className="mt-8 text-center text-sm text-slate-600">Every subscription plan starts with a free {TRIAL_DAYS}-day trial, no card required. Subscription charges are not refundable, so cancel before your renewal date to avoid the next charge.</p>
       <p className="mt-2 text-center text-sm text-slate-500">Annual prices are billed once per year: Starter $290, Growth $690, Agency $1,490, Agency Pro $2,990.</p>
     </div>
   );

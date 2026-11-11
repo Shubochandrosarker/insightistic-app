@@ -85,6 +85,23 @@ class LifecycleMailer
         }
     }
 
+    /**
+     * The org's real trial length (trial_started_at → trial_ends_at), so the
+     * email can never claim a different number than the account got. Falls
+     * back to the configured length before the trial dates exist.
+     */
+    public static function trialLengthDays(Organization $org): int
+    {
+        if ($org->trial_started_at && $org->trial_ends_at) {
+            $days = (int) round($org->trial_started_at->diffInSeconds($org->trial_ends_at) / 86400);
+            if ($days > 0) {
+                return $days;
+            }
+        }
+
+        return max(1, (int) config('commercial.trial_days', 7));
+    }
+
     /** @return array{subject:string,body:array}|null */
     private function copyFor(string $type, Organization $org, array $data): ?array
     {
@@ -97,7 +114,7 @@ class LifecycleMailer
                 'subject' => 'Your Insightistic trial is live — here\'s your license key',
                 'body' => [
                     'preview' => 'Connect your WordPress plugin and see your first insights today.',
-                    'heading' => 'Your ' . config('insightistic.trial_days', 7) . '-day trial has started',
+                    'heading' => 'Your ' . self::trialLengthDays($org) . '-day trial has started',
                     'lines'   => [
                         "Hi {$name}, your <strong>{$plan}</strong> trial is active. One key unlocks everything — paste it into the Insightistic WordPress plugin and your site connects automatically.",
                     ],

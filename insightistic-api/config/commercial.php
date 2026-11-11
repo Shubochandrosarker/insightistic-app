@@ -8,7 +8,14 @@
 return [
     'version' => '2026-10-14',
     'currency' => 'USD',
+    // Single source of truth for the no-card trial (settled 2026-11-11: 7).
+    // Read by TrialService, Stripe trial_period_days, /public/plans, the
+    // lifecycle emails and the app copy fallback.
     'trial_days' => (int) env('INSIGHTISTIC_TRIAL_DAYS', 7),
+    'trial_card_required' => false,
+    // INSIGHTISTIC_SIGNUP_TRIAL_DAYS is NOT read by any code (prod .env.ai
+    // still has 14). Surfaced on System Health so it can be removed safely.
+    'legacy_signup_trial_days_env' => env('INSIGHTISTIC_SIGNUP_TRIAL_DAYS'),
     // 30-day money-back guarantee: Lifetime Deal (Founding Angel) ONLY.
     // Subscriptions (7-day free trial) and credit packs are non-refundable.
     'refund_window_days' => 30,

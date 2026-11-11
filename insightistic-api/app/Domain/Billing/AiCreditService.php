@@ -71,6 +71,12 @@ final class AiCreditService
         ], true);
     }
 
+    /** True when this action is free because it spends a standard-request slot instead of credits. */
+    public function willUseStandardRequest(Organization $organization, string $action, bool $eligibleForStandard = false): bool
+    {
+        return $eligibleForStandard && $this->standardRemaining($organization) > 0;
+    }
+
     public function canCharge(Organization $organization, string $action, bool $eligibleForStandard = false): bool
     {
         $cost = $this->cost($action);

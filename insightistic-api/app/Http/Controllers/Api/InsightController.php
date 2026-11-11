@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Domain\Billing\AiAllowanceContext;
 use App\Domain\Billing\AiCreditService;
 use App\Domain\Billing\Exceptions\InsufficientCreditsException;
 use App\Models\AiInsight;
@@ -13,6 +14,8 @@ use App\Services\UsageService;
 use App\Support\DateRange;
 use App\Support\Tenancy;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 
 class InsightController extends Controller
@@ -25,6 +28,7 @@ class InsightController extends Controller
         private UsageService $usage,
         private Tenancy $tenancy,
         private AiCreditService $credits,
+        private AiAllowanceContext $allowance,
     ) {}
 
     public function index(Request $request)
@@ -209,21 +213,25 @@ class InsightController extends Controller
             ], 403);
         }
 
-        if ($creditModel && ! $this->credits->canCharge($org, $action, $eligibleForStandard)) {
-            return response()->json([
-                'message' => 'This action needs more Insight Credits. Buy a credit pack or upgrade your plan.',
-                'code'    => 'insufficient_credits',
-                'action'  => $action,
-                'cost'    => $this->credits->cost($action),
-                'available' => $this->credits->walletSummary($org)['total_usable'],
-            ], 402);
-        }
-
         if (! $creditModel && ! $this->usage->canGenerateInsight($org)) {
             return response()->json([
                 'message' => 'AI insight limit reached for this month. Upgrade your plan for more.',
                 'code'    => 'ai_limit_reached',
             ], 402);
+        }
+
+        // A standard-request slot is already paid for by the plan, so it is
+        // never reserved. Everything else arms the allowance scope: the
+        // provider chain holds the tariff before the first paid call and
+        // settles it only if a real model answers a non-null result. A short
+        // balance downgrades to the free-tier models rather than returning
+        // 402 — the approved "AI never hard-stops, never surprise-bills"
+        // policy — so there is no credit preflight left to reject here.
+        $usesStandardRequest = $creditModel
+            && $this->credits->willUseStandardRequest($org, $action, $eligibleForStandard);
+
+        if ($creditModel && ! $usesStandardRequest) {
+            $this->allowance->for($org->id, $action, 'insight:' . $data['type'] . ':' . Str::uuid()->toString());
         }
 
         $insight = $isLegacy
@@ -237,25 +245,25 @@ class InsightController extends Controller
             ], 502);
         }
 
-        if ($creditModel) {
+        if ($usesStandardRequest) {
+            // Free by plan: only the standard-request counter moves.
             try {
-                $this->credits->charge($org, $action, 'ai_insight:' . $insight->id, $eligibleForStandard);
+                $this->credits->charge($org, $action, 'ai_insight:' . $insight->id, true);
             } catch (InsufficientCreditsException $e) {
-                // A concurrent request may have consumed the balance after the
-                // preflight check. Do not retain an unpaid insight.
-                $insight->delete();
-
-                return response()->json([
-                    'message' => 'This action needs more Insight Credits. Buy a credit pack or upgrade your plan.',
-                    'code'    => 'insufficient_credits',
-                    'action'  => $action,
-                    'cost'    => $this->credits->cost($action),
-                    'available' => $e->available,
-                ], 402);
+                // Standard slots ran out between the preflight and the charge.
+                // The answer is already delivered, so log the shortfall
+                // instead of deleting work the customer can see.
+                Log::warning('ai_insight.standard_charge_shortfall', [
+                    'organization_id' => $org->id,
+                    'insight_id'      => $insight->id,
+                    'available'       => $e->available,
+                ]);
             }
-        } else {
+        } elseif (! $creditModel) {
             $this->usage->recordInsight($org);
         }
+        // Credit-priced answers were settled by AiAllowanceGuard::commit()
+        // around the provider call, so nothing is charged here.
 
         return response()->json([
             'insight'   => $insight,

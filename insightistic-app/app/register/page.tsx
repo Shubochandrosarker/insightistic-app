@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth";
 import { AuthShell } from "@/components/auth/AuthShell";
 import { OAuthButtons } from "@/components/auth/OAuthButtons";
+import { TRIAL_DAYS } from "@/lib/trial";
 
 const PLAN_LABELS: Record<string, string> = {
   free: "Free Connected",
@@ -79,7 +80,7 @@ export default function Register() {
   return (
     <AuthShell
       title={isLifetimePlan ? "Create your Founding Angel account" : "Create your free account"}
-      subtitle={isLifetimePlan ? "No free trial for LTD. After account setup, Stripe opens by default; Paddle is also available." : "Explore the free workspace, then start a 7-day trial on any regular subscription plan."}
+      subtitle={isLifetimePlan ? "No free trial for LTD. After account setup, Stripe opens by default; Paddle is also available." : `Explore the free workspace, then start a ${TRIAL_DAYS}-day trial on any regular subscription plan. No card required.`}
       footer={
         <>
           Already have an account?{" "}

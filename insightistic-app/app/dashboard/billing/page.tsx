@@ -13,6 +13,7 @@ import { Spinner } from "@/components/ui/Spinner";
 import { initPaddle, openPaddleCheckout } from "@/lib/paddle";
 import type { PaddleEnvironment } from "@/lib/paddle";
 import { money0, num } from "@/lib/format";
+import { TRIAL_DAYS } from "@/lib/trial";
 
 // Fallback lineup — Growth is the featured "Best Value" plan. Live names and
 // featured flags come from /public/plans once loaded; this constant wins only
@@ -150,7 +151,7 @@ export default function BillingPage() {
   const [finishLabel, setFinishLabel] = useState("Finishing your subscription setup…");
   const [selectedFounderTier, setSelectedFounderTier] = useState<string | null>(null);
   const [checkoutReturn, setCheckoutReturn] = useState<{ status: "success" | "cancel"; provider: string | null; kind: string | null } | null>(null);
-  const trialDays: number = Number(data?.trial?.days ?? 7);
+  const trialDays: number = Number(data?.trial?.days ?? TRIAL_DAYS);
   const trialEligible: boolean = data?.trial?.eligible === true;
   const paidRef = useRef(false);
   const checkoutReturnHandled = useRef(false);
@@ -233,7 +234,7 @@ export default function BillingPage() {
     reload();
   }
 
-  /** Regular plans start as a 7-day trial with no payment (no checkout). */
+  /** Regular plans start as a no-card trial (TRIAL_DAYS, from the API) with no checkout. */
   async function startTrial() {
     setBusy(true); setMsg(null);
     try {

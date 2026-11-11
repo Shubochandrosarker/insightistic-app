@@ -2,12 +2,13 @@
 import Link from "next/link";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { BrandLogo } from "@/components/BrandLogo";
+import { TRIAL_DAYS } from "@/lib/trial";
 
 type Stat = { value?: number; suffix?: string; big: string; small: string };
 
 const stats: Stat[] = [
   { value: 3, suffix: " min", big: "3 min", small: "to connect" },
-  { value: 7, suffix: " days", big: "7 days", small: "free trial" },
+  { value: TRIAL_DAYS, suffix: " days", big: `${TRIAL_DAYS} days`, small: "free trial" },
   { big: "White-label", small: "for agencies" },
 ];
 

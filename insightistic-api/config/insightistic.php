@@ -156,6 +156,7 @@ return [
     'app_url' => env('INSIGHTISTIC_APP_URL', 'https://app.insightistic.com'),
 
     // Trial length for new organizations. Keep this aligned with public pricing.
+    // Alias of commercial.trial_days (same env); kept for older callers.
     'trial_days' => (int) env('INSIGHTISTIC_TRIAL_DAYS', 7),
 
     /*

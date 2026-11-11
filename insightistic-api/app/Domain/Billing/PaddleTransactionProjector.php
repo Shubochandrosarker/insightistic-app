@@ -10,6 +10,8 @@ use App\Models\PlanPrice;
 use App\Models\ProductEvent;
 use App\Models\Subscription;
 use App\Jobs\DeliverPurchaseConversions;
+use App\Services\LifecycleMailer;
+use App\Services\LicenseService;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\DB;
@@ -29,6 +31,8 @@ final class PaddleTransactionProjector
 {
     public function __construct(
         private CreditLedger $credits,
+        private LicenseService $licenses,
+        private LifecycleMailer $mailer,
     ) {}
 
     /**
@@ -177,6 +181,28 @@ final class PaddleTransactionProjector
                     'limits_json'   => null,
                 ],
             );
+
+            // A lifetime purchase is not a subscription, but it still owns
+            // the paid plan projection, provider label and license state. The
+            // same projection is used by Stripe LTD fulfillment.
+            $org->forceFill([
+                'plan_id' => $planPrice?->plan_id,
+                'status' => 'active',
+                'billing_provider' => 'paddle',
+                'trial_ends_at' => null,
+                'trial_plan_slug' => null,
+            ])->save();
+            $this->licenses->syncForOrganization($org->fresh(['plan']));
+            $this->mailer->send($org->fresh(['plan', 'owner']), 'lifetime_purchased', [
+                'provider'       => 'Paddle',
+                'amount_minor'   => $txn->total_minor,
+                'currency'       => $txn->currency,
+                'transaction_id' => $txn->provider_transaction_id,
+                'invoice_number' => $txn->invoice_number,
+                'purchase_date'   => $txn->completed_at?->format('M j, Y'),
+                'refund_deadline' => $txn->completed_at?->copy()->addDays((int) config('commercial.refund_window_days', 30))->format('M j, Y'),
+                'plan_name'      => $planPrice?->plan?->name,
+            ], 'ltd:' . $txn->provider_transaction_id);
 
             return;
         }

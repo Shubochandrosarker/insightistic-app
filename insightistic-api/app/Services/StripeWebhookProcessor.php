@@ -329,6 +329,8 @@ class StripeWebhookProcessor
             'plan_id' => $plan->id,
             'status' => 'active',
             'billing_provider' => 'stripe',
+            'trial_ends_at' => null,
+            'trial_plan_slug' => null,
             'stripe_customer_id' => $org->stripe_customer_id ?: ($session->customer ?? null),
         ])->save();
         $this->licenses->syncForOrganization($org->fresh(['plan']));

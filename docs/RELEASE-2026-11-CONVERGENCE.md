@@ -103,6 +103,8 @@ Base: `main` at `d5b5d63` (#145 merged 2026-11-11). Merge in this order. Each st
   - `insightistic:rank-provider-check`: "configured: no; checks skipped, cost nothing" (#150 inert).
   - System Health shows `trial` {days 7, card_required false}, `rank` {dataforseo, configured false}, and `ai_jobs`.
 - **Frontend:** Vitest 195/195 and `tsc` clean on #149, which includes #148.
+- **App image:** `docker build -f docker/app/Dockerfile` from the rc tree succeeds (`insightistic-app:rc-d98a929`). Its build args match live: `NEXT_PUBLIC_API_URL` is empty and `API_PROXY_TARGET=http://api:8000`.
+- **Label safety:** both new images default to `traefik.enable=false` (#145). The live compose explicitly sets `traefik.enable=true` on `api` and `app` (verified with `docker compose config`), and compose labels override image labels, so swapping the image tags keeps both routed. queue and scheduler stay `false`.
 
 ### Build, deploy, rollback
 

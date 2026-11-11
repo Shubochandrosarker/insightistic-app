@@ -362,7 +362,14 @@ it('counts an AppSumo LTD sale against appsumo_2026 and never the Founding Angel
     $service = app(\App\Domain\Billing\LtdCampaignService::class);
     $reservation = $service->reserve($org, 'appsumo_solo', (string) \Illuminate\Support\Str::uuid());
 
-    $data = paddleTransactionData('lifetime', ['custom_data' => ['organization_id' => $org->id, 'ltd_reservation_id' => $reservation->id]]);
+    // The sale must carry the AppSumo price (the helper defaults to pri_pdl_lifetime,
+    // which maps to no plan here, so the AppSumo path was never exercised).
+    $data = paddleTransactionData('lifetime', [
+        'id'          => 'txn_pdl_appsumo',
+        'items'       => [['price' => ['id' => 'pri_pdl_appsumo'], 'quantity' => 1]],
+        'details'     => ['totals' => ['subtotal' => '7900', 'tax' => '0', 'total' => '7900', 'currency_code' => 'USD']],
+        'custom_data' => ['organization_id' => $org->id, 'ltd_reservation_id' => $reservation->id],
+    ]);
     app(\App\Domain\Billing\PaddleEventProcessor::class)->process('transaction.completed', $data);
     app(\App\Domain\Billing\PaddleEventProcessor::class)->process('transaction.completed', $data);
 

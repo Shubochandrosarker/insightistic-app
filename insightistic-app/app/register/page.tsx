@@ -80,7 +80,7 @@ export default function Register() {
   return (
     <AuthShell
       title={isLifetimePlan ? "Create your Founding Angel account" : "Create your free account"}
-      subtitle={isLifetimePlan ? "No free trial for LTD. After account setup, Stripe opens by default; Paddle is also available." : `Explore the free workspace, then start a ${TRIAL_DAYS}-day trial on any regular subscription plan. No card required.`}
+      subtitle={isLifetimePlan ? "No free trial for LTD. After account setup, checkout opens on Stripe." : `Explore the free workspace, then start a ${TRIAL_DAYS}-day trial on any regular subscription plan. No card required.`}
       footer={
         <>
           Already have an account?{" "}

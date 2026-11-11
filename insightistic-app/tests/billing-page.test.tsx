@@ -1,15 +1,15 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor, act } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 /**
- * Billing checkout, provider-aware (roadmap 22/22A):
- *  - the Paddle path asks /billing/checkout-config and opens a Paddle.js
- *    overlay with the API-issued price/token, then polls /billing/subscription
- *    until the webhook projects the purchase (never trusting the client
- *    callback alone);
- *  - Stripe-era organizations (501 paddle_not_enabled) keep the legacy
- *    /billing/checkout redirect.
+ * Billing page, Stripe-only (Paddle surface retired):
+ *  - every checkout — subscription, founder lifetime, credit packs — is a
+ *    redirect to a server-created Stripe Checkout Session (subscription and
+ *    lifetime via /billing/stripe/checkout, packs via /billing/credits/checkout);
+ *  - completion is polled server-side after the ?checkout=success return;
+ *    the webhook, never the browser callback, makes a purchase real;
+ *  - the portal button POSTs /billing/portal (Stripe Customer Portal for all).
  */
 
 const apiMocks = vi.hoisted(() => ({
@@ -24,7 +24,6 @@ vi.mock("@/lib/dashboard", () => ({
 }));
 
 import BillingPage from "@/app/dashboard/billing/page";
-import { teardownMessageListenerForTest } from "@/lib/paddle";
 
 const freeOrg = {
   organization: { status: "trialing" },
@@ -33,20 +32,11 @@ const freeOrg = {
   subscription: {},
 };
 
-const paddleOrg = {
+const legacyPaddleOrg = {
   organization: { status: "active" },
   plan: { name: "Growth" },
   usage: { ai_insights: { used: 2, limit: 75 }, reports: { used: 1, limit: 10 } },
   subscription: { billing_provider: "paddle", provider_subscription_id: "ctm_sub_1" },
-};
-
-const checkoutConfig = {
-  provider: "paddle",
-  price_id: "pri_test_growth",
-  client_token: "test_client_token",
-  environment: "production",
-  customer: { email: "owner@example.com" },
-  custom_data: { organization_id: 7, plan_slug: "growth" },
 };
 
 const livePlans = {
@@ -58,43 +48,28 @@ const livePlans = {
   ],
 };
 
-function paddleStub() {
-  return {
-    Environment: { set: vi.fn() },
-    Initialize: vi.fn(),
-    Checkout: { open: vi.fn() },
-  };
-}
+const defaultGet = (path: string) =>
+  path === "/billing/subscription"
+    ? Promise.resolve(freeOrg)
+    : path === "/public/plans"
+      ? Promise.resolve(livePlans)
+      : Promise.resolve({});
 
-/** The CDN never loads in jsdom — fire the load event the loader listens for. */
-function resolvePaddleLoad() {
-  document.getElementById("paddle-js")?.dispatchEvent(new Event("load"));
-}
-
-/** Simulate the pay-host iframe reporting payment completion. */
-function checkoutFrameReportsCompleted() {
-  window.dispatchEvent(
-    new MessageEvent("message", {
-      data: { type: "insightistic-checkout-completed" },
-      origin: "https://pay.insightistic.com",
-    }),
-  );
+/** Swap window.location so `window.location.href = ...` is observable. */
+function stubLocation(search = "") {
+  const assign = vi.fn();
+  const originalLocation = window.location;
+  Object.defineProperty(window, "location", {
+    configurable: true,
+    value: { ...window.location, search, set href(v: string) { assign(v); } },
+  });
+  return { assign, restore: () => Object.defineProperty(window, "location", { configurable: true, value: originalLocation }) };
 }
 
 beforeEach(() => {
   vi.clearAllMocks();
   window.history.pushState({}, "", "/dashboard/billing");
-  document.getElementById("paddle-js")?.remove();
-  document.getElementById("insightistic-checkout-frame")?.remove();
-  delete (window as any).Paddle;
-  teardownMessageListenerForTest();
-  apiMocks.apiGet.mockImplementation((path: string) =>
-    path === "/billing/subscription"
-      ? Promise.resolve(freeOrg)
-      : path === "/public/plans"
-        ? Promise.resolve(livePlans)
-        : Promise.resolve({}),
-  );
+  apiMocks.apiGet.mockImplementation(defaultGet);
 });
 
 describe("Billing page checkout", () => {
@@ -102,7 +77,7 @@ describe("Billing page checkout", () => {
     apiMocks.apiGet.mockImplementation((path: string) =>
       path === "/billing/subscription"
         ? Promise.resolve({
-            ...paddleOrg,
+            ...legacyPaddleOrg,
             organization: { status: "active", trial_ends_at: "2026-07-29T00:00:00Z" },
             plan: { name: "Agency Pro", price_monthly: 29900 },
           })
@@ -152,11 +127,10 @@ describe("Billing page checkout", () => {
     expect(screen.queryByRole("option", { name: "Growth — Best Value" })).not.toBeInTheDocument();
   });
 
-  it("offers Stripe when the API lists it and redirects to a Stripe Checkout Session", async () => {
+  it("redirects checkout to a Stripe Checkout Session and shows invoices without any Paddle portal link", async () => {
     apiMocks.apiGet.mockImplementation((path: string) =>
       path === "/billing/subscription" ? Promise.resolve(freeOrg)
       : path === "/public/plans" ? Promise.resolve(livePlans)
-      : path === "/billing/providers" ? Promise.resolve({ providers: [{ id: "paddle" }, { id: "stripe" }] })
       : path === "/billing/summary" ? Promise.resolve({ provider: "stripe", portal: { type: "stripe_portal", available: true },
           invoices: [{ id: 1, date: "2026-11-04T00:00:00Z", total_minor: 6900, status: "completed", url: "https://invoice.stripe.com/i/test" }] })
       : Promise.resolve({}),
@@ -164,27 +138,25 @@ describe("Billing page checkout", () => {
     apiMocks.apiPost.mockImplementation((path: string) =>
       path === "/billing/stripe/checkout" ? Promise.resolve({ url: "https://checkout.stripe.com/c/pay/cs_test_x" }) : Promise.resolve({}),
     );
-    const assign = vi.fn();
-    const originalLocation = window.location;
-    Object.defineProperty(window, "location", { configurable: true, value: { ...window.location, search: "", set href(v: string) { assign(v); } } });
+    const { assign, restore } = stubLocation();
 
     try {
-    render(<BillingPage />);
-    expect(await screen.findByLabelText("Card via Stripe")).toBeChecked();
-    await userEvent.click(await screen.findByLabelText("Card via Stripe"));
-    expect(await screen.findByText("View ↗")).toHaveAttribute("href", "https://invoice.stripe.com/i/test");
-    expect(screen.queryByText("Manage subscription ↗")).not.toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: "Continue to checkout" }));
+      render(<BillingPage />);
+      expect(await screen.findByText("View ↗")).toHaveAttribute("href", "https://invoice.stripe.com/i/test");
+      expect(screen.queryByText("Manage subscription ↗")).not.toBeInTheDocument();
 
-    await waitFor(() => expect(apiMocks.apiPost).toHaveBeenCalledWith("/billing/stripe/checkout", { plan: "growth", kind: "monthly" }));
-    expect(apiMocks.apiPost).not.toHaveBeenCalledWith("/billing/checkout-config", expect.anything());
-    expect(assign).toHaveBeenCalledWith("https://checkout.stripe.com/c/pay/cs_test_x");
+      await userEvent.click(screen.getByRole("button", { name: "Continue to checkout" }));
+
+      await waitFor(() => expect(apiMocks.apiPost).toHaveBeenCalledWith("/billing/stripe/checkout", { plan: "growth", kind: "monthly" }));
+      expect(apiMocks.apiPost).not.toHaveBeenCalledWith("/billing/checkout-config", expect.anything());
+      expect(apiMocks.apiPost).not.toHaveBeenCalledWith("/billing/credits/checkout", expect.anything());
+      expect(assign).toHaveBeenCalledWith("https://checkout.stripe.com/c/pay/cs_test_x");
     } finally {
-      Object.defineProperty(window, "location", { configurable: true, value: originalLocation });
+      restore();
     }
   });
 
-  it("uses Stripe as the default checkout when Paddle is not enabled", async () => {
+  it("sends the selected plan and interval to the Stripe checkout", async () => {
     apiMocks.apiPost.mockImplementation((path: string) =>
       path === "/billing/stripe/checkout"
           ? Promise.resolve({ url: "https://checkout.stripe.com/c/pay/test" })
@@ -203,75 +175,10 @@ describe("Billing page checkout", () => {
     );
   });
 
-  it("opens a checkout on the approved pay domain and polls until the webhook projects it", async () => {
-    const P = paddleStub();
-    (window as any).Paddle = P;
-
-    apiMocks.apiPost.mockImplementation((path: string) =>
-      path === "/billing/checkout-config" ? Promise.resolve(checkoutConfig) : Promise.resolve({}),
-    );
-
-    // Call 1 is the page's own load. Call 2 is the post-payment poll, held
-    // open so the "processing" state is observable. Later calls (reload)
-    // already see the projected Paddle subscription.
-    let resolvePoll: (value: any) => void = () => {};
-    let subscriptionCalls = 0;
-    apiMocks.apiGet.mockImplementation((path: string) => {
-      if (path === "/billing/subscription") {
-        subscriptionCalls += 1;
-        if (subscriptionCalls === 1) return Promise.resolve(freeOrg);
-        if (subscriptionCalls === 2) return new Promise((r) => { resolvePoll = r; });
-        return Promise.resolve(paddleOrg);
-      }
-      if (path === "/public/plans") return Promise.resolve(livePlans);
-      return Promise.resolve({});
-    });
-
-    render(<BillingPage />);
-    await userEvent.click(await screen.findByLabelText("Paddle (cards, PayPal, local methods)"));
-    await userEvent.click(await screen.findByRole("button", { name: "Continue to checkout" }));
-
-    // Loader injects the CDN script; jsdom resolves it by event.
-    await waitFor(() => expect(document.getElementById("paddle-js")).toBeTruthy());
-    resolvePaddleLoad();
-
-    // Initialize takes only the token — passing `environment` throws
-    // "[PADDLE] Unknown option parameter 'environment'" in Paddle.js v2.
-    await waitFor(() => expect(P.Initialize).toHaveBeenCalledWith({ token: "test_client_token" }));
-    expect(P.Environment.set).not.toHaveBeenCalled();
-
-    // The transaction is created by the hosted pay-domain iframe (Paddle
-    // rejects checkout creation from app.insightistic.com — 403 blocked
-    // vendor). The dashboard only forwards the config into the frame.
-    await waitFor(() => expect(document.getElementById("insightistic-checkout-frame")).toBeTruthy());
-    const frame = document.querySelector<HTMLIFrameElement>("#insightistic-checkout-frame iframe");
-    const src = new URL(frame!.src);
-    expect(src.origin).toBe("https://pay.insightistic.com");
-    expect(src.searchParams.get("price")).toBe("pri_test_growth");
-    expect(JSON.parse(src.searchParams.get("data")!)).toEqual({ organization_id: 7, plan_slug: "growth" });
-
-    // The buyer pays inside the frame; it reports completion over postMessage.
-    checkoutFrameReportsCompleted();
-
-    expect(await screen.findByText("Finishing your subscription setup…")).toBeInTheDocument();
-
-    resolvePoll(paddleOrg);
-    expect(await screen.findByText("You're on Growth — everything is active.")).toBeInTheDocument();
-  });
-
-  it("prefers live catalog names and featured flags from /public/plans", async () => {
-    render(<BillingPage />);
-
-    // growth is_featured in the live catalog → "Best Value" suffix.
-    expect(await screen.findByRole("option", { name: "Growth — Best Value" })).toBeInTheDocument();
-    expect(screen.getByRole("option", { name: "Agency Pro" })).toBeInTheDocument();
-  });
-
-  it("shows the Angel Solo LTD purchase with Stripe selected and no trial", async () => {
+  it("opens the Angel Solo lifetime purchase on Stripe with no provider toggle and no trial", async () => {
     apiMocks.apiGet.mockImplementation((path: string) =>
       path === "/billing/subscription" ? Promise.resolve(freeOrg)
       : path === "/public/plans" ? Promise.resolve(livePlans)
-      : path === "/billing/providers" ? Promise.resolve({ providers: [{ id: "paddle" }, { id: "stripe" }] })
       : Promise.resolve({}),
     );
 
@@ -281,62 +188,51 @@ describe("Billing page checkout", () => {
         : Promise.resolve({}),
     );
 
-    const assign = vi.fn();
-    const originalLocation = window.location;
-    Object.defineProperty(window, "location", { configurable: true, value: { ...window.location, search: "?plan=angel_solo", set href(v: string) { assign(v); } } });
+    const { assign, restore } = stubLocation("?plan=angel_solo");
     try {
       render(<BillingPage />);
       expect(screen.queryByRole("button", { name: /Start 7-day free trial/i })).not.toBeInTheDocument();
       expect((await screen.findAllByText(/No free trial/i)).length).toBeGreaterThan(0);
-      const payButton = await screen.findByRole("button", { name: "Pay $149 with Stripe" });
+      expect(screen.queryByLabelText(/Paddle/i)).not.toBeInTheDocument();
+
+      const payButton = await screen.findByRole("button", { name: "Pay $149" });
       await userEvent.click(payButton);
       await waitFor(() => expect(apiMocks.apiPost).toHaveBeenCalledWith("/billing/stripe/checkout", { plan: "angel_solo", kind: "lifetime" }));
       expect(assign).toHaveBeenCalledWith("https://checkout.stripe.com/c/pay/cs_test_ltd");
     } finally {
-      Object.defineProperty(window, "location", { configurable: true, value: originalLocation });
+      restore();
     }
   });
 
-  it("sends the selected credit pack to the server before opening the popup", async () => {
-    const P = paddleStub();
-    (window as any).Paddle = P;
-
+  it("sends the selected credit pack to the Stripe credits checkout", async () => {
     apiMocks.apiPost.mockImplementation((path: string) =>
-      path === "/billing/checkout-config"
-        ? Promise.resolve({
-            ...checkoutConfig,
-            price_id: "pri_test_credits_20000",
-            custom_data: {
-              organization_id: 7,
-              purchase_kind: "credit_pack",
-              plan_slug: "insight_credits",
-              credit_pack: "credits_20000",
-            },
-          })
+      path === "/billing/credits/checkout"
+        ? Promise.resolve({ url: "https://checkout.stripe.com/c/pay/cs_test_credits" })
         : Promise.resolve({}),
     );
 
+    const { assign, restore } = stubLocation();
+    try {
+      render(<BillingPage />);
+      await userEvent.click(await screen.findByRole("button", { name: "Buy 20,000 credits — $49" }));
+
+      await waitFor(() =>
+        expect(apiMocks.apiPost).toHaveBeenCalledWith("/billing/credits/checkout", { pack: "credits_20000" }),
+      );
+      expect(apiMocks.apiPost).not.toHaveBeenCalledWith("/billing/checkout-config", expect.anything());
+      expect(assign).toHaveBeenCalledWith("https://checkout.stripe.com/c/pay/cs_test_credits");
+    } finally {
+      restore();
+    }
+  });
+
+  it("shows the credits confirmation message when Stripe credits checkout returns ?credits=success", async () => {
+    window.history.pushState({}, "", "/dashboard/billing?credits=success&pack=credits_20000");
+
     render(<BillingPage />);
-    await userEvent.click(await screen.findByRole("button", { name: "Buy 20,000 credits — $49" }));
 
-    await waitFor(() =>
-      expect(apiMocks.apiPost).toHaveBeenCalledWith("/billing/checkout-config", {
-        plan: "insight_credits",
-        kind: "credit_pack",
-        credit_pack: "credits_20000",
-      }),
-    );
-
-    await waitFor(() => expect(document.getElementById("insightistic-checkout-frame")).toBeTruthy());
-    const frame = document.querySelector<HTMLIFrameElement>("#insightistic-checkout-frame iframe");
-    const src = new URL(frame!.src);
-    expect(src.searchParams.get("price")).toBe("pri_test_credits_20000");
-    expect(JSON.parse(src.searchParams.get("data")!)).toEqual({
-      organization_id: 7,
-      purchase_kind: "credit_pack",
-      plan_slug: "insight_credits",
-      credit_pack: "credits_20000",
-    });
+    expect(await screen.findByText(/your credits land after checkout completes/i)).toBeInTheDocument();
+    expect(apiMocks.apiPost).not.toHaveBeenCalled();
   });
 
   it("starts a no-payment 7-day trial for an eligible account instead of opening checkout", async () => {
@@ -351,8 +247,15 @@ describe("Billing page checkout", () => {
     await userEvent.click(await screen.findByRole("button", { name: "Start 7-day free trial" }));
 
     await waitFor(() => expect(apiMocks.apiPost).toHaveBeenCalledWith("/billing/start-trial", { plan: "growth" }));
-    expect(apiMocks.apiPost).not.toHaveBeenCalledWith("/billing/checkout-config", expect.anything());
-    expect(document.getElementById("insightistic-checkout-frame")).toBeNull();
+    expect(apiMocks.apiPost).not.toHaveBeenCalledWith("/billing/stripe/checkout", expect.anything());
+  });
+
+  it("prefers live catalog names and featured flags from /public/plans", async () => {
+    render(<BillingPage />);
+
+    // growth is_featured in the live catalog → "Best Value" suffix.
+    expect(await screen.findByRole("option", { name: "Growth — Best Value" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "Agency Pro" })).toBeInTheDocument();
   });
 
   it("does not list Founding Angel tiers in-app unless arriving from /ltd", async () => {

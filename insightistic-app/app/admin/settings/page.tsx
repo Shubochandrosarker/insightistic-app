@@ -14,7 +14,7 @@ import Link from "next/link";
  * 2026-10-13 incident pin: this page used to fetch /admin/system-health
  * (copy-paste) and there was no GET /admin/settings at all. It now reads
  * the dedicated endpoint, which returns true platform facts — counts,
- * release, service status, Paddle env mode — and NEVER secret values.
+ * release, service status — and NEVER secret values.
  * Errors render explicitly (retry), never an infinite skeleton.
  */
 function Row({ label, value }: { label: string; value: React.ReactNode }) {
@@ -87,7 +87,6 @@ export default function AdminSettings() {
 
         <Card title="Integrations (status only — no secrets)">
           <Row label="Mail" value={<Badge tone={data.mail?.configured ? "green" : "amber"}>{data.mail?.configured ? "configured" : "not set"}</Badge>} />
-          <Row label="Paddle" value={<Badge tone={data.paddle?.configured ? "green" : "amber"}>{data.paddle?.configured ? data.paddle?.environment : "not set"}</Badge>} />
           <Row label="Stripe" value={<Badge tone={data.stripe?.configured ? "green" : "amber"}>{data.stripe?.configured ? data.stripe?.mode : "not set"}</Badge>} />
           <Row label="AI provider" value={<Badge tone={data.ai?.configured ? "green" : "amber"}>{data.ai?.configured ? data.ai?.provider : "not set"}</Badge>} />
           <div className="pt-3"><Link href="/admin/ai" className="text-sm font-semibold text-brand hover:underline">Open editable AI configuration →</Link></div>

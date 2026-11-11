@@ -1,14 +1,14 @@
 <?php
 
-use App\Models\Plan;
-use App\Models\PlanPrice;
 use App\Models\Subscription;
 use Illuminate\Support\Str;
 
 /**
- * Provider-aware tenant billing actions (roadmap doc 23): Paddle orgs get a
- * Paddle portal link and Paddle cancellation semantics (scheduled cancel,
- * no un-cancel), while Stripe orgs keep their exact legacy behavior.
+ * Tenant billing actions for legacy Paddle-billed orgs (roadmap doc 23):
+ * Paddle cancellation semantics (scheduled cancel, no un-cancel) remain for
+ * subscriptions still billed through Paddle, while the customer portal is
+ * Stripe-only — a Paddle org's portal opens on a Stripe customer created
+ * on the fly (Paddle surface retired).
  */
 
 /** Org whose subscription row points at Paddle, with a re-authed owner token. */
@@ -68,31 +68,6 @@ function fakePaddleCancel(string $subscriptionId, string $endsAt): void
     ]);
 }
 
-it('returns production environment in checkout config when sandbox is off', function () {
-    config()->set('feature-flags.paddle', true);
-    config()->set('billing.paddle.sandbox', false);
-    config()->set('billing.paddle.client_token', 'live_test_token');
-
-    [$user, $org] = makeOrgUser('paddle-env@example.com');
-    $token = $user->createToken('test')->plainTextToken;
-
-    $plan = Plan::create(['name' => 'Env ' . Str::random(4), 'slug' => 'paddle-env-' . Str::random(4), 'is_active' => true]);
-    PlanPrice::create([
-        'plan_id'           => $plan->id,
-        'provider'          => 'paddle',
-        'kind'              => 'monthly',
-        'provider_price_id' => 'pri_env_' . Str::random(8),
-        'currency'          => 'USD',
-        'amount_minor'      => 2900,
-        'is_active'         => true,
-    ]);
-
-    $this->withToken($token)
-        ->postJson('/api/billing/checkout-config', ['plan' => $plan->slug, 'kind' => 'monthly'])
-        ->assertOk()
-        ->assertJsonPath('environment', 'production');
-});
-
 it('cancels a paddle subscription through paddle and records the scheduled change', function () {
     [$org, $token] = paddleActionOrg('paddle-cancel@example.com');
     $sub = $org->subscription;
@@ -114,20 +89,18 @@ it('cancels a paddle subscription through paddle and records the scheduled chang
         ->and($sub->cancel_at_period_end)->toBeTrue();
 });
 
-it('opens a paddle customer portal for paddle orgs', function () {
+it('opens the Stripe portal for paddle orgs — the Stripe customer is created on the fly', function () {
     [$org, $token] = paddleActionOrg('paddle-portal@example.com');
-    $customerId = $org->subscription->provider_customer_id;
 
-    Http::fake([
-        'https://sandbox-api.paddle.com/customers/' . $customerId . '/portal-sessions' => Http::response([
-            'data' => ['urls' => ['general' => ['overview' => 'https://login.paddle.com/portal/session']]],
-        ]),
-    ]);
+    $stripe = Mockery::mock(\App\Services\StripeService::class)->makePartial();
+    $stripe->shouldReceive('customerId')->once()->with(Mockery::on(fn ($o) => $o->id === $org->id))->andReturn('cus_created');
+    $stripe->shouldReceive('portalUrl')->once()->with('cus_created', Mockery::type('string'))->andReturn('https://billing.stripe.com/p/session/test');
+    app()->instance(\App\Services\StripeService::class, $stripe);
 
     $this->withToken($token)
         ->postJson('/api/billing/portal')
         ->assertOk()
-        ->assertJsonPath('url', 'https://login.paddle.com/portal/session');
+        ->assertJsonPath('url', 'https://billing.stripe.com/p/session/test');
 });
 
 it('refuses to reactivate a canceled paddle subscription', function () {

@@ -208,17 +208,10 @@ Route::middleware(['auth:sanctum', 'tenant', 'restrict.impersonation'])->group(f
     Route::post('billing/cancel', [BillingController::class, 'cancel'])->middleware(['role:owner', 'reauth']);
     Route::post('billing/reactivate', [BillingController::class, 'reactivate'])->middleware('role:owner');
 
-    // Paddle (roadmap 23-STRIPE-TO-PADDLE-MIGRATION) — checkout config feeds
-    // Paddle.js; change-plan is a real billing mutation, so reauth like the
-    // Stripe cancel above. Both no-op with 501 while the feature flag is off
-    // (checked inside the controllers so the routes stay discoverable).
     Route::post('billing/start-trial', [BillingController::class, 'startTrial'])->middleware('role:owner');
-    Route::post('billing/checkout-config', [BillingController::class, 'paddleCheckoutConfig'])->middleware('role:owner');
-    Route::post('billing/change-plan', [BillingController::class, 'paddleChangePlan'])->middleware(['role:owner', 'reauth']);
 
-    // Dual-provider billing (Paddle + Stripe, docs/billing-providers.md).
-    // Stripe checkout mirrors the Paddle checkout-config auth (owner, no reauth:
-    // nothing is charged until the customer confirms on Stripe's page).
+    // Stripe checkout (owner, no reauth: nothing is charged until the
+    // customer confirms on Stripe's page).
     Route::post('billing/stripe/checkout', [BillingController::class, 'checkout'])->middleware('role:owner');
     Route::get('billing/providers', [BillingController::class, 'providers'])->middleware('role:owner,admin');
     Route::get('billing/summary', [BillingController::class, 'summary'])->middleware('role:owner,admin');

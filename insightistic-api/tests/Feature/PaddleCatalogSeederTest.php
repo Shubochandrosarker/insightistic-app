@@ -8,8 +8,8 @@ use Illuminate\Support\Str;
 
 /**
  * The live-catalog mapping (PaddleCatalogSeeder) must resolve every real
- * Paddle price id to the right plan/kind — the webhook projector's plan
- * resolution and checkout-config both depend on it.
+ * Paddle price id to the right plan/kind — the read-only webhook
+ * projector's plan resolution depends on it.
  */
 it('seeds the live paddle catalog into plan_prices with correct plan and kind mapping', function () {
     $this->seed(PlanSeeder::class);

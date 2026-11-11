@@ -16,7 +16,7 @@ export default function ConsentBanner() {
       <p className="text-sm font-semibold text-fg">Help us measure marketing performance</p>
       <p className="mt-1 text-xs leading-relaxed text-muted">
         Insightistic does not load advertising tags by default. If you allow marketing measurement,
-        a verified Paddle purchase may be matched to a consenting Google or Meta ad click.
+        a verified purchase may be matched to a consenting Google or Meta ad click.
       </p>
       <div className="mt-3 flex flex-wrap gap-2">
         <button

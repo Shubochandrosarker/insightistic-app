@@ -190,7 +190,7 @@ it('refuses live Stripe keys unless explicitly allowed', function () {
         ->and(fn () => app(StripeService::class)->customerId($org))->toThrow(RuntimeException::class, 'live keys are disabled');
 });
 
-it('lists both providers for the customer to choose', function () {
+it('still lists Stripe when the legacy paddle flag is on but paddle is not offered at checkout', function () {
     config()->set('feature-flags.paddle', true);
     config()->set('billing.paddle.client_token', 'test_tok');
     [, , $token] = dpOwner('dp-providers@example.com');
@@ -370,19 +370,21 @@ it('opens the Stripe Customer Portal for a Stripe customer', function () {
     $this->withToken($token)->postJson('/api/billing/portal')->assertOk()->assertJson(['url' => 'https://billing.stripe.com/p/session/test']);
 });
 
-it('keeps the Paddle portal for Paddle customers', function () {
+it('opens the Stripe portal for Paddle customers — no Paddle portal fallback', function () {
     [, $org, $token] = dpOwner('dp-paddle-portal@example.com');
     $org->forceFill(['billing_provider' => 'paddle', 'paddle_customer_id' => 'ctm_test'])->save();
     Subscription::create(['organization_id' => $org->id, 'billing_provider' => 'paddle', 'provider_customer_id' => 'ctm_test', 'status' => 'active']);
 
     $paddle = Mockery::mock(\App\Services\Billing\PaddleClient::class);
-    $paddle->shouldReceive('customerPortalSession')->once()->with('ctm_test')->andReturn('https://customer-portal.paddle.com/test');
+    $paddle->shouldNotReceive('customerPortalSession');
     app()->instance(\App\Services\Billing\PaddleClient::class, $paddle);
+
     $stripe = Mockery::mock(StripeService::class)->makePartial();
-    $stripe->shouldNotReceive('portalUrl');
+    $stripe->shouldReceive('customerId')->once()->andReturn('cus_created_on_the_fly');
+    $stripe->shouldReceive('portalUrl')->once()->with('cus_created_on_the_fly', Mockery::type('string'))->andReturn('https://billing.stripe.com/p/session/test');
     app()->instance(StripeService::class, $stripe);
 
-    $this->withToken($token)->postJson('/api/billing/portal')->assertOk()->assertJson(['url' => 'https://customer-portal.paddle.com/test']);
+    $this->withToken($token)->postJson('/api/billing/portal')->assertOk()->assertJson(['url' => 'https://billing.stripe.com/p/session/test']);
 });
 
 it('returns one provider-neutral billing summary with invoices', function () {

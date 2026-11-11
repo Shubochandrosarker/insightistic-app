@@ -47,9 +47,7 @@ return [
         ],
     ],
 
-    // Providers offered at checkout (customer chooses). Stripe is the
-    // default first option; Paddle remains available as the explicit
-    // secondary provider. Credit packs are sold by both: Paddle through the
-    // overlay, Stripe through POST /billing/credits/checkout.
-    'checkout_providers' => array_values(array_filter(array_map('trim', explode(',', (string) env('BILLING_CHECKOUT_PROVIDERS', 'stripe,paddle'))))),
+    // Providers offered at checkout. Stripe only — the Paddle checkout
+    // surface is retired; credit packs sell through POST /billing/credits/checkout.
+    'checkout_providers' => array_values(array_filter(array_map('trim', explode(',', (string) env('BILLING_CHECKOUT_PROVIDERS', 'stripe'))))),
 ];

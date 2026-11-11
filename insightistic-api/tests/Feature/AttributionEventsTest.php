@@ -193,21 +193,3 @@ it('delivers a consented Meta purchase only when a matching ad click exists', fu
         && $request['data'][0]['event_name'] === 'Purchase'
         && $request['data'][0]['event_id'] === 'paddle:txn_meta_1');
 });
-
-it('fires checkout_started when a paddle checkout config is requested', function () {
-    [$user, $org] = makeOrgUser('ev-checkout@example.com');
-    config()->set('feature-flags.paddle', true);
-    config()->set('billing.paddle.api_key', 'test');
-
-    Http::fake(['*paddle*' => Http::response([], 200)]);
-
-    try {
-        $this->actingAs($user)->postJson('/api/billing/checkout-config', [
-            'plan' => $org->plan->slug, 'kind' => 'lifetime',
-        ]);
-    } catch (Throwable) {
-        // config errors are fine — the event fires before provider calls
-    }
-
-    expect(ProductEvent::where('event', 'checkout_started')->count())->toBe(1);
-});

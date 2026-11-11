@@ -31,42 +31,107 @@
 | Default checkout order | `stripe,paddle` (Stripe first) | `paddle,stripe` | **live** (prod env already sets `stripe,paddle`) |
 | Register / billing / pricing pages | Stripe first, LTD-aware register copy | Paddle first, "Start your free trial" | **live** |
 | Terms / privacy | "Paddle or Stripe"; Paddle MoR "where applicable" | "Paddle as Merchant of Record" only | **live** text (this is what customers see today; legal wording is Shuvo's decision) |
-| Migrations | 2026_* set | same | no migration diff |
+| Migrations | 76 applied, none pending | same set | no migration in this release; seeders add 3 hidden `appsumo_*` plans (see below) |
 
 #143 ported most of 9d7a845, but not these 13 files. This PR copies them byte-for-byte from the running containers. Deploying `main` as it stands would have regressed billing to Paddle first, put Paddle-MoR-only terms back, and sent a false "trial started" email to every signup.
 
-## One tagged release
+## One tagged release: `v2026.11.1`
 
-1. Merge order (Shuvo's OK for each):
-   1. #145 (Traefik)
-   2. #146 (AI jobs + hotfix port)
-   3. **this PR** (convergence)
-   4. #147 (brain, inert until env is set)
-   5. the trial-alignment PR (stacked on this PR)
-   
-   They merge cleanly in that order (checked locally).
-2. Tag `v2026.11.1` on the merge commit.
-3. Build both images **from the tag** with the Dockerfiles. No `docker commit`, ever. GitHub Actions is locked, so build on the VPS from `git archive v2026.11.1`:
+### Exact contents
+
+Base: `main` at `d5b5d63` (#145 merged 2026-11-11). Merge in this order. Each step was checked as a real `git merge --no-ff` and all six merge cleanly. Release candidate merge commit (local, not pushed): `d98a929`.
+
+| # | PR | Commits | Without new env | Ships |
+|---|---|---|---|---|
+| 0 | already on `main` | #143 `1e4f5d3` (9d7a845 port), #144 `5bd511c` (AppSumo LTD, flag off), #145 `d5b5d63` (Traefik) | — | yes |
+| 1 | #146 AI jobs | `493d2a3` hotfix port, `30b3902` closure fix + skip logging + watchdog | active (it is the fix) | **required** |
+| 2 | #148 convergence | `603c871` 13 live-only files + this plan, `ee6fa4e` AppSumo test fixture fix | active (keeps live behavior) | **required** |
+| 3 | #147 brain | `e95ea3b`, `87e8711` | inert (`INSIGHTISTIC_KNOWLEDGE_AGENT_*` unset → disabled) | yes |
+| 4 | #149 trial | `df688d9`, `995d25e` (+ merge of #148) | active: 7-day / no-card everywhere | yes |
+| 5 | #150 rank adapter | `9a48bef`, `acd4379` | inert (no `DATAFORSEO_*` in prod → checks skipped, $0) | optional |
+| 6 | #151 AI cost metering | `0dfc440` | active, additive (records tokens + `usage.cost`) | optional (recommended: needed to measure the AppSumo AI allowance) |
+
+#150 and #151 merge independently; dropping either does not affect the others.
+
+### Migrations and seeders
+
+- **No new migrations** in any of the six PRs. Prod `migrate:status --pending`: none (76 applied). The staging copy with the rc image: none.
+- **Seeders do run.** Prod api/queue/scheduler have `RUN_MIGRATIONS=true`, `SEED_PLANS=true`, `SEED_BILLING_CATALOG=true`. The entrypoint runs `PlanSeeder` + `PaddleCatalogSeeder` on every container start. With the rc image this writes exactly:
+  - `plans`: 13 → 16. Three new **hidden** rows (`appsumo_solo` $79, `appsumo_studio` $149, `appsumo_agency` $269, `is_active=false`, lifetime). They come from #144.
+  - `plan_prices`: 39 → 39 (no `PADDLE_PRICE_LTD_APPSUMO_*` in prod, so no price rows).
+  - `ltd_campaigns`: 1 → 1 (`appsumo_2026` is only created on the first AppSumo reservation, which the flag blocks).
+  - Every existing plan row is byte-identical before and after (diffed on staging).
+- Rollback for the seed: delete the three `appsumo_*` plan rows (nothing references them). The DB restore is not needed.
+
+### Risks
+
+1. **#144 AppSumo, Paddle prices (main risk).**
+   - It ships dormant: prod has no `FEATURE_LTD_APPSUMO` and no `PADDLE_PRICE_LTD_APPSUMO_*`, so `reserve()` rejects `appsumo_*` (`invalid_ltd_plan`). Only the three hidden plan rows above appear, and admins can see them in the admin plan list.
+   - **The design does not match how AppSumo sells.** AppSumo marketplace buyers pay on AppSumo and are fulfilled through the AppSumo Licensing API v2: `purchase`/`activate`/`upgrade`/`downgrade`/`deactivate` webhooks, then OAuth to fetch the `license_key` and link it to the new account. They never reach our Paddle checkout. Under #144 as written, a sale "pointed at the Paddle prices" would arrive without a local reservation and land in `manual_review`. It also contradicts the Stripe-only direction. **Do not activate #144 as-is.** It needs an AppSumo Licensing v2 adapter (webhook + OAuth redemption) that reuses the `appsumo_*` plans and the `appsumo_2026` counter. That is a separate PR and Shuvo's decision.
+   - Pricing against Founding Angel (Shuvo's call):
+     - AppSumo Solo is $79 for 3 sites; Angel Solo is $149 for 3 sites.
+     - AppSumo Studio is $149 for 10 sites; Angel Studio is $299 for 7 sites.
+     - AppSumo Agency is $269 for 25 sites; Angel Agency is $699 for 15 sites.
+     - The four Founding Angel holders stay valid regardless.
+   - AI allowance conflict: #144 gives AppSumo tiers `monthly_credits=0` and `standard_ai_requests` 200/600/600. The settled decision is a small monthly AI-credit allowance from measured cost (#151 draft). Reconcile this before activation.
+   - Behavior notes:
+     - Turning `FEATURE_LTD_APPSUMO` off mid-campaign also stops `confirmSale` from counting AppSumo sales. Keep it on until the campaign closes.
+     - `maximum_sales=500` is read once, when the campaign row is created.
+   - #144's own sale-counting test was broken: it sent `pri_pdl_lifetime` instead of the AppSumo price, so it failed on `main`. This is fixed in `ee6fa4e`. With the right price the code path passes, so the counting logic is sound.
+2. **Seeders race on three containers.** api, queue and scheduler all run migrate + seed at start. Upserts are idempotent and `|| true` swallows a unique-slug race, but recreate **api first**, wait for healthy, then queue + scheduler.
+3. **AI providers, not fixed by this release.** On staging, the WPistic gateway failed 21/21 insight calls and `openai/gpt-luna-latest` failed 1/1. The free `nemotron` fallback carried everything. #146 fixes the crash, not provider health.
+4. **Prod AI output is still zero until this ships.** The watchdog on a fresh prod copy reports ZERO ROWS for both jobs since 2026-11-10.
+5. **Env leftovers, fixed at release time:**
+   - `.env.ai` `INSIGHTISTIC_SIGNUP_TRIAL_DAYS=14` is dead (System Health shows it as `legacy_signup_trial_days_env: "14"`). Delete it.
+   - `.env.ai` `INSIGHTISTIC_RELEASE=b66a470` is stale. Delete it.
+   - `.env` `INSIGHTISTIC_BUILD_TIME` overrides the image build arg, so System Health shows 2026-11-04. Update it or drop it.
+6. **Legal copy:** terms and privacy stay on the live wording. Changing them is Shuvo's decision.
+7. **Watchtower** labels stay `true` on api/queue/scheduler/app. Local `v2026.11.1` tags are not in a registry, so Watchtower cannot replace them. Leave as is.
+
+### Staging test results (2026-11-11, Asia/Dhaka)
+
+- **Pest, full suite** on the rc (`d98a929`), throwaway Postgres: **944 passed, 3 failed** (4 670 assertions). The 3 failures are the known environment-only baseline. `main` alone had 4; #144's AppSumo test now passes.
+  - `ActionExecutorTest` / `ActionProposalServiceTest`: a 10s outbound-webhook timeout because the test network is `--internal`.
+  - `OAuthRedirectConfigTest`: the test runner copies `.env.example` to `.env`, and its `GOOGLE_REDIRECT_URI` value wins over the "empty env" case the test expects.
+- **Image:** `docker build` from the rc tree. `insightistic-api:rc-d98a929` labels = `{"traefik.enable":"false"}`, with no `traefik.http.*` labels.
+- **Staging stack** (`insightistic-staging`, fresh `pg_dump` of prod, mail to log, billing secrets blank, no Traefik, no published ports, same `RUN_MIGRATIONS/SEED_*` as prod):
+  - The container is healthy and `/up` returns 200. No pending migrations. The seed delta is exactly as listed above.
+  - `insightistic:insights-generate`: 12 generated, 10 skipped (`no_data` 8, `ai_paused` 2).
+  - `insightistic:ai-visibility`: 6 dispatched, 9 runs written after draining the queue.
+  - Watchdog: ZERO ROWS → **OK** for both jobs.
+  - `telemetry_ai_usage` now records tokens (#151), e.g. nemotron 10 calls, 3 260 in / 17 295 out. Cost is $0.000000 because the only successful model is free.
+  - `insightistic:rank-provider-check`: "configured: no; checks skipped, cost nothing" (#150 inert).
+  - System Health shows `trial` {days 7, card_required false}, `rank` {dataforseo, configured false}, and `ai_jobs`.
+- **Frontend:** Vitest 195/195 and `tsc` clean on #149, which includes #148.
+
+### Build, deploy, rollback
+
+1. Tag `v2026.11.1` on the final merge commit.
+2. Build both images **from the tag** with the Dockerfiles. No `docker commit`, ever. GitHub Actions is locked, so build on the VPS from `git archive v2026.11.1`:
    - `insightistic-api:v2026.11.1`
    - `insightistic-app:v2026.11.1`
    
    Then check that `docker image inspect` shows no `traefik.http.*` labels.
-4. Staging gate: run the `insightistic-staging` compose project on a fresh pg_dump.
-   - Pest is green apart from the 4 known baseline failures.
-   - `insights-generate` and `ai-visibility` write rows.
-   - The watchdog is OK.
-   - Next.js test + build pass.
-5. Production (Shuvo's OK, maintenance-light, about 2 minutes):
+3. Staging gate: repeat the staging run above with the tagged image.
+4. Production (Shuvo's OK, about 2 minutes):
    1. Back up: `docker-compose.yml`, `.env`, `.env.ai`, and a pg_dump to `/docker/backups/insightistic-app/<ts>-pre-v2026.11.1`.
-   2. In compose, set all four images to `v2026.11.1` and `INSIGHTISTIC_RELEASE=v2026.11.1`. **Delete** `INSIGHTISTIC_RELEASE` from `.env.ai`.
-   3. `docker compose config --quiet`, then `docker compose up -d --no-deps api queue scheduler app`. `RUN_MIGRATIONS` is a no-op because there's no new migration.
-   4. Verify:
+   2. In compose, set all four images to `v2026.11.1` and `INSIGHTISTIC_RELEASE=v2026.11.1`. Apply the env leftovers from risk 5.
+   3. `docker compose config --quiet`.
+   4. `docker compose up -d --no-deps api`, then wait for healthy.
+   5. `docker compose up -d --no-deps queue scheduler app`.
+   6. Verify:
       - 50× `api.insightistic.com/up` = 200
       - `app.insightistic.com/login` = 200
       - `scripts/check-traefik-labels.sh` passes
-      - the scheduler and queue processes are up
+      - the queue and scheduler processes are up
+      - `plans` has 16 rows
       - next morning: the 05:00 / 07:00 UTC jobs write rows, and the 09:30 UTC watchdog is OK
-6. Rollback: put the image tags back to `ai-pause-20261107` / `deploy-9d7a845`. Both images are kept, so do NOT prune them. Then restore the backed-up compose and run `up -d`. The DB restore isn't needed because there's no migration.
+5. Rollback:
+   1. Put the image tags back to `ai-pause-20261107` / `deploy-9d7a845`. Both images are kept, so do NOT prune them.
+   2. Restore the backed-up compose and env, then run `up -d`.
+   3. Optionally delete the three `appsumo_*` plan rows.
+   
+   The DB restore isn't needed.
 
 ## Env decisions that ride with the release (not changed by this PR)
 - `INSIGHTISTIC_SIGNUP_TRIAL_DAYS=14` in prod `.env.ai`. The settled decision is 7 days. The trial PR changes the default and the copy, and the env value changes at release time.

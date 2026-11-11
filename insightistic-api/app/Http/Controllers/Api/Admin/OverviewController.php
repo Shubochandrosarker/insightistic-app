@@ -151,6 +151,7 @@ class OverviewController extends AdminController
             'database' => ['status' => $db, 'driver' => config('database.default')],
             'queue'    => array_merge($this->queueStatus(), ['connection' => config('queue.default')]),
             'scheduler'=> ['status' => 'configured', 'detail' => 'nightly snapshots 02:00'],
+            'rank'     => $this->rankHealth(),
             'storage'  => ['writable' => is_writable(storage_path()), 'reports_disk' => config('insightistic.reports.disk', 'public')],
             'mail'     => ['mailer' => config('mail.default'), 'configured' => ! empty(config('mail.mailers.smtp.host')) || config('mail.default') !== 'smtp'],
             // Both billing providers: configured / API reachable / webhook
@@ -159,7 +160,6 @@ class OverviewController extends AdminController
             'cache'    => ['driver' => config('cache.default'), 'ok' => $this->cacheOk()],
             'paddle'   => $billingHealth['paddle'],
             'ai'       => $this->aiHealth(),
-            'rank'     => $this->rankHealth(),
             'recent_failed_jobs' => Schema::hasTable('failed_jobs')
                 ? DB::table('failed_jobs')->latest('id')->limit(5)->get(['id', 'queue', 'exception', 'failed_at'])
                     ->map(fn ($r) => ['id' => $r->id, 'queue' => $r->queue, 'failed_at' => $r->failed_at, 'error' => Str::limit((string) $r->exception, 160)])

@@ -91,6 +91,13 @@ dying silently an hour later.
 | `INSIGHTISTIC_KNOWLEDGE_MAX_CONTENT_BYTES` | extracted-text cap, default 2 000 000 |
 | `INSIGHTISTIC_KNOWLEDGE_CRAWL_TIMEOUT` / `_CRAWL_MAX_BYTES` | crawler caps |
 
+## Object storage (S3-compatible, optional)
+
+`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_DEFAULT_REGION`,
+`AWS_BUCKET`, `AWS_ENDPOINT` (MinIO/R2), `AWS_USE_PATH_STYLE_ENDPOINT`.
+Point `INSIGHTISTIC_KNOWLEDGE_DISK=s3` / `INSIGHTISTIC_REPORTS_DISK=s3`.
+Local disks remain the development default.
+
 ## Rank tracking provider
 
 | Variable | Default | Notes |
@@ -100,13 +107,6 @@ dying silently an hour later.
 | `DATAFORSEO_DEPTH` | `100` | Results per keyword check (10..200). Billed per 10 results. |
 | `DATAFORSEO_CONCURRENCY` | `5` | Parallel live requests (one keyword each). |
 | `DATAFORSEO_TIMEOUT` | `60` | Seconds per live request. |
-
-## Object storage (S3-compatible, optional)
-
-`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_DEFAULT_REGION`,
-`AWS_BUCKET`, `AWS_ENDPOINT` (MinIO/R2), `AWS_USE_PATH_STYLE_ENDPOINT`.
-Point `INSIGHTISTIC_KNOWLEDGE_DISK=s3` / `INSIGHTISTIC_REPORTS_DISK=s3`.
-Local disks remain the development default.
 
 ## Licensing / trials
 

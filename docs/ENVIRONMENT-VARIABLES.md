@@ -135,6 +135,7 @@ Local disks remain the development default.
 |---|---|
 | `NEXT_PUBLIC_API_URL` | empty = proxy mode (recommended); set = direct mode (also lands in the CSP `connect-src`) |
 | `API_PROXY_TARGET` | server-side proxy target (`http://api:8000` in compose) |
+| `APPSUMO_AFFILIATE_URL` | **Runtime** (server-side, not `NEXT_PUBLIC_`; no rebuild needed). Empty/unset = the Founding Angel LTD sales page is hidden: `/ltd`, `/ltd/*`, `/lifetime*`, `/lifetime-deal*`, `/founding-angel(s)*`, `/register?plan=angel_*|founder_tier_*` and `/dashboard/billing?plan=angel_*|founder_tier_*` (new purchases only) answer **302** → `/pricing` with `X-Robots-Tag: noindex, nofollow`. Set (http/https URL) = `/ltd` renders and every Buy Now button links to this URL. Holders' billing and payment returns are never redirected. Set it on the `app` service. See `insightistic-app/lib/ltd.ts`. |
 
 ## Deploy-stack extras (`.env.production.example`)
 

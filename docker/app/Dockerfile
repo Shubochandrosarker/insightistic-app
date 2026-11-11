@@ -28,5 +28,12 @@ COPY --from=deps /app/.next ./.next
 COPY --from=deps /app/next.config.mjs ./next.config.mjs
 COPY --from=deps /app/public ./public
 
+# Images never route themselves. Traefik routing is opt-in per *service* in
+# compose (traefik.enable=true on the web service only). Without this default,
+# an image that inherits router labels (e.g. one made with `docker commit` from
+# the routed api container) makes queue/scheduler join the same Traefik
+# service and ~2/3 of api.insightistic.com requests 502 (incident 2026-11-07).
+LABEL traefik.enable="false"
+
 EXPOSE 3000
 CMD ["npm", "start"]

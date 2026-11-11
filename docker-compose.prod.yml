@@ -182,6 +182,7 @@ services:
       - internal
     labels:
       <<: *watchtower-labels
+      traefik.enable: "false"   # routed via the nginx service, not directly
     healthcheck:
       test: ["CMD-SHELL", "php -r \"exit(@fsockopen('127.0.0.1', 8000) ? 0 : 1);\""]
       interval: 15s
@@ -206,6 +207,7 @@ services:
       - internal
     labels:
       <<: *watchtower-labels
+      traefik.enable: "false"   # workers serve no HTTP
 
   scheduler:
     <<: *api-image
@@ -224,6 +226,7 @@ services:
       - internal
     labels:
       <<: *watchtower-labels
+      traefik.enable: "false"   # workers serve no HTTP
 
   app:
     image: ${IMAGE_NAMESPACE:-ghcr.io/shubochandrosarker/insightistic-app}/app:${IMAGE_TAG:-latest}

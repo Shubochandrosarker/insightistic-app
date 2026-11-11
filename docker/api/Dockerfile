@@ -94,6 +94,13 @@ RUN mkdir -p storage/app/public storage/framework/cache storage/framework/sessio
 COPY docker/api/entrypoint.sh /usr/local/bin/insightistic-entrypoint
 RUN chmod +x /usr/local/bin/insightistic-entrypoint
 
+# Images never route themselves. Traefik routing is opt-in per *service* in
+# compose (traefik.enable=true on the web service only). Without this default,
+# an image that inherits router labels (e.g. one made with `docker commit` from
+# the routed api container) makes queue/scheduler join the same Traefik
+# service and ~2/3 of api.insightistic.com requests 502 (incident 2026-11-07).
+LABEL traefik.enable="false"
+
 EXPOSE 8000
 
 HEALTHCHECK --interval=15s --timeout=5s --start-period=30s --retries=5 \

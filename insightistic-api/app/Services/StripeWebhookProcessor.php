@@ -334,7 +334,16 @@ class StripeWebhookProcessor
             'stripe_customer_id' => $org->stripe_customer_id ?: ($session->customer ?? null),
         ])->save();
         $this->licenses->syncForOrganization($org->fresh(['plan']));
-        $this->mailer->send($org->fresh('plan'), 'subscription_started', [], 'ltd:' . $txn->provider_transaction_id);
+        $this->mailer->send($org->fresh(['plan', 'owner']), 'lifetime_purchased', [
+            'provider'        => 'Stripe',
+            'amount_minor'    => $txn->total_minor,
+            'currency'        => $txn->currency,
+            'transaction_id'  => $txn->provider_transaction_id,
+            'invoice_number'  => $txn->invoice_number,
+            'purchase_date'   => $txn->completed_at?->format('M j, Y'),
+            'refund_deadline' => $txn->completed_at?->copy()->addDays((int) config('commercial.refund_window_days', 30))->format('M j, Y'),
+            'plan_name'       => $plan->name,
+        ], 'ltd:' . $txn->provider_transaction_id);
     }
 
     /**

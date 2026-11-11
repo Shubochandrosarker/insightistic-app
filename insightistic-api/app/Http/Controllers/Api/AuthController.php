@@ -16,7 +16,6 @@ class AuthController extends Controller
 {
     public function __construct(
         private AccountProvisioner $provisioner,
-        private \App\Services\LifecycleMailer $lifecycleMailer,
         private \App\Services\Auth\MfaService $mfa,
         private \App\Services\Auth\LoginNotifier $loginNotifier,
     ) {}
@@ -109,15 +108,6 @@ class AuthController extends Controller
         } catch (\Throwable $e) {
             report($e);
         }
-        try {
-            // Trial-started email carries the one-time license key (spec §11).
-            $this->lifecycleMailer->send($org->fresh(['plan', 'owner']), 'trial_started', [
-                'license_key' => $rawLicenseKey,
-            ]);
-        } catch (\Throwable $e) {
-            report($e);
-        }
-
         return response()->json([
             'token'        => $token,
             'user'         => $user->only(['id', 'name', 'email', 'is_super_admin']),

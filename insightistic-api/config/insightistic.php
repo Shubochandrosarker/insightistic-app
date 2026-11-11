@@ -128,6 +128,12 @@ return [
     ],
 
     // Frontend app base (Stripe redirects, invite links).
+    // Operator alerts (AI job crash / zero-rows watchdog). Comma-separated.
+    // Empty = log-only (CRITICAL lines in the scheduler's laravel.log).
+    'ops' => [
+        'alert_email' => env('INSIGHTISTIC_OPS_ALERT_EMAIL'),
+    ],
+
     'app_url' => env('INSIGHTISTIC_APP_URL', 'https://app.insightistic.com'),
 
     // Trial length for new organizations. Keep this aligned with public pricing.

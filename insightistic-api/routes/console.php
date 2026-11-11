@@ -78,7 +78,9 @@ Schedule::command('insightistic:reports-deliver')
  */
 Schedule::command('insightistic:insights-generate')
     ->dailyAt('05:00')
-    ->withoutOverlapping();
+    ->withoutOverlapping()
+    ->onFailure(fn () => app(\App\Services\Observability\AiJobAlert::class)
+        ->notify('crash:insights-generate', 'insights-generate exited with an error (see scheduler laravel.log)'));
 
 /*
  * Telemetry retention (spec Phase 2.3). 03:50 — after privacy maintenance
@@ -188,4 +190,18 @@ Schedule::command('insightistic:uptime-check')
  */
 Schedule::command('insightistic:ai-visibility')
     ->dailyAt('07:00')
+    ->withoutOverlapping()
+    ->onFailure(fn () => app(\App\Services\Observability\AiJobAlert::class)
+        ->notify('crash:ai-visibility', 'ai-visibility exited with an error (see scheduler laravel.log)'));
+
+/*
+ * Zero-rows watchdog for the two daily AI jobs above. 09:30 — after the
+ * 05:00 insights pass and after the 07:00 visibility jobs have drained
+ * from the queue. Measures rows written (ai_insights, ai_visibility_runs)
+ * in the last 24h, not exit codes, so it also catches a job that "succeeds"
+ * while skipping every site. Alerts via log CRITICAL and, when
+ * INSIGHTISTIC_OPS_ALERT_EMAIL is set, one email per day.
+ */
+Schedule::command('insightistic:ai-jobs-watchdog')
+    ->dailyAt('09:30')
     ->withoutOverlapping();

@@ -179,3 +179,15 @@ dashboard that only works under one of those would leave the deployments most
 likely to be neglected uncovered.
 
 `LOG_CHANNEL=stderr` remains the right choice for container log drivers.
+
+## AI pause switch and AI job alerts
+
+| Variable | Default | Notes |
+|---|---|---|
+| `INSIGHTISTIC_AI_PAUSED_DOMAINS` | empty | Comma list of site domains whose variable-cost AI work is paused (subdomains and `www.` included). An organization can also be paused with `ai_settings_json.paused=true`. Paused sites are skipped by the daily AI jobs with a logged `ai_paused` reason and get a 402 `ai_paused` from AI endpoints. |
+| `INSIGHTISTIC_AI_PAUSED_MESSAGE` | invoice notice | Message returned with the 402 `ai_paused` response. |
+| `INSIGHTISTIC_OPS_ALERT_EMAIL` | empty | Comma list. When set, a crash of `insights-generate` / `ai-visibility`, or the 09:30 `insightistic:ai-jobs-watchdog` finding zero `ai_insights` / `ai_visibility_runs` rows for eligible sites, sends one email per alert per day. Empty = CRITICAL log line only. |
+
+Every skip in the daily AI jobs is logged as `ai_job.<job>.skip` with `site_id`
+and `reason`; each run ends with `ai_job.<job>.summary` (eligible / written /
+skipped / reasons), cached and shown under `ai_jobs` on Admin → System Health.

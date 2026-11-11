@@ -6,6 +6,7 @@ use App\Jobs\RunAiVisibilityJob;
 use App\Models\AiVisibilityPrompt;
 use App\Models\Site;
 use App\Services\Ai\AiAvailability;
+use App\Services\Observability\AiJobRunLog;
 use Illuminate\Console\Command;
 
 /**
@@ -28,8 +29,7 @@ class AiVisibilityScheduledCommand extends Command
 
     public function handle(AiAvailability $availability): int
     {
-        $dispatched = 0;
-        $skipped = 0;
+        $run = new AiJobRunLog('ai-visibility');
 
         // Sites that actually monitor at least one active prompt (Site has
         // no aiVisibilityPrompts relation — resolve through the prompt table).
@@ -43,26 +43,39 @@ class AiVisibilityScheduledCommand extends Command
             ->whereIn('id', $siteIds)
             ->whereNull('archived_at')
             ->with('organization')
-            ->chunkById(100, function ($sites) use (&$dispatched, &$skipped) {
+            ->chunkById(100, function ($sites) use ($availability, $run) {
                 foreach ($sites as $site) {
                     $org = $site->organization;
 
-                    if (! $org || $org->deletion_scheduled_for !== null) {
-                        $skipped++;
+                    if (! $org) {
+                        $run->skip($site->id, 'no_organization');
+                        continue;
+                    }
+
+                    if ($org->deletion_scheduled_for !== null) {
+                        $run->skip($site->id, 'organization_deletion_scheduled', ['org_id' => $org->id]);
                         continue;
                     }
 
                     if ($availability->isPaused($org, $site)) {
-                        $skipped++;
+                        $run->skip($site->id, 'ai_paused', ['org_id' => $org->id]);
                         continue;
                     }
 
+                    $run->eligible();
                     RunAiVisibilityJob::dispatch($site->id);
-                    $dispatched++;
+                    $run->wrote($site->id);
                 }
             });
 
-        $this->info("AI visibility runs: {$dispatched} dispatched, {$skipped} skipped.");
+        // "written" here means jobs queued; the watchdog checks the rows the
+        // jobs actually wrote (ai_visibility_runs) later in the morning.
+        $summary = $run->finish();
+
+        $this->info("AI visibility runs: {$summary['written']} dispatched, {$summary['skipped']} skipped.");
+        if (! empty($summary['reasons'])) {
+            $this->line('Skip reasons: ' . json_encode($summary['reasons']));
+        }
 
         return self::SUCCESS;
     }

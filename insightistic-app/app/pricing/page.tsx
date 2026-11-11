@@ -1,7 +1,11 @@
 import { Nav } from "@/components/marketing/Nav";
 import { Footer } from "@/components/marketing/Footer";
 import { PricingCards } from "@/components/marketing/PricingCards";
-import { AngelPricing } from "@/components/marketing/AngelPricing";
+import Link from "next/link";
+import { appsumoAffiliateUrl } from "@/lib/ltd";
+
+// The LTD link depends on APPSUMO_AFFILIATE_URL at request time.
+export const dynamic = "force-dynamic";
 
 // Sibling products in the WordPressistic ecosystem. Verifyistic has no
 // logo asset yet — add it to public/logos + this list when one lands.
@@ -27,6 +31,8 @@ const ecosystem = [
 ];
 
 export default function Pricing() {
+  // The Founding Angel offer lives on /ltd and is linked only while it is live.
+  const ltdLive = appsumoAffiliateUrl() !== null;
   return (
     <main className="bg-white">
       <Nav />
@@ -37,10 +43,14 @@ export default function Pricing() {
         </div>
         <PricingCards />
 
-        <AngelPricing />
+        {ltdLive && (
+          <p className="mt-10 text-center text-sm">
+            <Link href="/ltd" className="font-medium text-slate-900 underline hover:text-slate-700">Founding Angel lifetime deal</Link>
+          </p>
+        )}
 
         <p className="mt-10 text-center text-sm text-slate-500">
-          Lifetime deals available at launch · Insight Credit packs are one-time top-ups that don&rsquo;t expire.
+          Insight Credit packs are one-time top-ups that don&rsquo;t expire.
         </p>
 
         <div className="mt-16 border-t border-slate-200 pt-12">

@@ -676,9 +676,10 @@ export default function BillingPage() {
         </Card>
       )}
 
-      {/* The lifetime deal is sold from /ltd (direct, one-time checkout).
-          In-app it appears only when the user arrives from /ltd with an
-          Angel tier selected, or already owns one. */}
+      {/* Founding Angel card: shown to holders (lifetimeGrant), or when a user
+          arrives with an Angel tier selected. While APPSUMO_AFFILIATE_URL is
+          empty, proxy.ts 302s new ?plan=angel_* arrivals to /pricing (payment
+          returns with ?checkout= still land here). */}
       {(selectedFounderTier || lifetimeGrant) && (
       <Card id="founder-lifetime" className="mt-5" title="Founding Angel Plans"
         subtitle="One payment. Lifetime core access. Only 100 total licenses across all Angel tiers.">

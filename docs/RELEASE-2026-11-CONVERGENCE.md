@@ -37,21 +37,23 @@
 
 ## One tagged release: `v2026.11.1`
 
-### Exact contents
+### Exact contents (final, 2026-11-11)
 
-Base: `main` at `d5b5d63` (#145 merged 2026-11-11). Merge in this order. Each step was checked as a real `git merge --no-ff` and all six merge cleanly. Release candidate merge commit (local, not pushed): `d98a929`.
+Decided (JOLLY, for Shuvo): `v2026.11.1` ships **everything below, including #150 and #151**.
 
-| # | PR | Commits | Without new env | Ships |
-|---|---|---|---|---|
-| 0 | already on `main` | #143 `1e4f5d3` (9d7a845 port), #144 `5bd511c` (AppSumo LTD, flag off), #145 `d5b5d63` (Traefik) | — | yes |
-| 1 | #146 AI jobs | `493d2a3` hotfix port, `30b3902` closure fix + skip logging + watchdog | active (it is the fix) | **required** |
-| 2 | #148 convergence | `603c871` 13 live-only files + this plan, `ee6fa4e` AppSumo test fixture fix | active (keeps live behavior) | **required** |
-| 3 | #147 brain | `e95ea3b`, `87e8711` | inert (`INSIGHTISTIC_KNOWLEDGE_AGENT_*` unset → disabled) | yes |
-| 4 | #149 trial | `df688d9`, `995d25e` (+ merge of #148) | active: 7-day / no-card everywhere | yes |
-| 5 | #150 rank adapter | `9a48bef`, `acd4379` | inert (no `DATAFORSEO_*` in prod → checks skipped, $0) | optional |
-| 6 | #151 AI cost metering | `0dfc440` | active, additive (records tokens + `usage.cost`) | optional (recommended: needed to measure the AppSumo AI allowance) |
+| PR | Squash commit on `main` | Without new env | Status |
+|---|---|---|---|
+| #143 9d7a845 port | `1e4f5d3` | active | merged |
+| #144 AppSumo LTD (flag off) | `5bd511c` | dormant (see risk 1) | merged |
+| #145 Traefik labels | `d5b5d63` | active | merged |
+| #146 AI jobs fix + watchdog | `129428c` | active (it is the fix) | merged |
+| #148 convergence + this plan | `14a7ba5` | active (keeps live behavior) | merged |
+| #147 shared brain (CF Access + MCP) | `e8dc102` | inert until the brain env is set (below) | merged |
+| #150 rank adapter (DataForSEO) | `765c870` | inert (no `DATAFORSEO_*` in prod → checks skipped, $0) | merged |
+| #151 AI cost metering | `580432f` | active, additive (tokens + `usage.cost`) | merged |
+| #149 7-day no-card trial | (pending) | active | open, mergeable; tag after it merges |
 
-#150 and #151 merge independently; dropping either does not affect the others.
+Tag `v2026.11.1` on `main` once #149 is merged. The release candidate `d98a929` that was tested below had the same contents (merged locally in the same order).
 
 ### Migrations and seeders
 
@@ -117,7 +119,7 @@ Base: `main` at `d5b5d63` (#145 merged 2026-11-11). Merge in this order. Each st
 3. Staging gate: repeat the staging run above with the tagged image.
 4. Production (Shuvo's OK, about 2 minutes):
    1. Back up: `docker-compose.yml`, `.env`, `.env.ai`, and a pg_dump to `/docker/backups/insightistic-app/<ts>-pre-v2026.11.1`.
-   2. In compose, set all four images to `v2026.11.1` and `INSIGHTISTIC_RELEASE=v2026.11.1`. Apply the env leftovers from risk 5.
+   2. In compose, set all four images to `v2026.11.1` and `INSIGHTISTIC_RELEASE=v2026.11.1`. Apply the "Env changes at release time" below.
    3. `docker compose config --quiet`.
    4. `docker compose up -d --no-deps api`, then wait for healthy.
    5. `docker compose up -d --no-deps queue scheduler app`.
@@ -135,7 +137,38 @@ Base: `main` at `d5b5d63` (#145 merged 2026-11-11). Merge in this order. Each st
    
    The DB restore isn't needed.
 
-## Env decisions that ride with the release (not changed by this PR)
-- `INSIGHTISTIC_SIGNUP_TRIAL_DAYS=14` in prod `.env.ai`. The settled decision is 7 days. The trial PR changes the default and the copy, and the env value changes at release time.
-- `FEATURE_PADDLE=true`, `BILLING_CHECKOUT_PROVIDERS=stripe,paddle`. The Stripe-only switch is P1 #9, a separate decision.
-- `INSIGHTISTIC_OPS_ALERT_EMAIL` (new, #146) needs an address from Shuvo.
+## Env changes at release time (prod is not changed before the release)
+
+In `/docker/insightistic-app/.env.ai` (this is the file the api/queue/scheduler containers load through `env_file`):
+- Add `INSIGHTISTIC_OPS_ALERT_EMAIL=wordpressistic@gmail.com` (decided). This is the recipient for AI job crash and zero-rows watchdog alerts (#146).
+- Delete `INSIGHTISTIC_SIGNUP_TRIAL_DAYS=14`. It is dead, and the trial is 7 days from `commercial.trial_days`.
+- Delete the stale `INSIGHTISTIC_RELEASE=b66a470`.
+- Keep `FEATURE_PADDLE=true` and `BILLING_CHECKOUT_PROVIDERS=stripe,paddle`. The Stripe-only switch is P1 #9, a separate decision.
+
+In `/docker/insightistic-app/.env`:
+- Update or remove the stale `INSIGHTISTIC_BUILD_TIME`.
+
+Shared brain (#147). **Already done on 2026-11-11, inert until release:**
+- Cloudflare Access service token **`insightistic-api-brain-2026-11`** was created. It expires **2027-11-11 08:41 UTC** (14:41 Asia/Dhaka); renew it before then.
+- An app-scoped Service Auth policy, "insightistic-api service token" (non_identity, precedence 2), was added on the `insightistic-brain` Access app (brain.insightistic.com) only. The existing tripistic policy is unchanged.
+- Verified:
+  - with the token, Access passes the request to the origin;
+  - without it, or with a wrong secret, the answer is 403;
+  - the same token is refused (403) on brain.tripistic.com.
+- `WPISTIC_KNOWLEDGE_AGENT_CF_ACCESS_CLIENT_ID` / `_CLIENT_SECRET` are stored only in `/docker/insightistic-app/.env` (chmod 600; backup `.env.bak-20261111T084155Z-pre-cf-access-token`).
+
+At release, to turn the brain on:
+1. `.env` is only read for compose `${VAR}` interpolation, so add these lines to the `environment:` of api, queue and scheduler in `docker-compose.yml`:
+
+   ```yaml
+   WPISTIC_KNOWLEDGE_AGENT_CF_ACCESS_CLIENT_ID: "${WPISTIC_KNOWLEDGE_AGENT_CF_ACCESS_CLIENT_ID}"
+   WPISTIC_KNOWLEDGE_AGENT_CF_ACCESS_CLIENT_SECRET: "${WPISTIC_KNOWLEDGE_AGENT_CF_ACCESS_CLIENT_SECRET}"
+   ```
+
+2. Set the following, then check that `php artisan tinker` shows `config('insightistic.knowledge_agent.cf_access_client_id')` as non-empty (do not print it):
+   - `WPISTIC_KNOWLEDGE_AGENT_ENABLED=true`
+   - `WPISTIC_KNOWLEDGE_AGENT_URL=https://brain.insightistic.com`
+   - `WPISTIC_KNOWLEDGE_AGENT_DRIVER=mcp`
+   - `WPISTIC_KNOWLEDGE_AGENT_MCP_KINDS=project,system` (the default)
+   - plus the memory-server side items still listed in #147 (`WPISTIC_MCP_ALLOWED_HOSTS` including `brain.insightistic.com`)
+3. If the brain misbehaves, set `WPISTIC_KNOWLEDGE_AGENT_ENABLED=false`. The client already falls back to local knowledge after a timeout or cooldown.

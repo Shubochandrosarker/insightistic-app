@@ -113,6 +113,16 @@ dying silently an hour later.
 Point `INSIGHTISTIC_KNOWLEDGE_DISK=s3` / `INSIGHTISTIC_REPORTS_DISK=s3`.
 Local disks remain the development default.
 
+## Rank tracking provider
+
+| Variable | Default | Notes |
+|---|---|---|
+| `RANK_PROVIDER` | `dataforseo` | Rank tracker SERP adapter (see docs/RANK-TRACKING-PROVIDER.md). |
+| `DATAFORSEO_LOGIN` / `DATAFORSEO_PASSWORD` | empty | Checks are skipped (no cost) while empty. Verify with `php artisan insightistic:rank-provider-check`. |
+| `DATAFORSEO_DEPTH` | `100` | Results per keyword check (10..200). Billed per 10 results. |
+| `DATAFORSEO_CONCURRENCY` | `5` | Parallel live requests (one keyword each). |
+| `DATAFORSEO_TIMEOUT` | `60` | Seconds per live request. |
+
 ## Licensing / trials
 
 `INSIGHTISTIC_TRIAL_DAYS` (7), `INSIGHTISTIC_LICENSE_VALIDATE_INTERVAL`

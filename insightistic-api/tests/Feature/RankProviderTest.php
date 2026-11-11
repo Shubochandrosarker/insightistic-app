@@ -5,6 +5,8 @@ use App\Models\RankKeyword;
 use App\Models\Site;
 use App\Services\Integrations\IntegrationFailure;
 use App\Services\Rank\DataForSeoProvider;
+use App\Services\Rank\RankProvider;
+use App\Services\Rank\RankProviderFactory;
 use Illuminate\Support\Facades\Http;
 
 /**
@@ -51,10 +53,42 @@ function rankKeyword(Site $site, string $keyword, array $overrides = []): RankKe
     ])));
 }
 
-function fakeDataForSeo(array $envelope, int $status = 200): void
+/**
+ * Fake the live endpoint. Live calls carry ONE task each, so the fake answers
+ * per request: $byKeyword maps keyword text => task fields (status_code,
+ * cost, items, ...) and echoes the request's tag back like DataForSEO does.
+ * An `http` key on a task forces that HTTP status; `envelope` overrides the
+ * envelope status/message.
+ */
+function fakeDataForSeoLive(array $byKeyword): void
 {
     Http::fake([
-        'api.dataforseo.com/v3/serp/google/organic/live/regular' => Http::response($envelope, $status),
+        'api.dataforseo.com/v3/serp/google/organic/live/regular' => function ($request) use ($byKeyword) {
+            $task = $request->data()[0] ?? [];
+            $spec = $byKeyword[$task['keyword'] ?? ''] ?? ['items' => []];
+
+            if (isset($spec['http'])) {
+                return Http::response(['error' => 'boom'], $spec['http']);
+            }
+
+            if (isset($spec['envelope'])) {
+                return Http::response($spec['envelope'], 200);
+            }
+
+            return Http::response([
+                'status_code'    => 20000,
+                'status_message' => 'Ok.',
+                'cost'           => $spec['cost'] ?? 0.02,
+                'tasks'          => [[
+                    'id'             => $spec['id'] ?? ('task-'.$task['tag']),
+                    'status_code'    => $spec['status_code'] ?? 20000,
+                    'status_message' => $spec['status_message'] ?? 'Ok.',
+                    'cost'           => $spec['cost'] ?? 0.02,
+                    'data'           => $task,
+                    'result'         => ($spec['status_code'] ?? 20000) === 20000 ? [['items' => $spec['items'] ?? []]] : null,
+                ]],
+            ], 200);
+        },
     ]);
 }
 
@@ -66,106 +100,84 @@ it('reports availability based on configured credentials', function () {
     expect(app(DataForSeoProvider::class)->available())->toBeTrue();
 });
 
-it('maps SERP results back to keywords with even cost distribution and features', function () {
+it('maps SERP results back to keywords with the measured per-task cost and features', function () {
     [, $org] = makeOrgUser('rank-provider@example.com');
     $site = rankOrgSite($org);
 
     $found = rankKeyword($site, 'Running Shoes', ['country' => 'in']);
-    $missing = rankKeyword($site, 'blue sneakers'); // no country → default market
+    $missing = rankKeyword($site, 'blue sneakers');
 
-    // One found (site's domain at rank 3), one beyond/without the site's
-    // organic listing (site's only hit sits outside the top 100 → null).
-    fakeDataForSeo([
-        'status_code'    => 10000,
-        'status_message' => 'Ok',
-        'tasks'          => [
-            [
-                'id'          => 'task-1',
-                'status_code' => 20000,
-                'cost'        => 0.001,
-                'data'        => ['keyword' => 'Running Shoes'],
-                'result'      => [['items' => [
-                    ['type' => 'paid', 'rank_absolute' => 1, 'url' => 'https://ads.example.com/x'],
-                    ['type' => 'featured_snippet', 'rank_absolute' => 2, 'url' => 'https://wikipedia.example.org/shoes'],
-                    ['type' => 'organic', 'domain' => 'competitor.example', 'rank_absolute' => 1, 'url' => 'https://competitor.example/a'],
-                    ['type' => 'organic', 'domain' => 'www.ranksite.example', 'rank_absolute' => 3, 'url' => 'https://www.ranksite.example/shoes'],
-                ]]],
-            ],
-            [
-                'id'          => 'task-2',
-                'status_code' => 20000,
-                'cost'        => 0.003,
-                'data'        => ['keyword' => 'blue sneakers'],
-                'result'      => [['items' => [
-                    ['type' => 'organic', 'domain' => 'competitor.example', 'rank_absolute' => 1, 'url' => 'https://competitor.example/b'],
-                    ['type' => 'organic', 'domain' => 'ranksite.example', 'rank_absolute' => 150, 'url' => 'https://ranksite.example/deep'], // >100 → not found
-                ]]],
-            ],
-        ],
+    fakeDataForSeoLive([
+        'Running Shoes' => ['id' => 'task-1', 'cost' => 0.02, 'items' => [
+            ['type' => 'paid', 'rank_absolute' => 1, 'url' => 'https://ads.example.com/x'],
+            ['type' => 'featured_snippet', 'rank_absolute' => 2, 'url' => 'https://wikipedia.example.org/shoes'],
+            ['type' => 'organic', 'domain' => 'competitor.example', 'rank_absolute' => 1, 'url' => 'https://competitor.example/a'],
+            ['type' => 'organic', 'domain' => 'www.ranksite.example', 'rank_absolute' => 3, 'url' => 'https://www.ranksite.example/shoes'],
+        ]],
+        'blue sneakers' => ['id' => 'task-2', 'cost' => 0.014, 'items' => [
+            ['type' => 'organic', 'domain' => 'competitor.example', 'rank_absolute' => 1, 'url' => 'https://competitor.example/b'],
+            ['type' => 'organic', 'domain' => 'ranksite.example', 'rank_absolute' => 150, 'url' => 'https://ranksite.example/deep'], // beyond depth 100
+        ]],
     ]);
 
     $results = app(DataForSeoProvider::class)->checkBatch([$found, $missing]);
 
     expect($results)->toHaveCount(2);
-
-    // Found: the site's own best organic listing, www. stripped on match.
     expect($results[$found->id]['position'])->toBe(3)
         ->and($results[$found->id]['ranking_url'])->toBe('https://www.ranksite.example/shoes')
         ->and($results[$found->id]['serp_features'])->toBe(['paid', 'featured_snippet'])
-        ->and($results[$found->id]['provider_request_id'])->toBe('task-1');
+        ->and($results[$found->id]['provider_request_id'])->toBe('task-1')
+        ->and((float) $results[$found->id]['cost_units'])->toBe(0.02);
 
-    // Missing: real observation (null position), not an error.
     expect($results[$missing->id]['position'])->toBeNull()
         ->and($results[$missing->id]['ranking_url'])->toBeNull()
-        ->and($results[$missing->id]['provider_request_id'])->toBe('task-2');
-
-    // Even distribution of the batch's billable cost (0.001 + 0.003 = 0.004).
-    expect((float) $results[$found->id]['cost_units'])->toBe(0.002)
-        ->and((float) $results[$missing->id]['cost_units'])->toBe(0.002);
+        ->and($results[$missing->id]['provider_request_id'])->toBe('task-2')
+        ->and((float) $results[$missing->id]['cost_units'])->toBe(0.014);
 });
 
-it('sends one task per keyword with location and language names', function () {
+it('sends ONE task per live request with depth, device, tag, location and language', function () {
     [, $org] = makeOrgUser('rank-provider-request@example.com');
     $site = rankOrgSite($org, 'request.example');
 
     $india = rankKeyword($site, 'budget phones', ['country' => 'in']);
-    $city = rankKeyword($site, 'pizza delivery', ['location' => 'Mumbai', 'country' => 'in']);
+    $city = rankKeyword($site, 'pizza delivery', ['location' => 'Mumbai', 'country' => 'in', 'device' => RankKeyword::DEVICE_MOBILE]);
     $default = rankKeyword($site, 'generic thing', ['country' => null, 'language' => null]);
 
-    fakeDataForSeo(['status_code' => 10000, 'tasks' => [
-        ['id' => 't1', 'status_code' => 20000, 'cost' => 0, 'data' => ['keyword' => 'budget phones'], 'result' => [['items' => []]]],
-        ['id' => 't2', 'status_code' => 20000, 'cost' => 0, 'data' => ['keyword' => 'pizza delivery'], 'result' => [['items' => []]]],
-        ['id' => 't3', 'status_code' => 20000, 'cost' => 0, 'data' => ['keyword' => 'generic thing'], 'result' => [['items' => []]]],
-    ]]);
+    fakeDataForSeoLive([]);
 
     app(DataForSeoProvider::class)->checkBatch([$india, $city, $default]);
 
-    Http::assertSent(function ($request) {
-        if (str_starts_with((string) $request->header('Authorization')[0], 'Basic ') === false) {
-            return false;
-        }
+    Http::assertSentCount(3);
 
-        $tasks = $request->data();
+    $sent = collect(Http::recorded())->map(fn ($pair) => $pair[0]);
+    expect($sent->every(fn ($r) => str_starts_with((string) $r->header('Authorization')[0], 'Basic ') && count($r->data()) === 1))->toBeTrue();
 
-        return count($tasks) === 3
-            // ISO-2 'in' resolves through the extensible country map.
-            && ($tasks[0]['location_name'] ?? null) === 'India'
-            && ($tasks[0]['language_name'] ?? null) === 'English'
-            // Free-text location column wins over the country map.
-            && ($tasks[1]['location_name'] ?? null) === 'Mumbai'
-            // Unknown/no country omits location entirely (provider default).
-            && ! array_key_exists('location_name', $tasks[2])
-            && ($tasks[2]['language_name'] ?? null) === 'English';
-    });
+    $byKeyword = $sent->mapWithKeys(fn ($r) => [$r->data()[0]['keyword'] => $r->data()[0]]);
+
+    expect($byKeyword['budget phones'])->toMatchArray(['location_name' => 'India', 'language_name' => 'English', 'depth' => 100, 'device' => 'desktop', 'tag' => (string) $india->id])
+        ->and($byKeyword['pizza delivery'])->toMatchArray(['location_name' => 'Mumbai', 'device' => 'mobile', 'tag' => (string) $city->id])
+        ->and($byKeyword['generic thing'])->not->toHaveKey('location_name')
+        ->and($byKeyword['generic thing']['language_name'])->toBe('English');
 });
 
-it('throws IntegrationFailure when the envelope rejects the batch', function () {
+it('honours DATAFORSEO_DEPTH within 10..200 and estimates cost per 10-result SERP', function () {
+    config(['services.dataforseo.depth' => 50]);
+    $p = app(DataForSeoProvider::class);
+    expect($p->depth())->toBe(50)->and($p->serpsPerCheck())->toBe(5)->and($p->estimatedCostPerCheckUsd())->toBe(0.01);
+
+    config(['services.dataforseo.depth' => 1000]);
+    expect(app(DataForSeoProvider::class)->depth())->toBe(200);
+
+    config(['services.dataforseo.depth' => 3]);
+    expect(app(DataForSeoProvider::class)->depth())->toBe(10);
+});
+
+it('throws IntegrationFailure when the envelope rejects the only request', function () {
     [, $org] = makeOrgUser('rank-provider-envfail@example.com');
     $site = rankOrgSite($org, 'envfail.example');
-
     $keyword = rankKeyword($site, 'doomed keyword');
 
-    fakeDataForSeo(['status_code' => 40100, 'status_message' => 'Not enough funds'], 200);
+    fakeDataForSeoLive(['doomed keyword' => ['envelope' => ['status_code' => 40200, 'status_message' => 'Payment Required.']]]);
 
     try {
         app(DataForSeoProvider::class)->checkBatch([$keyword]);
@@ -183,10 +195,9 @@ it('throws a retryable IntegrationFailure on HTTP errors without leaking credent
 
     [, $org] = makeOrgUser('rank-provider-httpfail@example.com');
     $site = rankOrgSite($org, 'httpfail.example');
-
     $keyword = rankKeyword($site, 'doomed keyword');
 
-    fakeDataForSeo(['error' => 'boom'], 500);
+    fakeDataForSeoLive(['doomed keyword' => ['http' => 500]]);
 
     try {
         app(DataForSeoProvider::class)->checkBatch([$keyword]);
@@ -202,37 +213,65 @@ it('throws a retryable IntegrationFailure on HTTP errors without leaking credent
 it('never turns a hard task error into a fake not-found result', function () {
     [, $org] = makeOrgUser('rank-provider-taskfail@example.com');
     $site = rankOrgSite($org, 'taskfail.example');
-
     $keyword = rankKeyword($site, 'doomed keyword');
 
-    fakeDataForSeo(['status_code' => 10000, 'tasks' => [
-        ['id' => 't1', 'status_code' => 40700, 'status_message' => 'Invalid location',
-         'cost' => 0, 'data' => ['keyword' => 'doomed keyword'], 'result' => []],
-    ]]);
+    fakeDataForSeoLive(['doomed keyword' => ['status_code' => 40501, 'status_message' => 'Invalid Field: location_name.']]);
 
     expect(fn () => app(DataForSeoProvider::class)->checkBatch([$keyword]))
         ->toThrow(IntegrationFailure::class);
 });
 
-it('splits batches larger than the per-call task cap into multiple posts', function () {
-    [, $org] = makeOrgUser('rank-provider-chunk@example.com');
-    $site = rankOrgSite($org, 'chunk.example');
+it('drops only the failed keywords from a mixed batch (they stay due) and keeps the rest', function () {
+    [, $org] = makeOrgUser('rank-provider-partial@example.com');
+    $site = rankOrgSite($org, 'partial.example');
+    $good = rankKeyword($site, 'good keyword');
+    $bad = rankKeyword($site, 'bad keyword');
 
-    $keywords = [];
-    foreach (range(1, 101) as $i) {
-        $keywords[] = rankKeyword($site, 'keyword '.$i);
-    }
+    fakeDataForSeoLive(['bad keyword' => ['status_code' => 40501, 'status_message' => 'Invalid Field.']]);
 
-    $tasks = [];
-    foreach ($keywords as $keyword) {
-        $tasks[] = ['id' => 't-'.$keyword->id, 'status_code' => 20000, 'cost' => 0,
-            'data' => ['keyword' => $keyword->keyword], 'result' => [['items' => []]]];
-    }
-    fakeDataForSeo(['status_code' => 10000, 'tasks' => $tasks]);
+    $results = app(DataForSeoProvider::class)->checkBatch([$good, $bad]);
 
-    $results = app(DataForSeoProvider::class)->checkBatch($keywords);
+    expect($results)->toHaveKey($good->id)->not->toHaveKey($bad->id);
+});
 
-    expect(count($results))->toBe(101);
+it('treats the real Ok code 20000 as success (regression: the old adapter expected 10000)', function () {
+    [, $org] = makeOrgUser('rank-provider-ok@example.com');
+    $site = rankOrgSite($org, 'ok.example');
+    $kw = rankKeyword($site, 'ok keyword');
 
-    Http::assertSentCount(2); // 100 + 1
+    fakeDataForSeoLive(['ok keyword' => ['items' => [['type' => 'organic', 'domain' => 'ok.example', 'rank_absolute' => 7, 'url' => 'https://ok.example/']]]]);
+
+    expect(app(DataForSeoProvider::class)->checkBatch([$kw])[$kw->id]['position'])->toBe(7);
+});
+
+it('resolves the provider from RANK_PROVIDER with DataForSEO as the default', function () {
+    config(['insightistic.rank.provider' => null]);
+    expect(app(RankProvider::class))->toBeInstanceOf(DataForSeoProvider::class)
+        ->and(app(RankProvider::class)->name())->toBe('dataforseo');
+
+    config(['insightistic.rank.provider' => 'nope']);
+    expect(fn () => RankProviderFactory::make())->toThrow(InvalidArgumentException::class);
+});
+
+it('rank-provider-check reports not configured without calling the provider', function () {
+    config(['services.dataforseo.login' => null, 'services.dataforseo.password' => null]);
+    Http::fake();
+
+    $this->artisan('insightistic:rank-provider-check')
+        ->expectsOutputToContain('provider: dataforseo')
+        ->expectsOutputToContain('configured: no')
+        ->assertExitCode(0);
+
+    Http::assertNothingSent();
+});
+
+it('rank-provider-check verifies credentials and balance via the free user_data endpoint', function () {
+    config(['services.dataforseo.login' => RANK_LOGIN, 'services.dataforseo.password' => RANK_PASSWORD]);
+    Http::fake([
+        'api.dataforseo.com/v3/appendix/user_data' => Http::response(['status_code' => 20000, 'tasks' => [['result' => [['money' => ['balance' => 12.5]]]]]]),
+    ]);
+
+    $this->artisan('insightistic:rank-provider-check')
+        ->expectsOutputToContain('credentials: ok (balance $12.50)')
+        ->assertExitCode(0);
 });

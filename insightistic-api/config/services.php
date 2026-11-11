@@ -65,5 +65,12 @@ return [
     'dataforseo' => [
         'login' => env('DATAFORSEO_LOGIN'),
         'password' => env('DATAFORSEO_PASSWORD'),
+        // Results per check. DataForSEO bills per 10 results (rounded up), so
+        // 100 = top-100 = 10 SERPs per keyword per check. Max 200.
+        'depth' => (int) env('DATAFORSEO_DEPTH', 100),
+        // Parallel live requests (one keyword each).
+        'concurrency' => (int) env('DATAFORSEO_CONCURRENCY', 5),
+        // Seconds per live request (deep SERPs take several seconds).
+        'timeout' => (int) env('DATAFORSEO_TIMEOUT', 60),
     ],
 ];

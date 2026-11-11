@@ -151,6 +151,7 @@ class OverviewController extends AdminController
             'database' => ['status' => $db, 'driver' => config('database.default')],
             'queue'    => array_merge($this->queueStatus(), ['connection' => config('queue.default')]),
             'scheduler'=> ['status' => 'configured', 'detail' => 'nightly snapshots 02:00'],
+            'rank'     => $this->rankHealth(),
             'storage'  => ['writable' => is_writable(storage_path()), 'reports_disk' => config('insightistic.reports.disk', 'public')],
             'mail'     => ['mailer' => config('mail.default'), 'configured' => ! empty(config('mail.mailers.smtp.host')) || config('mail.default') !== 'smtp'],
             // Both billing providers: configured / API reachable / webhook
@@ -170,6 +171,30 @@ class OverviewController extends AdminController
                     ->map(fn ($r) => ['id' => $r->id, 'queue' => $r->queue, 'failed_at' => $r->failed_at, 'error' => Str::limit((string) $r->exception, 160)])
                 : [],
         ];
+    }
+
+    /** Rank tracker provider status + measured cost. Status only, never credentials. */
+    private function rankHealth(): array
+    {
+        try {
+            $provider = app(\App\Services\Rank\RankProvider::class);
+            $since = now()->subDays(30);
+            $obs = \App\Models\RankObservation::query()->where('checked_at', '>=', $since)
+                ->selectRaw('count(*) as n, coalesce(sum(cost_units), 0) as cost, max(checked_at) as last')
+                ->first();
+
+            return [
+                'provider'            => $provider->name(),
+                'configured'          => $provider->available(),
+                'depth'               => $provider instanceof \App\Services\Rank\DataForSeoProvider ? $provider->depth() : null,
+                'active_keywords'     => \App\Models\RankKeyword::query()->where('active', true)->count(),
+                'checks_30d'          => (int) ($obs->n ?? 0),
+                'measured_cost_30d'   => round((float) ($obs->cost ?? 0), 4),
+                'last_observation_at' => $obs->last ?? null,
+            ];
+        } catch (\Throwable $e) {
+            return ['provider' => config('insightistic.rank.provider'), 'configured' => false, 'error' => 'unavailable'];
+        }
     }
 
     /** AI routing readiness and a no-generation OpenRouter credential probe. */

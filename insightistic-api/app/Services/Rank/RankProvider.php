@@ -7,8 +7,9 @@ use App\Models\RankKeyword;
 /**
  * Pluggable SERP observation backend for the rank tracker (Phase 10, doc 13
  * §Build-vs-buy: never scrape SERPs in-process — everything goes through a
- * provider). The only implementation shipped is DataForSeoProvider; tests
- * bind fakes of this interface instead of stubbing HTTP.
+ * provider). The active implementation is chosen by RankProviderFactory
+ * from config('insightistic.rank.provider') (env RANK_PROVIDER, default
+ * "dataforseo"); tests bind fakes of this interface instead of stubbing HTTP.
  */
 interface RankProvider
 {
@@ -32,4 +33,7 @@ interface RankProvider
 
     /** Whether credentials are configured; false = skip checks, never bill. */
     public function available(): bool;
+
+    /** Stable provider id stored on every observation (rank_observations.provider). */
+    public function name(): string;
 }

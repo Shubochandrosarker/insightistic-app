@@ -9,6 +9,7 @@ use App\Models\AiMessage;
 use App\Models\AiRun;
 use App\Models\AiThread;
 use App\Models\Site;
+use App\Services\Ai\AiAvailability;
 use App\Services\Copilot\CopilotChat;
 use App\Services\Copilot\CopilotContextBuilder;
 use App\Services\UsageService;
@@ -30,6 +31,7 @@ class CopilotController extends Controller
         private CopilotChat $chat,
         private UsageService $usage,
         private Tenancy $tenancy,
+        private AiAvailability $availability,
     ) {}
 
     public function threads(Request $request)
@@ -165,15 +167,9 @@ class CopilotController extends Controller
             $data['agent_slug'] = $data['agent_slug'] ?? $agent['rag_agent_slug'];
         }
 
-        // Server-side quota — structured 402 before any provider call.
-        if (! $this->usage->canSendAiMessage($org)) {
-            return response()->json(
-                $this->usage->limitError($org, 'monthly_ai_messages', (int) $this->usage->counter($org)->ai_messages_used),
-                402,
-            );
-        }
-
-        // Resolve the authorized context selections.
+        // Resolve the optional site before any quota/provider work so a
+        // paused Brother Tours site gets the same clear notice as a paused
+        // organization-level AI workspace.
         $site = null;
         if (! empty($data['site_id'])) {
             $site = Site::find($data['site_id']); // tenant-scoped; foreign id = 404
@@ -182,6 +178,18 @@ class CopilotController extends Controller
             }
         } elseif ($thread->site_id) {
             $site = Site::find($thread->site_id);
+        }
+
+        if ($this->availability->isPaused($org, $site)) {
+            return $this->availability->response();
+        }
+
+        // Server-side quota — structured 402 before any provider call.
+        if (! $this->usage->canSendAiMessage($org)) {
+            return response()->json(
+                $this->usage->limitError($org, 'monthly_ai_messages', (int) $this->usage->counter($org)->ai_messages_used),
+                402,
+            );
         }
 
         $range = null;

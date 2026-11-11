@@ -6,6 +6,7 @@ use App\Models\AiVisibilityPrompt;
 use App\Models\AiVisibilityRun;
 use App\Models\Site;
 use App\Services\AiVisibility\PromptRunner;
+use App\Services\Ai\AiAvailability;
 use App\Services\UsageService;
 use Carbon\Carbon;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -59,6 +60,14 @@ class RunAiVisibilityJob implements ShouldQueue
         $org = $site->organization;
 
         if ($org === null || $org->deletion_scheduled_for !== null) {
+            return;
+        }
+
+        if (app(AiAvailability::class)->isPaused($org, $site)) {
+            Log::info('AI visibility skipped: AI work paused for site.', [
+                'site_id' => $site->id,
+            ]);
+
             return;
         }
 

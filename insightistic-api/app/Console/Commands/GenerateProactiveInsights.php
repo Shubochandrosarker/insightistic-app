@@ -8,6 +8,7 @@ use App\Models\AiInsight;
 use App\Models\Organization;
 use App\Models\Site;
 use App\Services\ContextAssembler;
+use App\Services\Ai\AiAvailability;
 use App\Services\InsightGenerator;
 use App\Services\UsageService;
 use App\Support\DateRange;
@@ -56,6 +57,7 @@ class GenerateProactiveInsights extends Command
         UsageService $usage,
         Tenancy $tenancy,
         AiCreditService $credits,
+        AiAvailability $availability,
     ): int {
         $types = $this->option('type') ?: self::PROACTIVE_TYPES;
 
@@ -81,6 +83,11 @@ class GenerateProactiveInsights extends Command
                     $org = $site->organization;
 
                     if (! $org || $org->deletion_scheduled_for !== null) {
+                        continue;
+                    }
+
+                    if ($availability->isPaused($org, $site)) {
+                        $skipped++;
                         continue;
                     }
 

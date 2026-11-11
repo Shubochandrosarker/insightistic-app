@@ -34,6 +34,16 @@ return [
         // Keep AI calls below the 300s proxy/FastCGI ceiling while allowing
         // slower generation responses to finish instead of dying at 60s.
         'timeout' => (int) env('INSIGHTISTIC_AI_TIMEOUT', 240),
+        // Temporary tenant/site pause switch. Keep this empty by default;
+        // production can pause one site's AI without suspending its account.
+        'paused_domains' => array_values(array_filter(array_map(
+            'trim',
+            explode(',', (string) env('INSIGHTISTIC_AI_PAUSED_DOMAINS', '')),
+        ))),
+        'paused_message' => env(
+            'INSIGHTISTIC_AI_PAUSED_MESSAGE',
+            'AI research is temporarily paused because the pending invoice must be cleared to restore research credits. Please clear the pending invoice, then try again.',
+        ),
     ],
 
     // Plan-aware OpenRouter routing. WPistic is always attempted first by the

@@ -19,6 +19,7 @@ use App\Http\Controllers\Api\Admin\UserController as AdminUserController;
 use App\Http\Controllers\Api\AlertController;
 use App\Http\Controllers\Api\AppSumoOAuthController;
 use App\Http\Controllers\Api\AppSumoWebhookController;
+use App\Http\Controllers\Api\AppSumoClaimController;
 use App\Http\Controllers\Api\AnalyticsController;
 use App\Http\Controllers\Api\AnalyticsQueryController;
 use App\Http\Controllers\Api\ActionProposalController;
@@ -858,6 +859,14 @@ Route::post('appsumo/webhook', [AppSumoWebhookController::class, '__invoke'])->m
 // throttle as the other OAuth callbacks; it answers 200 OK (no code) for the
 // Partner Portal validation ping.
 Route::get('appsumo/oauth/callback', [AppSumoOAuthController::class, 'callback'])->middleware('throttle:auth');
+
+// Buyer claim (final OAuth step): the OAuth controller upserts the license
+// row and redirects the buyer to the SPA claim page, which calls these. No
+// auth middleware — the license key + password are the only credentials;
+// POST verifies a password so it throttles like the other auth endpoints,
+// GET is the unauthenticated page pre-check.
+Route::get('appsumo/claim/{licenseKey}', [AppSumoClaimController::class, 'show'])->middleware('throttle:public');
+Route::post('appsumo/claim', [AppSumoClaimController::class, 'claim'])->middleware('throttle:auth');
 
 // ---- Uptime monitoring (Phase 12, docs/roadmap-2026/16-PERFORMANCE-UPTIME.md)
 // Appended as its own group rather than spliced into the site.access group

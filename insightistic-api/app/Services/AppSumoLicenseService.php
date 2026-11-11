@@ -88,21 +88,16 @@ class AppSumoLicenseService
 
     /**
      * Bind an AppSumo license to a user's organization (OAuth claim flow).
-     * Resolves the user's primary org — owned first, then first membership —
-     * and applies entitlements. Returns the row so callers can react (the
-     * raw Insightistic license key, when one must be issued for the plugin
-     * handshake, is the claim endpoint's concern: it is shown once and never
-     * stored).
+     * Resolves the user's primary org, applies entitlements, and returns the
+     * row so callers can react (the raw Insightistic license key, when one
+     * must be issued for the plugin handshake, is the claim endpoint's
+     * concern: it is shown once and never stored).
      */
     public function linkToOrganization(string $licenseKey, User $user): AppSumoLicense
     {
         $row = AppSumoLicense::query()->where('license_key', $licenseKey)->firstOrFail();
 
-        $org = Organization::query()->where('owner_user_id', $user->id)->orderBy('id')->first()
-            ?? Organization::query()
-                ->whereHas('users', fn ($q) => $q->where('users.id', $user->id))
-                ->orderBy('id')
-                ->first();
+        $org = $this->primaryOrganization($user);
 
         $row->user_id = $user->id;
         $row->org_id = $org?->id;
@@ -113,6 +108,21 @@ class AppSumoLicenseService
         }
 
         return $row;
+    }
+
+    /**
+     * The user's primary org — owned first, then first membership. Shared by
+     * linkToOrganization and the claim controller (which must decide between
+     * linking and provisioning an org BEFORE binding, so both paths resolve
+     * the org with one rule).
+     */
+    public function primaryOrganization(User $user): ?Organization
+    {
+        return Organization::query()->where('owner_user_id', $user->id)->orderBy('id')->first()
+            ?? Organization::query()
+                ->whereHas('users', fn ($q) => $q->where('users.id', $user->id))
+                ->orderBy('id')
+                ->first();
     }
 
     /**

@@ -8,6 +8,7 @@ use App\Mail\ClientReportMail;
 use App\Domain\Billing\AiCreditService;
 use App\Domain\Billing\Exceptions\InsufficientCreditsException;
 use App\Services\ReportBuilder;
+use App\Services\Ai\AiAvailability;
 use App\Services\UsageService;
 use Illuminate\Console\Command;
 use Illuminate\Support\Carbon;
@@ -33,7 +34,7 @@ class DeliverScheduledReports extends Command
 
     protected $description = 'Send scheduled weekly/monthly reports that are due right now.';
 
-    public function handle(ReportBuilder $builder, UsageService $usage, AiCreditService $credits): int
+    public function handle(ReportBuilder $builder, UsageService $usage, AiCreditService $credits, AiAvailability $availability): int
     {
         $query = ReportSchedule::where('is_active', true)->with('site');
         if ($id = $this->option('schedule')) {
@@ -43,6 +44,11 @@ class DeliverScheduledReports extends Command
         $sent = 0;
         foreach ($query->get() as $schedule) {
             if (! $schedule->site) {
+                continue;
+            }
+            $org = $schedule->site->organization;
+            if ($availability->isPaused($org, $schedule->site)) {
+                $this->line("Schedule {$schedule->id}: AI work paused for this site, skipping.");
                 continue;
             }
             if (! $this->isDueNow($schedule)) {
@@ -58,7 +64,6 @@ class DeliverScheduledReports extends Command
                 continue;
             }
 
-            $org = $schedule->site->organization;
             if (! $usage->canGenerateReport($org)) {
                 $this->warn("Schedule {$schedule->id}: monthly report allowance exhausted, skipping.");
                 continue;

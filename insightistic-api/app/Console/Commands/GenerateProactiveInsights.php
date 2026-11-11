@@ -8,7 +8,9 @@ use App\Models\AiInsight;
 use App\Models\Organization;
 use App\Models\Site;
 use App\Services\ContextAssembler;
+use App\Services\Ai\AiAvailability;
 use App\Services\InsightGenerator;
+use App\Services\Observability\AiJobRunLog;
 use App\Services\UsageService;
 use App\Support\DateRange;
 use App\Support\Tenancy;
@@ -56,6 +58,7 @@ class GenerateProactiveInsights extends Command
         UsageService $usage,
         Tenancy $tenancy,
         AiCreditService $credits,
+        AiAvailability $availability,
     ): int {
         $types = $this->option('type') ?: self::PROACTIVE_TYPES;
 
@@ -68,21 +71,33 @@ class GenerateProactiveInsights extends Command
         }
 
         $dry = (bool) $this->option('dry-run');
-        $generated = 0;
-        $skipped = 0;
+        $run = new AiJobRunLog('insights-generate');
 
         Site::withoutGlobalScope('organization')
             ->when($this->option('site'), fn ($q) => $q->whereKey($this->option('site')))
             ->whereNull('archived_at')
             ->where('connection_status', 'connected')
             ->with('organization')
-            ->chunkById(50, function ($sites) use ($contexts, $generator, $usage, $tenancy, $credits, $types, $dry, &$generated, &$skipped) {
+            ->chunkById(50, function ($sites) use ($contexts, $generator, $usage, $tenancy, $credits, $availability, $types, $dry, $run) {
                 foreach ($sites as $site) {
                     $org = $site->organization;
 
-                    if (! $org || $org->deletion_scheduled_for !== null) {
+                    if (! $org) {
+                        $run->skip($site->id, 'no_organization');
                         continue;
                     }
+
+                    if ($org->deletion_scheduled_for !== null) {
+                        $run->skip($site->id, 'organization_deletion_scheduled', ['org_id' => $org->id]);
+                        continue;
+                    }
+
+                    if ($availability->isPaused($org, $site)) {
+                        $run->skip($site->id, 'ai_paused', ['org_id' => $org->id]);
+                        continue;
+                    }
+
+                    $run->eligible();
 
                     // The generator and assembler both rely on tenant scope.
                     $tenancy->setOrganization($org);
@@ -93,22 +108,24 @@ class GenerateProactiveInsights extends Command
                         $eligibleForStandard = $credits->standardEligible($org, $action);
 
                         if ($creditModel && ! $credits->entitledForAction($org, $action)) {
-                            $skipped++;
+                            $run->skip($site->id, 'not_entitled', ['type' => $type, 'action' => $action]);
                             continue;
                         }
 
                         if ($creditModel && ! $credits->canCharge($org, $action, $eligibleForStandard)) {
                             $this->line("org {$org->id}: Insight Credits exhausted, skipping remaining types");
+                            $run->skip($site->id, 'credits_exhausted', ['type' => $type, 'org_id' => $org->id]);
                             break;
                         }
 
                         if (! $creditModel && ! $usage->canGenerateInsight($org)) {
                             $this->line("org {$org->id}: AI insight limit reached, skipping remaining types");
+                            $run->skip($site->id, 'insight_limit_reached', ['type' => $type, 'org_id' => $org->id]);
                             break;
                         }
 
                         if ($this->hasFreshInsight($site->id, $type)) {
-                            $skipped++;
+                            $run->skip($site->id, 'fresh_insight_exists', ['type' => $type]);
                             continue;
                         }
 
@@ -116,7 +133,7 @@ class GenerateProactiveInsights extends Command
                         $context = $contexts->assemble($type, $site, $range, null);
 
                         if (! $context || ! $context['has_data']) {
-                            $skipped++;
+                            $run->skip($site->id, 'no_data', ['type' => $type]);
                             continue;
                         }
 
@@ -133,20 +150,28 @@ class GenerateProactiveInsights extends Command
                                 } catch (InsufficientCreditsException) {
                                     $insight->delete();
                                     $this->line("org {$org->id}: concurrent credit spend prevented {$type}");
+                                    $run->skip($site->id, 'concurrent_credit_spend', ['type' => $type]);
                                     continue;
                                 }
                             } else {
                                 $usage->recordInsight($org);
                             }
-                            $generated++;
+                            $run->wrote($site->id, ['type' => $type]);
+                        } else {
+                            $run->skip($site->id, 'generator_returned_nothing', ['type' => $type]);
                         }
                     }
                 }
             });
 
+        $summary = $run->finish($dry);
+
         $this->info($dry
             ? 'Proactive insights: dry run complete.'
-            : "Proactive insights: {$generated} generated, {$skipped} skipped.");
+            : "Proactive insights: {$summary['written']} generated, {$summary['skipped']} skipped.");
+        if (! empty($summary['reasons'])) {
+            $this->line('Skip reasons: ' . json_encode($summary['reasons']));
+        }
 
         return self::SUCCESS;
     }

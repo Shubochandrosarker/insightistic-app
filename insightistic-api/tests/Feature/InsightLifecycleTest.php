@@ -321,3 +321,58 @@ it('rejects an unknown insight type rather than silently skipping it', function 
     $this->artisan('insightistic:insights-generate', ['--type' => ['nonsense']])
         ->assertFailed();
 });
+
+/*
+ * Nov 2026 regression: the ai-pause hotfix referenced $availability inside
+ * the chunkById closure without capturing it, so every scheduled run died
+ * with "Undefined variable $availability" before writing a row.
+ */
+it('runs across paused and unpaused sites without crashing (ai-pause closure regression)', function () {
+    fakeAiProvider();
+    [, $org] = makeOrgUser('ins-pause-ok@example.com');
+    $live = siteWithTraffic($org, 'Live shop');
+
+    [, $pausedOrg] = makeOrgUser('ins-pause-org@example.com');
+    $pausedOrg->forceFill(['ai_settings_json' => ['paused' => true]])->save();
+    $paused = siteWithTraffic($pausedOrg, 'Paused shop');
+
+    $this->artisan('insightistic:insights-generate', ['--type' => ['traffic']])
+        ->assertSuccessful();
+
+    expect(AiInsight::withoutGlobalScope('organization')->where('site_id', $live->id)->count())->toBe(1)
+        ->and(AiInsight::withoutGlobalScope('organization')->where('site_id', $paused->id)->count())->toBe(0);
+});
+
+it('skips a site whose domain is in INSIGHTISTIC_AI_PAUSED_DOMAINS and logs the reason', function () {
+    fakeAiProvider();
+    config(['insightistic.ai.paused_domains' => ['paused-domain.example']]);
+    [, $org] = makeOrgUser('ins-pause-domain@example.com');
+    $site = siteWithTraffic($org);
+    $site->forceFill(['domain' => 'www.paused-domain.example'])->save();
+
+    \Illuminate\Support\Facades\Log::spy();
+
+    $this->artisan('insightistic:insights-generate', ['--site' => $site->id, '--type' => ['traffic']])
+        ->assertSuccessful();
+
+    expect(AiInsight::withoutGlobalScope('organization')->where('site_id', $site->id)->count())->toBe(0);
+    \Illuminate\Support\Facades\Log::shouldHaveReceived('info')
+        ->withArgs(fn ($msg, $ctx = []) => $msg === 'ai_job.insights-generate.skip'
+            && ($ctx['site_id'] ?? null) === $site->id && ($ctx['reason'] ?? null) === 'ai_paused')
+        ->once();
+});
+
+it('records a run summary with per-reason skip counts', function () {
+    fakeAiProvider();
+    [, $org] = makeOrgUser('ins-summary@example.com');
+    $site = siteWithTraffic($org);
+    makeInsight($org, $site, ['type' => 'traffic', 'expires_at' => now()->addHours(6)]);
+
+    $this->artisan('insightistic:insights-generate', ['--site' => $site->id, '--type' => ['traffic']])
+        ->assertSuccessful();
+
+    $summary = \Illuminate\Support\Facades\Cache::get(\App\Services\Observability\AiJobRunLog::cacheKey('insights-generate'));
+    expect($summary['eligible'])->toBe(1)
+        ->and($summary['written'])->toBe(0)
+        ->and($summary['reasons'])->toBe(['fresh_insight_exists' => 1]);
+});

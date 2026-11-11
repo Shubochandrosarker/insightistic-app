@@ -159,6 +159,12 @@ class OverviewController extends AdminController
             'cache'    => ['driver' => config('cache.default'), 'ok' => $this->cacheOk()],
             'paddle'   => $billingHealth['paddle'],
             'ai'       => $this->aiHealth(),
+            // Last run of each daily AI job + the zero-rows watchdog verdict.
+            'ai_jobs'  => [
+                'insights_generate' => \Illuminate\Support\Facades\Cache::get(\App\Services\Observability\AiJobRunLog::cacheKey('insights-generate')),
+                'ai_visibility'     => \Illuminate\Support\Facades\Cache::get(\App\Services\Observability\AiJobRunLog::cacheKey('ai-visibility')),
+                'watchdog'          => \Illuminate\Support\Facades\Cache::get(\App\Console\Commands\AiJobsWatchdog::CACHE_KEY),
+            ],
             'recent_failed_jobs' => Schema::hasTable('failed_jobs')
                 ? DB::table('failed_jobs')->latest('id')->limit(5)->get(['id', 'queue', 'exception', 'failed_at'])
                     ->map(fn ($r) => ['id' => $r->id, 'queue' => $r->queue, 'failed_at' => $r->failed_at, 'error' => Str::limit((string) $r->exception, 160)])

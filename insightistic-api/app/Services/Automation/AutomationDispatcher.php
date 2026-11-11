@@ -6,6 +6,7 @@ use App\Models\AutomationRule;
 use App\Models\AutomationRun;
 use App\Models\Site;
 use App\Services\Actions\ActionExecutor;
+use App\Services\Ai\AiAvailability;
 use Illuminate\Support\Facades\Log;
 
 /**
@@ -35,7 +36,10 @@ use Illuminate\Support\Facades\Log;
  */
 class AutomationDispatcher
 {
-    public function __construct(private readonly ActionExecutor $executor) {}
+    public function __construct(
+        private readonly ActionExecutor $executor,
+        private readonly AiAvailability $availability,
+    ) {}
 
     /**
      * @param  array<string, mixed>  $context  Trigger-specific data, matched against trigger_config_json and recorded verbatim on the AutomationRun.
@@ -43,6 +47,15 @@ class AutomationDispatcher
      */
     public function dispatch(string $triggerType, Site $site, array $context = []): array
     {
+        if ($this->availability->isPaused($site->organization, $site)) {
+            Log::info('AutomationDispatcher: AI work paused for site; scheduled dispatch skipped.', [
+                'site_id' => $site->id,
+                'trigger_type' => $triggerType,
+            ]);
+
+            return [];
+        }
+
         $rules = AutomationRule::query()
             ->where('site_id', $site->id)
             ->where('trigger_type', $triggerType)

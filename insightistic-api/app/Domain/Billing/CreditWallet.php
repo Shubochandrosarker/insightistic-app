@@ -83,9 +83,23 @@ final class CreditWallet
         ];
     }
 
-    public function grantPurchased(Organization $organization, int $amount, string $reference, string $reason = 'credit_pack_purchase'): void
-    {
-        $this->ledger->grant($organization, $amount, $reason, 'paddle_credit_pack', $reference, 'purchased', null, null, ['catalog_version' => config('commercial.version')]);
+    /**
+     * Purchased (non-expiring) credits from a one-time pack. `reference` is
+     * the provider transaction/session id and doubles as the ledger's
+     * idempotency key, so a replayed webhook credits exactly once.
+     */
+    public function grantPurchased(
+        Organization $organization,
+        int $amount,
+        string $reference,
+        string $reason = 'credit_pack_purchase',
+        string $sourceType = 'paddle_credit_pack',
+        array $metadata = [],
+    ): void {
+        $this->ledger->grant(
+            $organization, $amount, $reason, $sourceType, $reference, 'purchased', null, null,
+            ['catalog_version' => config('commercial.version')] + $metadata,
+        );
     }
 
     /** Consume included credits first, then purchased credits, atomically/idempotently. */

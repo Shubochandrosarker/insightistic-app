@@ -36,10 +36,20 @@ return [
         // A webhook received within this many hours counts as "recent" on
         // Admin → System Health.
         'webhook_recent_hours' => (int) env('STRIPE_WEBHOOK_RECENT_HOURS', 72),
+        // Optional Stripe Price ids for the one-time Insight Credit packs.
+        // Blank = sell the pack with an inline price_data built from
+        // config/commercial.php price_minor, so packs work with no Stripe
+        // catalog setup at all.
+        'credit_prices' => [
+            'credits_5000' => env('STRIPE_PRICE_CREDITS_5000'),
+            'credits_20000' => env('STRIPE_PRICE_CREDITS_20000'),
+            'credits_50000' => env('STRIPE_PRICE_CREDITS_50000'),
+        ],
     ],
 
     // Providers offered at checkout (customer chooses). Stripe is the
     // default first option; Paddle remains available as the explicit
-    // secondary provider. Credit packs stay Paddle-only for now.
+    // secondary provider. Credit packs are sold by both: Paddle through the
+    // overlay, Stripe through POST /billing/credits/checkout.
     'checkout_providers' => array_values(array_filter(array_map('trim', explode(',', (string) env('BILLING_CHECKOUT_PROVIDERS', 'stripe,paddle'))))),
 ];

@@ -91,6 +91,21 @@ dying silently an hour later.
 | `INSIGHTISTIC_KNOWLEDGE_MAX_CONTENT_BYTES` | extracted-text cap, default 2 000 000 |
 | `INSIGHTISTIC_KNOWLEDGE_CRAWL_TIMEOUT` / `_CRAWL_MAX_BYTES` | crawler caps |
 
+## Shared knowledge brain (optional enrichment)
+
+| Variable | Default | Notes |
+|---|---|---|
+| `WPISTIC_KNOWLEDGE_AGENT_ENABLED` / `_URL` / `_TOKEN` / `_SLUG` / `_CATEGORY` | off | Existing. Admin → AI configuration can override enabled/url/slug/category (stored in `platform_settings.ai_routing`, never secrets). |
+| `WPISTIC_KNOWLEDGE_AGENT_DRIVER` | `rest` | `rest` = brain-api Worker (`/api/agents` …). `mcp` = WPistic memory MCP server (`tools/call memory_search`), e.g. `https://brain.insightistic.com`. |
+| `WPISTIC_KNOWLEDGE_AGENT_MCP_PATH` | `/mcp` | MCP endpoint path. |
+| `WPISTIC_KNOWLEDGE_AGENT_MCP_KINDS` | `project,system` | Allowlist of memory card kinds that may reach a customer prompt. Never add `client`, `person`, `decision`, `incident`, `run`. |
+| `WPISTIC_KNOWLEDGE_AGENT_CF_ACCESS_CLIENT_ID` | empty | Cloudflare Access service-token Client ID (secret store only). |
+| `WPISTIC_KNOWLEDGE_AGENT_CF_ACCESS_CLIENT_SECRET` | empty | Cloudflare Access service-token Client Secret (secret store only). |
+| `WPISTIC_KNOWLEDGE_AGENT_CONNECT_TIMEOUT` | `2` | Seconds. |
+| `WPISTIC_KNOWLEDGE_AGENT_TIMEOUT` | `4` | Seconds per request (capped by the budget). |
+| `WPISTIC_KNOWLEDGE_AGENT_BUDGET_MS` | `5000` | Total time for one lookup across all calls. |
+| `WPISTIC_KNOWLEDGE_AGENT_COOLDOWN` | `120` | Seconds the brain is skipped after a failure (timeout, 3xx login redirect, 401/403, bad payload). One warning is logged per trip with a reason code; answers use local knowledge only. |
+
 ## Object storage (S3-compatible, optional)
 
 `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_DEFAULT_REGION`,

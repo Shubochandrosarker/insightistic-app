@@ -170,6 +170,7 @@ describe("Billing page checkout", () => {
 
     try {
     render(<BillingPage />);
+    expect(await screen.findByLabelText("Card via Stripe")).toBeChecked();
     await userEvent.click(await screen.findByLabelText("Card via Stripe"));
     expect(await screen.findByText("View ↗")).toHaveAttribute("href", "https://invoice.stripe.com/i/test");
     expect(screen.queryByText("Manage subscription ↗")).not.toBeInTheDocument();
@@ -183,11 +184,9 @@ describe("Billing page checkout", () => {
     }
   });
 
-  it("keeps the legacy Stripe redirect when Paddle is not enabled (501)", async () => {
+  it("uses Stripe as the default checkout when Paddle is not enabled", async () => {
     apiMocks.apiPost.mockImplementation((path: string) =>
-      path === "/billing/checkout-config"
-        ? Promise.reject({ status: 501, message: "Paddle billing is not enabled.", data: { code: "paddle_not_enabled" } })
-        : path === "/billing/checkout"
+      path === "/billing/stripe/checkout"
           ? Promise.resolve({ url: "https://checkout.stripe.com/c/pay/test" })
           : Promise.resolve({}),
     );
@@ -200,10 +199,7 @@ describe("Billing page checkout", () => {
     await userEvent.click(checkoutButton);
 
     await waitFor(() =>
-      expect(apiMocks.apiPost).toHaveBeenCalledWith("/billing/checkout-config", { plan: "agency", kind: "yearly" }),
-    );
-    await waitFor(() =>
-      expect(apiMocks.apiPost).toHaveBeenCalledWith("/billing/checkout", { plan: "agency", interval: "yearly" }),
+      expect(apiMocks.apiPost).toHaveBeenCalledWith("/billing/stripe/checkout", { plan: "agency", kind: "yearly" }),
     );
   });
 
@@ -232,6 +228,7 @@ describe("Billing page checkout", () => {
     });
 
     render(<BillingPage />);
+    await userEvent.click(await screen.findByLabelText("Paddle (cards, PayPal, local methods)"));
     await userEvent.click(await screen.findByRole("button", { name: "Continue to checkout" }));
 
     // Loader injects the CDN script; jsdom resolves it by event.
@@ -270,41 +267,34 @@ describe("Billing page checkout", () => {
     expect(screen.getByRole("option", { name: "Agency Pro" })).toBeInTheDocument();
   });
 
-  it("opens the Angel Solo lifetime checkout via checkout-config {plan: angel_solo, kind: lifetime}", async () => {
-    const P = paddleStub();
-    (window as any).Paddle = P;
+  it("shows the Angel Solo LTD purchase with Stripe selected and no trial", async () => {
+    apiMocks.apiGet.mockImplementation((path: string) =>
+      path === "/billing/subscription" ? Promise.resolve(freeOrg)
+      : path === "/public/plans" ? Promise.resolve(livePlans)
+      : path === "/billing/providers" ? Promise.resolve({ providers: [{ id: "paddle" }, { id: "stripe" }] })
+      : Promise.resolve({}),
+    );
 
     apiMocks.apiPost.mockImplementation((path: string) =>
-      path === "/billing/checkout-config"
-        ? Promise.resolve({
-            ...checkoutConfig,
-            price_id: "pri_test_angel_solo",
-            custom_data: { organization_id: 7, purchase_kind: "lifetime", plan_slug: "angel_solo" },
-          })
+      path === "/billing/stripe/checkout"
+        ? Promise.resolve({ url: "https://checkout.stripe.com/c/pay/cs_test_ltd" })
         : Promise.resolve({}),
     );
 
-    // /ltd is direct checkout: arriving with ?plan=angel_solo opens the
-    // one-time checkout immediately, without a click or a trial.
-    window.history.pushState({}, "", "/dashboard/billing?plan=angel_solo");
-    render(<BillingPage />);
-
-    // One-time LTD purchase: same envelope, kind 'lifetime'.
-    await waitFor(() =>
-      expect(apiMocks.apiPost).toHaveBeenCalledWith("/billing/checkout-config", { plan: "angel_solo", kind: "lifetime" }),
-    );
-
-    // The hosted pay-domain iframe carries the checkout (Paddle only creates
-    // transactions on the approved domain).
-    await waitFor(() => expect(document.getElementById("insightistic-checkout-frame")).toBeTruthy());
-    const frame = document.querySelector<HTMLIFrameElement>("#insightistic-checkout-frame iframe");
-    const src = new URL(frame!.src);
-    expect(src.searchParams.get("price")).toBe("pri_test_angel_solo");
-    expect(JSON.parse(src.searchParams.get("data")!)).toEqual({
-      organization_id: 7,
-      purchase_kind: "lifetime",
-      plan_slug: "angel_solo",
-    });
+    const assign = vi.fn();
+    const originalLocation = window.location;
+    Object.defineProperty(window, "location", { configurable: true, value: { ...window.location, search: "?plan=angel_solo", set href(v: string) { assign(v); } } });
+    try {
+      render(<BillingPage />);
+      expect(screen.queryByRole("button", { name: /Start 7-day free trial/i })).not.toBeInTheDocument();
+      expect((await screen.findAllByText(/No free trial/i)).length).toBeGreaterThan(0);
+      const payButton = await screen.findByRole("button", { name: "Pay $149 with Stripe" });
+      await userEvent.click(payButton);
+      await waitFor(() => expect(apiMocks.apiPost).toHaveBeenCalledWith("/billing/stripe/checkout", { plan: "angel_solo", kind: "lifetime" }));
+      expect(assign).toHaveBeenCalledWith("https://checkout.stripe.com/c/pay/cs_test_ltd");
+    } finally {
+      Object.defineProperty(window, "location", { configurable: true, value: originalLocation });
+    }
   });
 
   it("sends the selected credit pack to the server before opening the popup", async () => {

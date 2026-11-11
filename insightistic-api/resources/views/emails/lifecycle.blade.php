@@ -21,6 +21,16 @@
                         <p style="margin:0;font-size:15px;font-family:'Courier New',monospace;color:#101828;word-break:break-all;">{{ $panel['value'] }}</p>
                     </div>
                 @endisset
+                @isset ($details)
+                    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:18px 0;border:1px solid #e6eaf2;border-radius:10px;background:#fbfcfe;">
+                        @foreach ($details as $detail)
+                            <tr>
+                                <td style="padding:9px 12px;border-bottom:1px solid #eef1f6;font-size:12px;color:#7a8699;">{{ $detail['label'] }}</td>
+                                <td style="padding:9px 12px;border-bottom:1px solid #eef1f6;font-size:13px;font-weight:bold;color:#101828;text-align:right;word-break:break-word;">{{ $detail['value'] }}</td>
+                            </tr>
+                        @endforeach
+                    </table>
+                @endisset
                 @isset ($steps)
                     <ol style="margin:0 0 14px;padding-left:20px;">
                         @foreach ($steps as $step)

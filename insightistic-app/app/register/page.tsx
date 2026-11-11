@@ -28,11 +28,15 @@ export default function Register() {
   const [interval, setInterval] = useState<"monthly" | "yearly">("monthly");
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const isLifetimePlan = Boolean(plan?.startsWith("angel_"));
   const up = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement>) =>
     setF({ ...f, [k]: e.target.value });
 
   useEffect(() => {
-    if (!loading && user) router.replace(user.is_super_admin ? "/admin" : "/dashboard");
+    if (!loading && user) {
+      const nextPlan = new URLSearchParams(window.location.search).get("plan");
+      router.replace(nextPlan ? `/dashboard/billing?plan=${encodeURIComponent(nextPlan)}` : (user.is_super_admin ? "/admin" : "/dashboard"));
+    }
   }, [user, loading, router]);
 
   // Read ?plan= from the marketing-site CTA without forcing a Suspense boundary.
@@ -74,8 +78,8 @@ export default function Register() {
 
   return (
     <AuthShell
-      title="Start your free trial"
-      subtitle="7 days free on any plan. No credit card required."
+      title={isLifetimePlan ? "Create your Founding Angel account" : "Create your free account"}
+      subtitle={isLifetimePlan ? "No free trial for LTD. After account setup, Stripe opens by default; Paddle is also available." : "Explore the free workspace, then start a 7-day trial on any regular subscription plan."}
       footer={
         <>
           Already have an account?{" "}

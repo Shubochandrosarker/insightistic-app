@@ -133,7 +133,14 @@ export default function BillingPage() {
   // API without them leaves the page on its Paddle-only behaviour.
   const { data: providersData } = useApi<any>("/billing/providers");
   const { data: summary } = useApi<any>("/billing/summary");
-  const [checkoutProvider, setCheckoutProvider] = useState<"paddle" | "stripe">("paddle");
+  // Stripe is the primary checkout. Paddle remains available as an explicit
+  // secondary choice when the live API advertises it.
+  const [checkoutProvider, setCheckoutProvider] = useState<"paddle" | "stripe">(() => {
+    if (typeof window !== "undefined" && FOUNDER_TIER_SLUGS.has(new URLSearchParams(window.location.search).get("plan") ?? "")) {
+      return "stripe";
+    }
+    return "stripe";
+  });
   const { sites } = useDashboard();
   const [plan, setPlan] = useState("growth");
   const [interval, setIntervalSel] = useState("monthly");
@@ -142,14 +149,21 @@ export default function BillingPage() {
   const [phase, setPhase] = useState<Phase>("idle");
   const [finishLabel, setFinishLabel] = useState("Finishing your subscription setup…");
   const [selectedFounderTier, setSelectedFounderTier] = useState<string | null>(null);
+  const [checkoutReturn, setCheckoutReturn] = useState<{ status: "success" | "cancel"; provider: string | null; kind: string | null } | null>(null);
   const trialDays: number = Number(data?.trial?.days ?? 7);
   const trialEligible: boolean = data?.trial?.eligible === true;
   const paidRef = useRef(false);
+  const checkoutReturnHandled = useRef(false);
 
   // Preselect the plan passed from the marketing-site CTA (?plan=).
   useEffect(() => {
-    const p = new URLSearchParams(window.location.search).get("plan");
-    const selectedInterval = new URLSearchParams(window.location.search).get("interval");
+    const params = new URLSearchParams(window.location.search);
+    const p = params.get("plan");
+    const selectedInterval = params.get("interval");
+    const result = params.get("checkout");
+    if (result === "success" || result === "cancel") {
+      setCheckoutReturn({ status: result, provider: params.get("provider"), kind: params.get("kind") });
+    }
     if (selectedInterval === "yearly" || selectedInterval === "monthly") setIntervalSel(selectedInterval);
     if (!p) return;
 
@@ -161,10 +175,37 @@ export default function BillingPage() {
     if (FOUNDER_TIER_SLUGS.has(p)) {
       setSelectedFounderTier(p);
       window.setTimeout(() => {
-        document.getElementById("founder-lifetime")?.scrollIntoView({ behavior: "smooth", block: "start" });
+        const target = document.getElementById("founder-lifetime");
+        if (typeof target?.scrollIntoView === "function") {
+          target.scrollIntoView({ behavior: "smooth", block: "start" });
+        }
       }, 250);
     }
   }, []);
+
+  useEffect(() => {
+    if (!selectedFounderTier) return;
+    const configured = Array.isArray(providersData?.providers)
+      ? providersData.providers.map((p: any) => String(p.id))
+      : null;
+    if (!configured) {
+      setCheckoutProvider("stripe");
+      return;
+    }
+    setCheckoutProvider((current) => {
+      if (configured.includes(current)) return current;
+      return configured.includes("stripe") ? "stripe" : "paddle";
+    });
+  }, [selectedFounderTier, providersData]);
+
+  useEffect(() => {
+    if (!Array.isArray(providersData?.providers)) return;
+    const configured = providersData.providers.map((p: any) => String(p.id));
+    setCheckoutProvider((current) => {
+      if (configured.includes(current)) return current;
+      return configured.includes("stripe") ? "stripe" : "paddle";
+    });
+  }, [providersData]);
 
   /**
    * Paddle webhook, not the checkout callback, makes a subscription real.
@@ -207,10 +248,10 @@ export default function BillingPage() {
     }
   }
 
-  async function stripeCheckout() {
+  async function stripeCheckout(checkoutPlan = plan, checkoutKind = interval) {
     setBusy(true); setMsg(null);
     try {
-      const r: any = await apiPost("/billing/stripe/checkout", { plan, kind: interval });
+      const r: any = await apiPost("/billing/stripe/checkout", { plan: checkoutPlan, kind: checkoutKind });
       window.location.href = r.url;
     } catch (e: any) {
       setMsg(e?.message || "Stripe checkout could not be started. Try again or choose Paddle.");
@@ -270,6 +311,7 @@ export default function BillingPage() {
    * lifetime grant appearing rather than billing_provider flipping.
    */
   async function oneTimeCheckout(planSlug: string, kind: "lifetime" | "credit_pack", creditPack?: string) {
+    if (kind === "lifetime" && checkoutProvider === "stripe") return stripeCheckout(planSlug, kind);
     setBusy(true); setMsg(null);
     try {
       const payload = { plan: planSlug, kind, ...(creditPack ? { credit_pack: creditPack } : {}) };
@@ -299,6 +341,26 @@ export default function BillingPage() {
       setPhase("idle");
       setBusy(false);
     }
+  }
+
+  async function finishStripeSetup(kind: string) {
+    setFinishLabel(kind === "lifetime" ? "Confirming your lifetime purchase…" : "Confirming your subscription…");
+    setPhase("processing");
+    for (let attempt = 0; attempt < POLL_TRIES; attempt++) {
+      const d = await apiGet("/billing/subscription").catch(() => null);
+      if (kind === "lifetime" && lifetimeGrantOf(d)) {
+        setMsg(`Lifetime ${grantTierLabel(lifetimeGrantOf(d)!.plan_slug!)} is active — welcome to the Founding Angels.`);
+        setPhase("idle"); setBusy(false); reload(); return;
+      }
+      if (kind !== "lifetime" && d?.subscription?.billing_provider === "stripe" && ["active", "trialing"].includes(String(d.subscription.status))) {
+        setMsg(`Your ${d?.plan?.name || "subscription"} is active.`);
+        setPhase("idle"); setBusy(false); reload(); return;
+      }
+      await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
+    }
+    setMsg("Payment received — account activation is finishing. Refresh in a moment if the plan has not appeared yet.");
+    setCheckoutReturn(null);
+    setPhase("idle"); setBusy(false); reload();
   }
 
   async function finishOneTime(planSlug: string, kind: "lifetime" | "credit_pack") {
@@ -369,19 +431,23 @@ export default function BillingPage() {
     if (options.length && !options.some((p: any) => String(p.slug) === plan)) setPlan(String(options[0].slug));
   }, [data, plansData, plan]);
 
+  useEffect(() => {
+    if (!data || !checkoutReturn || checkoutReturnHandled.current) return;
+    checkoutReturnHandled.current = true;
+    if (checkoutReturn.status === "cancel") {
+      setMsg("Checkout was cancelled. No payment was taken; you can choose Stripe or Paddle and try again.");
+      return;
+    }
+    if (checkoutReturn.provider === "stripe") {
+      void finishStripeSetup(checkoutReturn.kind || "subscription");
+    }
+    // Paddle completion remains inside its hosted overlay and is handled by
+    // finishOneTime/finishSetup, so this is intentionally a no-op for it.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data, checkoutReturn]);
+
   // The subscription endpoint is owner/admin-only — non-privileged members
   // and transient failures must land on a retry card, not an eternal spinner.
-  // /ltd is direct checkout: arriving with ?plan=angel_* opens the one-time
-  // Paddle checkout straight away (once), with no trial and no plan picker.
-  const ltdAutoOpened = useRef(false);
-  useEffect(() => {
-    if (ltdAutoOpened.current || !data || !selectedFounderTier) return;
-    if (lifetimeGrantOf(data)) return;
-    ltdAutoOpened.current = true;
-    oneTimeCheckout(selectedFounderTier, "lifetime");
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data, selectedFounderTier]);
-
   if ((loading || !data) && error) {
     return (
       <div>
@@ -403,11 +469,20 @@ export default function BillingPage() {
       : data.organization?.status === "expired"
         ? "trial ended"
         : null;
-  const stripeOffered: boolean = (providersData?.providers ?? []).some((p: any) => p.id === "stripe");
+  const providersLoaded = Array.isArray(providersData?.providers);
+  const offeredProviderIds = new Set((providersData?.providers ?? []).map((p: any) => String(p.id)));
+  // Keep the legacy Paddle-only page usable while the additive provider
+  // endpoint is loading. Once it responds, only render providers the API
+  // explicitly allows for this account.
+  const stripeOffered = !providersLoaded || offeredProviderIds.has("stripe");
+  const paddleOffered = !providersLoaded || offeredProviderIds.has("paddle");
+  const checkoutProviderAvailable = checkoutProvider === "stripe" ? stripeOffered : paddleOffered;
   const portalInfo: { type?: string; available?: boolean } = summary?.portal ?? {};
   const invoices: any[] = summary?.invoices ?? [];
   const hasSubscription = !!data.subscription?.stripe_subscription_id || !!provider;
   const lifetimeGrant = lifetimeGrantOf(data);
+  const ltdIntent = Boolean(selectedFounderTier && !lifetimeGrant && checkoutReturn?.status !== "success");
+  const ltdPaymentPending = Boolean(selectedFounderTier && !lifetimeGrant && checkoutReturn?.status === "success");
   const currentSlug = String(lifetimeGrant?.plan_slug || planObj.slug || "free");
   const currentRank = UPGRADE_RANKS[currentSlug] ?? 0;
 
@@ -532,7 +607,7 @@ export default function BillingPage() {
         <p className="mt-3 text-xs text-muted">Total usable now: {num(data.credits?.total_usable ?? monthlyCreditsRemaining)}. Next monthly reset: {data.credits?.next_reset_at ? new Date(data.credits.next_reset_at).toLocaleDateString() : "—"}. AI actions use included credits before purchased credits.</p>
       </Card>
 
-      <Card id="change-plan" className="mt-5" title="Change plan">
+      {!ltdIntent && <Card id="change-plan" className="mt-5" title="Change plan">
         {msg && <p className="mb-3 text-sm text-warn">{msg}</p>}
         <div className="grid gap-4 sm:grid-cols-2">
           <label className="block">
@@ -557,7 +632,7 @@ export default function BillingPage() {
           <fieldset className="mt-4">
             <legend className="mb-1.5 text-xs font-semibold text-fg">Pay with</legend>
             <div className="flex flex-wrap gap-4 text-sm text-fg">
-              {(["paddle", "stripe"] as const).map((p) => (
+              {(["paddle", "stripe"] as const).filter((p) => p === "stripe" ? stripeOffered : paddleOffered).map((p) => (
                 <label key={p} className="inline-flex items-center gap-2">
                   <input type="radio" name="checkout-provider" value={p} checked={checkoutProvider === p} onChange={() => setCheckoutProvider(p)} />
                   {p === "stripe" ? "Card via Stripe" : "Paddle (cards, PayPal, local methods)"}
@@ -585,7 +660,7 @@ export default function BillingPage() {
             </>
           )}
         </div>
-      </Card>
+      </Card>}
 
       {invoices.length > 0 && (
         <Card className="mt-5" title="Invoices">
@@ -606,6 +681,7 @@ export default function BillingPage() {
       {(selectedFounderTier || lifetimeGrant) && (
       <Card id="founder-lifetime" className="mt-5" title="Founding Angel Plans"
         subtitle="One payment. Lifetime core access. Only 100 total licenses across all Angel tiers.">
+        {msg && <p className="mb-3 rounded-lg border border-warn/30 bg-warn/10 px-3 py-2 text-sm text-warn">{msg}</p>}
         {soldOut && <p className="mb-3 rounded-lg border border-line bg-card2 px-3 py-2 text-sm text-muted">Founding Angel Plans — Sold Out. Our first 100 Founding Angel licenses have been claimed. You can still choose a regular subscription or buy Insight Credits.</p>}
         {selectedFounderTier && !lifetimeGrant && (
           <p className="mb-3 rounded-lg border border-brand/30 bg-brand/10 px-3 py-2 text-sm font-medium text-brand-700">
@@ -619,6 +695,11 @@ export default function BillingPage() {
               Your Founding Angel tier is a permanent entitlement — no further purchase needed. Credit packs below still
               top up AI usage anytime.
             </p>
+          </div>
+        ) : ltdPaymentPending ? (
+          <div className="rounded-xl border border-brand/20 bg-brand/5 p-5">
+            <Spinner label="Confirming your payment and activating lifetime access…" />
+            <p className="mt-3 text-sm text-muted">Do not pay again. Your account will update automatically after Stripe confirms the payment.</p>
           </div>
         ) : (
           <div className="grid gap-4 sm:grid-cols-3">
@@ -641,10 +722,10 @@ export default function BillingPage() {
                 <Button
                   variant="soft"
                   className="mt-3"
-                  disabled={busy || soldOut}
+                  disabled={busy || soldOut || !checkoutProviderAvailable}
                   onClick={() => oneTimeCheckout(t.slug, "lifetime")}
                 >
-                  Buy {t.name} — ${t.price}
+                  {checkoutProviderAvailable ? `Pay $${t.price} with ${checkoutProvider === "stripe" ? "Stripe" : "Paddle"}` : "Checkout unavailable"}
                 </Button>
               </div>
               ))}
@@ -652,6 +733,20 @@ export default function BillingPage() {
               <p className="text-sm text-muted">No higher Founding Angel tier is available for this account.</p>
             )}
           </div>
+        )}
+        {selectedFounderTier && !lifetimeGrant && !ltdPaymentPending && (stripeOffered || paddleOffered) && (
+          <fieldset className="mt-4 rounded-xl border border-line bg-card2 p-4">
+            <legend className="px-1 text-xs font-semibold text-fg">Choose payment provider</legend>
+            <div className="flex flex-wrap gap-4 text-sm text-fg">
+              {(["stripe", "paddle"] as const).filter((p) => p === "stripe" ? stripeOffered : paddleOffered).map((p) => (
+                <label key={p} className="inline-flex items-center gap-2">
+                  <input type="radio" name="ltd-checkout-provider" value={p} checked={checkoutProvider === p} onChange={() => setCheckoutProvider(p)} />
+                  {p === "stripe" ? "Stripe (recommended)" : "Paddle"}
+                </label>
+              ))}
+            </div>
+            <p className="mt-3 text-xs text-muted">No free trial. This is a one-time LTD payment with a 30-day money-back guarantee. Regular subscription refunds are not included.</p>
+          </fieldset>
         )}
         <p className="mt-3 text-xs text-muted">
           Lifetime access applies to the purchased core plan and feature family while Insightistic operates. Monthly allowances are shared across connected sites and do not roll over. No free trial; 30-day money-back guarantee from the purchase date. See <Link href="/terms" className="underline hover:text-fg">the terms</Link> for details.

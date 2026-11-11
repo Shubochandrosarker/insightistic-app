@@ -20,11 +20,11 @@ export default function Terms() {
 
         <h2 className="mt-6 text-lg font-semibold text-slate-900">2. Accounts &amp; Billing</h2>
         <p className="mt-2">
-          Payments are processed by Paddle.com as Merchant of Record. Paddle is the seller of
-          record for your purchase — taxes are collected and remitted by Paddle, and your payment
-          details are handled by Paddle, never by Insightistic. Plan limits apply per the selected
-          plan and are enforced server-side. Founding Angel lifetime plans and Insight Credit packs are
-          covered in section 5.
+          Payments are processed through Paddle or Stripe, depending on the provider you choose at
+          checkout. Paddle may act as Merchant of Record where applicable; Stripe payments are
+          processed for WordPressistic LLC. We do not store raw payment card data. Plan limits apply
+          per the selected plan and are enforced server-side. Founding Angel lifetime plans and
+          Insight Credit packs are covered in section 5.
         </p>
 
         <h2 className="mt-6 text-lg font-semibold text-slate-900">3. Your Data</h2>
@@ -53,7 +53,8 @@ export default function Terms() {
           renewal date.
         </p>
         <p className="mt-2">
-          The one-time Founding Angel Lifetime Deal has no free trial and is paid once up front. It comes with
+          The one-time Founding Angel Lifetime Deal has no free trial and is paid once up front through
+          Stripe by default, with Paddle available as an alternative. It comes with
           a 30-day money-back guarantee: ask for a refund within 30 calendar days of the purchase date and we
           refund the full amount to the original payment method. After 30 days, a Lifetime Deal purchase is
           final. To request one, email hello@wordpressistic.com with the account email and transaction

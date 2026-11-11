@@ -11,6 +11,6 @@
         <p style="margin:18px 0;">
             <a href="{{ $appUrl }}/dashboard" style="background:#2563EB;color:#fff;padding:11px 18px;border-radius:8px;text-decoration:none;">Open your dashboard</a>
         </p>
-        <p style="color:#9aa3b2;font-size:12px;">You're on a {{ config('insightistic.trial_days', 7) }}-day trial. No card required to explore.</p>
+        <p style="color:#9aa3b2;font-size:12px;">Your free workspace is ready. Start a regular-plan trial from Billing whenever you are ready — no card is required for the trial.</p>
     </div>
 </div>

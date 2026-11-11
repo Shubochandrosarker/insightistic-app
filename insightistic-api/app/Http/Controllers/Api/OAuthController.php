@@ -165,17 +165,6 @@ class OAuthController extends Controller
             } catch (\Throwable $e) {
                 report($e);
             }
-            try {
-                // OAuth signups never see a register response, so the one-time
-                // key travels in the trial-started email (masked everywhere else).
-                app(\App\Services\LifecycleMailer::class)->send(
-                    $org->fresh(['plan', 'owner']),
-                    'trial_started',
-                    ['license_key' => $rawLicenseKey],
-                );
-            } catch (\Throwable $e) {
-                report($e);
-            }
         } else {
             // SECURITY: enforce the same account-state rules as password login.
             // No token for invited (must accept invite), disabled, suspended,

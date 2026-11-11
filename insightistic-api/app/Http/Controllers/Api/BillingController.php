@@ -137,8 +137,11 @@ class BillingController extends Controller
         try {
             $result = $stripeBilling->createCheckout(
                 $org, $data['plan'], $kind,
-                $app . '/dashboard/billing?checkout=success&provider=stripe&session_id={CHECKOUT_SESSION_ID}',
-                $app . '/dashboard/billing?checkout=cancel&provider=stripe',
+                $app . '/dashboard/billing?checkout=success&provider=stripe&plan='
+                    . rawurlencode($data['plan']) . '&kind=' . rawurlencode($kind)
+                    . '&session_id={CHECKOUT_SESSION_ID}',
+                $app . '/dashboard/billing?checkout=cancel&provider=stripe&plan='
+                    . rawurlencode($data['plan']) . '&kind=' . rawurlencode($kind),
             );
         } catch (BillingConfigurationException $e) {
             return response()->json(['message' => $e->getMessage(), 'code' => $e->errorCode], 422);
@@ -158,8 +161,8 @@ class BillingController extends Controller
 
         return response()->json([
             'providers' => array_values(array_filter([
-                in_array('paddle', $offered, true) && $this->paddleEnabled() ? ['id' => 'paddle', 'label' => 'Paddle', 'kinds' => ['monthly', 'yearly', 'lifetime', 'credit_pack']] : null,
                 $stripeBilling->enabled() ? ['id' => 'stripe', 'label' => 'Stripe', 'kinds' => ['monthly', 'yearly', 'lifetime']] : null,
+                in_array('paddle', $offered, true) && $this->paddleEnabled() ? ['id' => 'paddle', 'label' => 'Paddle', 'kinds' => ['monthly', 'yearly', 'lifetime', 'credit_pack']] : null,
             ])),
             'current' => $this->providerFor($this->tenancy->organization()),
         ]);
@@ -362,6 +365,7 @@ class BillingController extends Controller
 
         try {
             app(LicenseService::class)->syncForOrganization($org);
+            app(LifecycleMailer::class)->send($org->fresh(['plan', 'owner']), 'trial_started', [], 'trial:' . $org->id);
             app(\App\Services\Analytics\AttributionService::class)->event('trial_started', $org, $request->user(), ['plan' => $data['plan']]);
         } catch (\Throwable) {
         }

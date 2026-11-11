@@ -30,7 +30,6 @@ const settings = {
   storage: { writable: true, reports_disk: "public" },
   scheduler: { status: "configured", detail: "nightly snapshots 02:00" },
   mail: { mailer: "smtp", configured: true },
-  paddle: { configured: true, environment: "production" },
   stripe: { configured: false, mode: "test" },
   ai: { provider: "plan_aware", configured: true },
   counts: { organizations: 7, users: 13, sites: 21, plans: 5, super_admins: 1 },
@@ -46,7 +45,7 @@ const health = {
   scheduler: { status: "configured", detail: "nightly snapshots 02:00" },
   storage: { writable: true, reports_disk: "public" },
   mail: { mailer: "smtp", configured: true },
-  paddle: { configured: true, environment: "production" },
+  stripe: { configured: true, mode: "test", api: "ok", webhook_signing_configured: true },
   ai: { provider: "plan_aware", configured: true, reachable: true },
   recent_failed_jobs: [],
 };
@@ -64,14 +63,14 @@ describe("Admin settings page", () => {
     expect(apiMocks.apiGet).not.toHaveBeenCalledWith("/admin/system-health");
   });
 
-  it("renders platform facts: release, counts and paddle env mode", async () => {
+  it("renders platform facts: release, counts and app env mode", async () => {
     render(<AdminSettings />);
 
     await waitFor(() => expect(screen.getByText("abc1234")).toBeInTheDocument());
     expect(screen.getByText("7")).toBeInTheDocument();
     expect(screen.getByText("13")).toBeInTheDocument();
-    // Paddle env mode is shown (twice: app env badge + paddle badge).
-    expect(screen.getAllByText("production").length).toBeGreaterThanOrEqual(2);
+    // App env badge; the Paddle integration row is gone (Stripe-only surface).
+    expect(screen.getByText("production")).toBeInTheDocument();
     expect(screen.getAllByText(/no secrets/i).length).toBeGreaterThanOrEqual(1);
   });
 
@@ -105,7 +104,8 @@ describe("Admin system health page", () => {
 
     await waitFor(() => expect(screen.getByText("API")).toBeInTheDocument());
     expect(screen.getByText("Database")).toBeInTheDocument();
-    expect(screen.getByText("Paddle")).toBeInTheDocument();
+    expect(screen.getByText("Stripe")).toBeInTheDocument();
+    expect(screen.queryByText("Paddle")).not.toBeInTheDocument();
     expect(screen.getByText("Cache")).toBeInTheDocument();
     expect(screen.getByText("Recent failed jobs")).toBeInTheDocument();
     expect(screen.getByText("No failed jobs 🎉")).toBeInTheDocument();

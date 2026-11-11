@@ -47,7 +47,7 @@ export default function Privacy() {
 
         <h2 className="mt-6 text-lg font-semibold text-slate-900">Sub-processors</h2>
         <ul className="mt-2 list-disc space-y-1.5 pl-5">
-          <li>Paddle or Stripe (billing; receives buyer contact and payment data required to process the purchase)</li>
+          <li>Stripe (billing; receives buyer contact and payment data required to process the purchase)</li>
           <li>Our AI provider (insight and AI-visibility generation)</li>
           <li>Email delivery providers</li>
           <li>Cloud hosting infrastructure</li>

@@ -10,8 +10,6 @@ import { Badge } from "@/components/ui/Badge";
 import { PageHeader } from "@/components/dashboard/PageHeader";
 import { ErrorState } from "@/components/dashboard/states";
 import { Spinner } from "@/components/ui/Spinner";
-import { initPaddle, openPaddleCheckout } from "@/lib/paddle";
-import type { PaddleEnvironment } from "@/lib/paddle";
 import { money0, num } from "@/lib/format";
 import { TRIAL_DAYS } from "@/lib/trial";
 
@@ -43,7 +41,7 @@ type Phase = "idle" | "processing";
 const POLL_TRIES = 15;
 const POLL_INTERVAL_MS = 2000;
 
-// Founding Angel LTD: one-time Paddle prices mapped to a permanent
+// Founding Angel LTD: one-time prices mapped to a permanent
 // entitlement grant — the webhook fulfills it, the checkout never creates a
 // subscription. The campaign cap is read from the backend catalog response.
 const FOUNDER_TIER_FALLBACK = [
@@ -106,42 +104,11 @@ function UsageBar({ label, used, limit }: { label: string; used: number; limit: 
   );
 }
 
-/** The 501/code shape the API returns when the Paddle flag is off for an org. */
-function isPaddleNotEnabled(e: any): boolean {
-  return e?.status === 501 || e?.data?.code === "paddle_not_enabled" || e?.code === "paddle_not_enabled";
-}
-
-/**
- * Checkout errors split in two: API validation (readable, show as-is) and
- * Paddle.js internals throwing inside the overlay flow — those surface as
- * minified TypeErrors like "ton is not a function", which read as broken to
- * the user. Log the original for diagnostics and show something actionable.
- */
-function checkoutErrorMessage(e: any): string {
-  const raw = e?.message ? String(e.message) : "";
-  if (/is not a function|is not a constructor|Unknown option parameter/i.test(raw)) {
-    console.error("Paddle checkout failed", e);
-    return "Checkout could not start — a payment-script error. Refresh the page and try again; if it keeps failing, contact support.";
-  }
-  return raw || "Checkout could not be started.";
-}
-
 export default function BillingPage() {
   const { data, loading, error, reload } = useApi<any>("/billing/subscription");
   const { data: plansData } = useApi<any>("/public/plans");
-  // Which processors this org can check out with, and a provider-agnostic
-  // summary (next renewal, invoices, portal). Both are optional: an older
-  // API without them leaves the page on its Paddle-only behaviour.
-  const { data: providersData } = useApi<any>("/billing/providers");
+  // Provider-agnostic summary: next renewal, invoices, portal availability.
   const { data: summary } = useApi<any>("/billing/summary");
-  // Stripe is the primary checkout. Paddle remains available as an explicit
-  // secondary choice when the live API advertises it.
-  const [checkoutProvider, setCheckoutProvider] = useState<"paddle" | "stripe">(() => {
-    if (typeof window !== "undefined" && FOUNDER_TIER_SLUGS.has(new URLSearchParams(window.location.search).get("plan") ?? "")) {
-      return "stripe";
-    }
-    return "stripe";
-  });
   const { sites } = useDashboard();
   const [plan, setPlan] = useState("growth");
   const [interval, setIntervalSel] = useState("monthly");
@@ -153,7 +120,6 @@ export default function BillingPage() {
   const [checkoutReturn, setCheckoutReturn] = useState<{ status: "success" | "cancel"; provider: string | null; kind: string | null } | null>(null);
   const trialDays: number = Number(data?.trial?.days ?? TRIAL_DAYS);
   const trialEligible: boolean = data?.trial?.eligible === true;
-  const paidRef = useRef(false);
   const checkoutReturnHandled = useRef(false);
 
   // Preselect the plan passed from the marketing-site CTA (?plan=).
@@ -164,6 +130,13 @@ export default function BillingPage() {
     const result = params.get("checkout");
     if (result === "success" || result === "cancel") {
       setCheckoutReturn({ status: result, provider: params.get("provider"), kind: params.get("kind") });
+    }
+    // Stripe credit-pack checkout returns here with ?credits=success|cancel.
+    if (params.get("credits") === "success") {
+      setMsg("Payment received — your credits land after checkout completes. Refresh in a moment if the balance hasn't moved yet.");
+    }
+    if (params.get("credits") === "cancel") {
+      setMsg("Checkout was cancelled. No payment was taken; you can try again.");
     }
     if (selectedInterval === "yearly" || selectedInterval === "monthly") setIntervalSel(selectedInterval);
     if (!p) return;
@@ -183,56 +156,6 @@ export default function BillingPage() {
       }, 250);
     }
   }, []);
-
-  useEffect(() => {
-    if (!selectedFounderTier) return;
-    const configured = Array.isArray(providersData?.providers)
-      ? providersData.providers.map((p: any) => String(p.id))
-      : null;
-    if (!configured) {
-      setCheckoutProvider("stripe");
-      return;
-    }
-    setCheckoutProvider((current) => {
-      if (configured.includes(current)) return current;
-      return configured.includes("stripe") ? "stripe" : "paddle";
-    });
-  }, [selectedFounderTier, providersData]);
-
-  useEffect(() => {
-    if (!Array.isArray(providersData?.providers)) return;
-    const configured = providersData.providers.map((p: any) => String(p.id));
-    setCheckoutProvider((current) => {
-      if (configured.includes(current)) return current;
-      return configured.includes("stripe") ? "stripe" : "paddle";
-    });
-  }, [providersData]);
-
-  /**
-   * Paddle webhook, not the checkout callback, makes a subscription real.
-   * Poll until the org's subscription is projected as Paddle (or the plan
-   * visibly changed), then refresh the page data (roadmap 22A §9).
-   */
-  async function finishSetup(beforePlanName: string | undefined) {
-    setFinishLabel("Finishing your subscription setup…");
-    setPhase("processing");
-    for (let attempt = 0; attempt < POLL_TRIES; attempt++) {
-      const d = await apiGet("/billing/subscription").catch(() => null);
-      const name = d?.plan?.name;
-      if (d?.subscription?.billing_provider === "paddle" || (name && name !== beforePlanName)) {
-        setMsg(`You're on ${name || plan} — everything is active.`);
-        setPhase("idle");
-        setBusy(false);
-        reload();
-        return;
-      }
-      await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
-    }
-    setMsg("Payment received — your subscription is finishing setup. Refresh in a moment.");
-    setPhase("idle");
-    setBusy(false);
-    reload();
-  }
 
   /** Regular plans start as a no-card trial (TRIAL_DAYS, from the API) with no checkout. */
   async function startTrial() {
@@ -255,91 +178,25 @@ export default function BillingPage() {
       const r: any = await apiPost("/billing/stripe/checkout", { plan: checkoutPlan, kind: checkoutKind });
       window.location.href = r.url;
     } catch (e: any) {
-      setMsg(e?.message || "Stripe checkout could not be started. Try again or choose Paddle.");
-      setBusy(false);
-    }
-  }
-
-  async function checkout() {
-    if (checkoutProvider === "stripe") return stripeCheckout();
-    setBusy(true); setMsg(null);
-    const beforePlanName = data?.plan?.name;
-    try {
-      let cfg: any;
-      try {
-        cfg = await apiPost("/billing/checkout-config", { plan, kind: interval });
-      } catch (e: any) {
-        // Organizations still billed through Stripe keep the legacy redirect.
-        if (!isPaddleNotEnabled(e)) throw e;
-        const r = await apiPost("/billing/checkout", { plan, interval });
-        window.location.href = r.url;
-        return;
-      }
-
-      const environment: PaddleEnvironment = cfg?.environment === "sandbox" ? "sandbox" : "production";
-      await initPaddle(cfg.client_token, environment);
-      paidRef.current = false;
-      openPaddleCheckout({
-        priceId: cfg.price_id,
-        email: cfg.customer?.email,
-        customerId: cfg.customer?.id,
-        customData: cfg.custom_data,
-        onSuccess: () => { paidRef.current = true; finishSetup(beforePlanName); },
-        onClose: (completed) => {
-          // A completed close is the success flow's business; only an
-          // abandoned checkout resets the form (silently).
-          if (completed || paidRef.current) return;
-          setBusy(false);
-          setPhase("idle");
-        },
-        onUnavailable: () => {
-          setMsg("Checkout could not be loaded — the secure payment host is unreachable. Check your connection and try again.");
-          setPhase("idle");
-          setBusy(false);
-        },
-      });
-    } catch (e: any) {
-      setMsg(checkoutErrorMessage(e));
-      setPhase("idle");
+      setMsg(e?.data?.message || e?.message || "Checkout could not be started. Try again.");
       setBusy(false);
     }
   }
 
   /**
-   * One-time purchases (founder lifetime / credit packs) reuse the same
-   * Paddle overlay, but the webhook grants entitlements/credits instead of
-   * projecting a subscription — so the completion poll watches for the
-   * lifetime grant appearing rather than billing_provider flipping.
+   * One-time purchases are Stripe-only: founder lifetime goes through the
+   * same checkout endpoint (mode=payment server-side), credit packs through
+   * the dedicated POST /billing/credits/checkout. Entitlements and credits
+   * are granted by the webhook after payment, never by the redirect.
    */
   async function oneTimeCheckout(planSlug: string, kind: "lifetime" | "credit_pack", creditPack?: string) {
-    if (kind === "lifetime" && checkoutProvider === "stripe") return stripeCheckout(planSlug, kind);
+    if (kind === "lifetime") return stripeCheckout(planSlug, kind);
     setBusy(true); setMsg(null);
     try {
-      const payload = { plan: planSlug, kind, ...(creditPack ? { credit_pack: creditPack } : {}) };
-      const cfg: any = await apiPost("/billing/checkout-config", payload);
-      const environment: PaddleEnvironment = cfg?.environment === "sandbox" ? "sandbox" : "production";
-      await initPaddle(cfg.client_token, environment);
-      paidRef.current = false;
-      openPaddleCheckout({
-        priceId: cfg.price_id,
-        email: cfg.customer?.email,
-        customerId: cfg.customer?.id,
-        customData: cfg.custom_data,
-        onSuccess: () => { paidRef.current = true; finishOneTime(planSlug, kind); },
-        onClose: (completed) => {
-          if (completed || paidRef.current) return;
-          setBusy(false);
-          setPhase("idle");
-        },
-        onUnavailable: () => {
-          setMsg("Checkout could not be loaded — the secure payment host is unreachable. Check your connection and try again.");
-          setPhase("idle");
-          setBusy(false);
-        },
-      });
+      const r: any = await apiPost("/billing/credits/checkout", { pack: creditPack });
+      window.location.href = r.url;
     } catch (e: any) {
-      setMsg(checkoutErrorMessage(e));
-      setPhase("idle");
+      setMsg(e?.data?.message || e?.message || "Checkout could not be started.");
       setBusy(false);
     }
   }
@@ -362,39 +219,6 @@ export default function BillingPage() {
     setMsg("Payment received — account activation is finishing. Refresh in a moment if the plan has not appeared yet.");
     setCheckoutReturn(null);
     setPhase("idle"); setBusy(false); reload();
-  }
-
-  async function finishOneTime(planSlug: string, kind: "lifetime" | "credit_pack") {
-    setFinishLabel("Finishing your lifetime setup…");
-    setPhase("processing");
-
-    // The subscription payload exposes no credit balance today, so there is
-    // nothing observable to poll — say where the credits land instead of
-    // inventing a number (they appear once the webhook fulfills the pack).
-    if (kind === "credit_pack") {
-      setMsg("Payment received — your credits land after checkout completes. Refresh in a moment if the balance hasn't moved.");
-      setPhase("idle");
-      setBusy(false);
-      reload();
-      return;
-    }
-
-    for (let attempt = 0; attempt < POLL_TRIES; attempt++) {
-      const d = await apiGet("/billing/subscription").catch(() => null);
-      const grant = lifetimeGrantOf(d);
-      if (grant) {
-        setMsg(`Lifetime ${grantTierLabel(grant.plan_slug!)} is active — welcome to the Founding Angels.`);
-        setPhase("idle");
-        setBusy(false);
-        reload();
-        return;
-      }
-      await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
-    }
-    setMsg("Payment received — your lifetime access is finishing setup. Refresh in a moment.");
-    setPhase("idle");
-    setBusy(false);
-    reload();
   }
 
   async function portal() {
@@ -436,14 +260,12 @@ export default function BillingPage() {
     if (!data || !checkoutReturn || checkoutReturnHandled.current) return;
     checkoutReturnHandled.current = true;
     if (checkoutReturn.status === "cancel") {
-      setMsg("Checkout was cancelled. No payment was taken; you can choose Stripe or Paddle and try again.");
+      setMsg("Checkout was cancelled. No payment was taken; you can try again.");
       return;
     }
     if (checkoutReturn.provider === "stripe") {
       void finishStripeSetup(checkoutReturn.kind || "subscription");
     }
-    // Paddle completion remains inside its hosted overlay and is handled by
-    // finishOneTime/finishSetup, so this is intentionally a no-op for it.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data, checkoutReturn]);
 
@@ -470,15 +292,6 @@ export default function BillingPage() {
       : data.organization?.status === "expired"
         ? "trial ended"
         : null;
-  const providersLoaded = Array.isArray(providersData?.providers);
-  const offeredProviderIds = new Set((providersData?.providers ?? []).map((p: any) => String(p.id)));
-  // Keep the legacy Paddle-only page usable while the additive provider
-  // endpoint is loading. Once it responds, only render providers the API
-  // explicitly allows for this account.
-  const stripeOffered = !providersLoaded || offeredProviderIds.has("stripe");
-  const paddleOffered = !providersLoaded || offeredProviderIds.has("paddle");
-  const checkoutProviderAvailable = checkoutProvider === "stripe" ? stripeOffered : paddleOffered;
-  const portalInfo: { type?: string; available?: boolean } = summary?.portal ?? {};
   const invoices: any[] = summary?.invoices ?? [];
   const hasSubscription = !!data.subscription?.stripe_subscription_id || !!provider;
   const lifetimeGrant = lifetimeGrantOf(data);
@@ -560,25 +373,13 @@ export default function BillingPage() {
           )}
           {summary?.provider && (
             <div className="mt-1 text-sm text-muted">
-              Billed via {summary.provider === "stripe" ? "Stripe" : "Paddle"}
+              Billed via Stripe
               {summary.next_renewal_at && !cancelPending && ` · renews ${new Date(summary.next_renewal_at).toLocaleDateString()}`}
             </div>
           )}
           <div className="mt-5 flex flex-wrap gap-2">
             <Button onClick={() => document.getElementById("change-plan")?.scrollIntoView({ behavior: "smooth" })}>Upgrade</Button>
             <Button variant="ghost" onClick={portal} disabled={busy}>Manage in portal</Button>
-            {/* Paddle customer portal — the link of record (Paddle orgs only). The button above
-                mints a fresh session for active Paddle subscriptions; this
-                link always reaches Paddle's portal (email lookup) even
-                without a subscription. */}
-            {portalInfo.type !== "stripe_portal" && <a
-              href="https://customer-portal.paddle.com/cpl_01m1ycy6ry01sg09dgnyt31pd1"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex h-9 items-center rounded-xl px-4 text-sm font-medium text-brand-700 underline-offset-2 hover:underline"
-            >
-              Manage subscription ↗
-            </a>}
             {hasSubscription && !cancelPending && (
               <Button variant="danger" onClick={cancelSub} disabled={busy}>Cancel subscription</Button>
             )}
@@ -629,19 +430,6 @@ export default function BillingPage() {
             </select>
           </label>
         </div>
-        {stripeOffered && !trialEligible && (
-          <fieldset className="mt-4">
-            <legend className="mb-1.5 text-xs font-semibold text-fg">Pay with</legend>
-            <div className="flex flex-wrap gap-4 text-sm text-fg">
-              {(["paddle", "stripe"] as const).filter((p) => p === "stripe" ? stripeOffered : paddleOffered).map((p) => (
-                <label key={p} className="inline-flex items-center gap-2">
-                  <input type="radio" name="checkout-provider" value={p} checked={checkoutProvider === p} onChange={() => setCheckoutProvider(p)} />
-                  {p === "stripe" ? "Card via Stripe" : "Paddle (cards, PayPal, local methods)"}
-                </label>
-              ))}
-            </div>
-          </fieldset>
-        )}
         <div className="mt-4">
           {phase === "processing" ? (
             <Spinner label={finishLabel} />
@@ -654,8 +442,8 @@ export default function BillingPage() {
                 </>
               ) : (
                 <>
-                  <Button onClick={checkout} disabled={busy || !selectedPlanAvailable}>{busy ? "Opening checkout…" : planOptions.length ? "Continue to checkout" : "No upgrade available"}</Button>
-                  <p className="mt-2 text-xs text-muted">Secure checkout via {checkoutProvider === "stripe" ? "Stripe" : "Paddle"}. Subscription charges are not refundable — cancel any time before your renewal date to stop the next charge.</p>
+                  <Button onClick={() => stripeCheckout()} disabled={busy || !selectedPlanAvailable}>{busy ? "Opening checkout…" : planOptions.length ? "Continue to checkout" : "No upgrade available"}</Button>
+                  <p className="mt-2 text-xs text-muted">Secure checkout via Stripe. Subscription charges are not refundable — cancel any time before your renewal date to stop the next charge.</p>
                 </>
               )}
             </>
@@ -724,10 +512,10 @@ export default function BillingPage() {
                 <Button
                   variant="soft"
                   className="mt-3"
-                  disabled={busy || soldOut || !checkoutProviderAvailable}
+                  disabled={busy || soldOut}
                   onClick={() => oneTimeCheckout(t.slug, "lifetime")}
                 >
-                  {checkoutProviderAvailable ? `Pay $${t.price} with ${checkoutProvider === "stripe" ? "Stripe" : "Paddle"}` : "Checkout unavailable"}
+                  Pay ${t.price}
                 </Button>
               </div>
               ))}
@@ -735,20 +523,6 @@ export default function BillingPage() {
               <p className="text-sm text-muted">No higher Founding Angel tier is available for this account.</p>
             )}
           </div>
-        )}
-        {selectedFounderTier && !lifetimeGrant && !ltdPaymentPending && (stripeOffered || paddleOffered) && (
-          <fieldset className="mt-4 rounded-xl border border-line bg-card2 p-4">
-            <legend className="px-1 text-xs font-semibold text-fg">Choose payment provider</legend>
-            <div className="flex flex-wrap gap-4 text-sm text-fg">
-              {(["stripe", "paddle"] as const).filter((p) => p === "stripe" ? stripeOffered : paddleOffered).map((p) => (
-                <label key={p} className="inline-flex items-center gap-2">
-                  <input type="radio" name="ltd-checkout-provider" value={p} checked={checkoutProvider === p} onChange={() => setCheckoutProvider(p)} />
-                  {p === "stripe" ? "Stripe (recommended)" : "Paddle"}
-                </label>
-              ))}
-            </div>
-            <p className="mt-3 text-xs text-muted">No free trial. This is a one-time LTD payment with a 30-day money-back guarantee. Regular subscription refunds are not included.</p>
-          </fieldset>
         )}
         <p className="mt-3 text-xs text-muted">
           Lifetime access applies to the purchased core plan and feature family while Insightistic operates. Monthly allowances are shared across connected sites and do not roll over. No free trial; 30-day money-back guarantee from the purchase date. See <Link href="/terms" className="underline hover:text-fg">the terms</Link> for details.

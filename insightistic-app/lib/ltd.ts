@@ -11,7 +11,7 @@
  * When it is set, /ltd renders and every Buy Now button points at that URL.
  *
  * Existing Founding Angel holders are unaffected: their grant, licenses and
- * /dashboard/billing (including Stripe/Paddle payment returns) are never
+ * /dashboard/billing (including Stripe payment returns) are never
  * redirected. Prices are not defined here.
  */
 

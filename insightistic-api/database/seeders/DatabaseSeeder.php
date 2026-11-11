@@ -10,7 +10,7 @@ class DatabaseSeeder extends Seeder
     {
         $this->call(PlanSeeder::class);
         // Local mapping of the live Paddle catalog (pure DB rows, no API
-        // calls) — the webhook projector and checkout-config resolve plan
+        // calls) — the read-only Paddle webhook projector resolves plan
         // from these rows.
         $this->call(PaddleCatalogSeeder::class);
     }

@@ -3,7 +3,6 @@
 namespace App\Http\Controllers\Api;
 
 use App\Domain\Billing\Exceptions\BillingConfigurationException;
-use App\Domain\Billing\Exceptions\PaddleApiException;
 use App\Domain\Billing\PaddleBillingService;
 use App\Domain\Billing\CreditWallet;
 use App\Domain\Billing\EntitlementResolver;
@@ -18,7 +17,6 @@ use App\Services\StripeService;
 use App\Services\StripeWebhookProcessor;
 use App\Services\UsageService;
 use App\Support\Tenancy;
-use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 
@@ -243,15 +241,12 @@ class BillingController extends Controller
         return response()->json($result);
     }
 
-    /** GET /billing/providers — which checkout providers the customer may choose. */
+    /** GET /billing/providers — checkout providers the customer may choose. Stripe only: the Paddle checkout surface is retired (webhook stays read-only). */
     public function providers(StripeBillingService $stripeBilling)
     {
-        $offered = (array) config('billing.checkout_providers', []);
-
         return response()->json([
             'providers' => array_values(array_filter([
                 $stripeBilling->enabled() ? ['id' => 'stripe', 'label' => 'Stripe', 'kinds' => ['monthly', 'yearly', 'lifetime']] : null,
-                in_array('paddle', $offered, true) && $this->paddleEnabled() ? ['id' => 'paddle', 'label' => 'Paddle', 'kinds' => ['monthly', 'yearly', 'lifetime', 'credit_pack']] : null,
             ])),
             'current' => $this->providerFor($this->tenancy->organization()),
         ]);
@@ -281,8 +276,7 @@ class BillingController extends Controller
                 'total_minor' => (int) $t->total_minor,
                 'tax_minor'   => (int) $t->tax_minor,
                 'date'        => ($t->completed_at ?? $t->occurred_at)?->toIso8601String(),
-                // Stripe hosted invoice link (safe, customer-scoped). Paddle
-                // invoices are reached through the Paddle portal.
+                // Stripe hosted invoice link (safe, customer-scoped).
                 'url'         => is_array($t->summary_json) ? ($t->summary_json['hosted_invoice_url'] ?? null) : null,
             ])->values();
 
@@ -294,11 +288,10 @@ class BillingController extends Controller
             'current_period_end'   => $sub?->current_period_end?->toIso8601String(),
             'cancel_at_period_end' => (bool) $sub?->cancel_at_period_end,
             'trial_ends_at'        => $org->trial_ends_at?->toIso8601String(),
-            'portal'               => match ($provider) {
-                'paddle' => ['type' => 'paddle_portal', 'available' => (bool) ($sub?->provider_customer_id || $org->paddle_customer_id)],
-                'stripe' => ['type' => 'stripe_portal', 'available' => (bool) ($org->stripe_customer_id || $sub?->stripe_customer_id)],
-                default  => ['type' => null, 'available' => false],
-            },
+            // Stripe-only portal (Paddle surface retired): the portal is the
+            // Stripe Customer Portal for every org, legacy Paddle-billed ones
+            // included — portal() creates the Stripe customer on the fly.
+            'portal'               => ['type' => 'stripe_portal', 'available' => (bool) ($org->stripe_customer_id || $sub?->stripe_customer_id)],
             'invoices' => $invoices,
         ]);
     }
@@ -319,36 +312,22 @@ class BillingController extends Controller
         return $org->paddle_customer_id ? 'paddle' : null;
     }
 
-    /** Open the Stripe customer portal. */
+    /**
+     * Open the Stripe customer portal — for every org, Paddle-era ones
+     * included. The Stripe customer is created on the fly (get-or-create)
+     * so the portal always opens; no Paddle fallback.
+     */
     public function portal()
     {
         $org = $this->tenancy->organization();
 
-        // Provider-aware: Paddle orgs get a temporary Paddle customer-portal
-        // link, Stripe orgs keep the Stripe portal. Paddle links are generated
-        // per request and never persisted.
-        if ($this->providerFor($org) === 'paddle') {
-            $url = $this->paddleBilling->portalUrl($org);
-
-            if (! $url) {
-                return response()->json(['message' => 'Could not open the Paddle portal. Contact support if this persists.'], 502);
-            }
-
-            return response()->json(['url' => $url]);
-        }
-
-        $customerId = $org->stripe_customer_id ?: $org->subscription?->stripe_customer_id;
-
-        if (! $customerId) {
-            return response()->json(['message' => 'No billing account yet. Start a checkout first.'], 422);
-        }
-
         try {
+            $customerId = $this->stripe->customerId($org);
             $url = $this->stripe->portalUrl($customerId, rtrim(config('insightistic.app_url'), '/') . '/dashboard/billing');
         } catch (\Throwable $e) {
             Log::warning('Stripe portal failed', ['org' => $org->id, 'error' => class_basename($e)]);
 
-            return response()->json(['message' => 'Could not open the Stripe portal. Contact support if this persists.'], 502);
+            return response()->json(['message' => 'Could not open the billing portal. Contact support if this persists.'], 502);
         }
 
         return response()->json(['url' => $url]);
@@ -464,104 +443,6 @@ class BillingController extends Controller
             'organization' => $org->only(['id', 'status', 'trial_ends_at', 'trial_plan_slug']),
             'credits' => $this->creditWallet->summary($org),
         ]);
-    }
-
-    // ---- Paddle (roadmap 23-STRIPE-TO-PADDLE-MIGRATION) ----------------------
-    // Both actions are flag-gated here rather than at the route, so the API
-    // surface stays discoverable (501 tells the SPA the flag is off, not 404).
-
-    /** Plan/currency/price data the SPA needs to render a Paddle.js checkout. */
-    public function paddleCheckoutConfig(Request $request)
-    {
-        if (! $this->paddleEnabled()) {
-            return response()->json(['message' => 'Paddle billing is not enabled.', 'code' => 'paddle_not_enabled'], 501);
-        }
-
-        $data = $request->validate([
-            'plan' => ['required', 'string', 'exists:plans,slug'],
-            'kind' => ['required', 'in:monthly,yearly,lifetime,credit_pack'],
-            'credit_pack' => ['required_if:kind,credit_pack', 'nullable', 'in:credits_5000,credits_20000,credits_50000'],
-        ]);
-
-        // Funnel event (spec §33): checkout OPENED — the verified purchase
-        // event lands later from the Paddle webhook projector, never from
-        // the browser.
-        try {
-            app(\App\Services\Analytics\AttributionService::class)->event(
-                'checkout_started',
-                $this->tenancy->organization(),
-                $request->user(),
-                ['plan' => $data['plan'], 'checkout_kind' => $data['kind'], 'credit_pack' => $data['credit_pack'] ?? null],
-            );
-        } catch (\Throwable) {
-        }
-
-        try {
-            return response()->json($this->paddleBilling->checkoutConfig(
-                $this->tenancy->organization(),
-                $data['plan'],
-                $data['kind'],
-                $data['credit_pack'] ?? null,
-            ));
-        } catch (BillingConfigurationException $e) {
-            return response()->json(['message' => $e->getMessage(), 'code' => $e->errorCode], 422);
-        } catch (PaddleApiException $e) {
-            return $this->providerError($e);
-        }
-    }
-
-    /** Move the org's Paddle subscription onto another plan's price. */
-    public function paddleChangePlan(Request $request)
-    {
-        if (! $this->paddleEnabled()) {
-            return response()->json(['message' => 'Paddle billing is not enabled.', 'code' => 'paddle_not_enabled'], 501);
-        }
-
-        $data = $request->validate([
-            'plan'                   => ['required', 'string', 'exists:plans,slug'],
-            'proration_billing_mode' => ['sometimes', 'in:prorated_immediately,prorated_next_billing_period,do_not_bill,full_immediately'],
-        ]);
-
-        $sub = $this->tenancy->organization()->subscription;
-
-        if (! $sub?->provider_subscription_id || $sub->billing_provider !== 'paddle') {
-            return response()->json(['message' => 'No active subscription to change.', 'code' => 'no_subscription'], 422);
-        }
-
-        try {
-            $subscription = $this->paddleBilling->changePlan(
-                $this->tenancy->organization(),
-                $data['plan'],
-                $data['proration_billing_mode'] ?? 'prorated_immediately',
-            );
-
-            return response()->json(['ok' => true, 'subscription' => $subscription->fresh()]);
-        } catch (ModelNotFoundException) {
-            return response()->json(['message' => 'No active subscription to change.', 'code' => 'no_subscription'], 422);
-        } catch (BillingConfigurationException $e) {
-            return response()->json(['message' => $e->getMessage(), 'code' => $e->errorCode], 422);
-        } catch (PaddleApiException $e) {
-            return $this->providerError($e);
-        }
-    }
-
-    private function paddleEnabled(): bool
-    {
-        return (bool) config('feature-flags.paddle');
-    }
-
-    /**
-     * Map a Paddle API failure onto the API's provider-error shape without
-     * ever echoing provider internals (or the API key) to the tenant.
-     */
-    private function providerError(PaddleApiException $e)
-    {
-        Log::warning('Paddle API error during tenant billing action.', [
-            'status' => $e->status,
-            'error'  => $e->getMessage(),
-        ]);
-
-        return response()->json(['message' => 'Billing provider is temporarily unavailable.', 'code' => 'billing_provider_error'], 502);
     }
 
     /** Subscription JSON: full model (provider-neutral columns included) + lifetime_grant. */

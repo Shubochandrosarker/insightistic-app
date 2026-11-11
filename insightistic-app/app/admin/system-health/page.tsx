@@ -63,9 +63,9 @@ export default function AdminSystemHealth() {
         <Health title="Scheduler" ok detail={data.scheduler?.detail || "configured"} />
         <Health title="Storage" ok={!!data.storage?.writable} detail={`${data.storage?.writable ? "writable" : "not writable"} · disk: ${data.storage?.reports_disk}`} />
         <Health title="Mail" ok={!!data.mail?.configured} warn={!data.mail?.configured} detail={`Mailer: ${data.mail?.mailer}`} />
-        {(["paddle", "stripe"] as const).map((id) => {
+        {(["stripe"] as const).map((id) => {
           const p = data[id] || {};
-          const label = id === "paddle" ? "Paddle" : "Stripe";
+          const label = "Stripe";
           const ok = !!p.configured && p.api === "ok" && !!p.webhook_signing_configured;
           const parts = [
             p.configured ? (p.mode || p.environment || "configured") : "not configured",

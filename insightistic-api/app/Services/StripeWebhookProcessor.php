@@ -80,7 +80,14 @@ class StripeWebhookProcessor
             case 'checkout.session.completed':
             case 'checkout.session.async_payment_succeeded':
                 if (($event->data->object->mode ?? null) === 'payment') {
-                    $this->fulfillLifetime($event->data->object);
+                    // One-time payments are told apart by metadata: a credit
+                    // pack carries `pack`, the Founding Angel LTD carries
+                    // `plan_id`.
+                    if (isset($event->data->object->metadata->pack)) {
+                        $this->fulfillCreditPack($event->data->object);
+                    } else {
+                        $this->fulfillLifetime($event->data->object);
+                    }
                     break;
                 }
                 $this->syncSubscription($event);
@@ -344,6 +351,56 @@ class StripeWebhookProcessor
             'refund_deadline' => $txn->completed_at?->copy()->addDays((int) config('commercial.refund_window_days', 30))->format('M j, Y'),
             'plan_name'       => $plan->name,
         ], 'ltd:' . $txn->provider_transaction_id);
+    }
+
+    /**
+     * checkout.session.completed with mode=payment and metadata.pack — an
+     * Insight Credit pack (StripeBillingService::createCreditsCheckout).
+     *
+     * Credited exactly once per Checkout Session id: the ledger's unique
+     * (source_type, source_reference) pair is the replay key, so a duplicate
+     * delivery — even one Stripe re-sends under a *new* event id — lands on
+     * the original entry instead of a second grant. processOnce() already
+     * covers the same-event-id case; this covers the rest.
+     *
+     * The pack catalogue, not the session metadata, decides the amount: the
+     * metadata is only a routing hint, so a tampered/stale value can never
+     * mint extra credits.
+     */
+    public function fulfillCreditPack($session): void
+    {
+        if (($session->payment_status ?? null) !== 'paid') {
+            return; // async payment methods complete later via checkout.session.async_payment_succeeded
+        }
+
+        $meta = $session->metadata ?? null;
+        $sessionId = (string) ($session->id ?? '');
+        $org = $this->resolveOrg($meta->organization_id ?? null, $session->customer ?? null);
+        $pack = collect(config('commercial.credit_packs', []))
+            ->first(fn (array $candidate): bool => ($candidate['slug'] ?? null) === (string) ($meta->pack ?? ''));
+        $credits = (int) ($pack['credits'] ?? 0);
+
+        if (! $org || $credits <= 0 || $sessionId === '') {
+            \Illuminate\Support\Facades\Log::warning('Stripe credit-pack session without org/pack metadata', [
+                'session' => $sessionId ?: null,
+                'pack'    => $meta->pack ?? null,
+            ]);
+
+            return;
+        }
+
+        app(\App\Domain\Billing\CreditWallet::class)->grantPurchased(
+            $org, $credits, $sessionId, 'stripe_credit_pack', 'stripe_credit_pack',
+            ['pack' => $pack['slug'], 'payment_intent' => $session->payment_intent ?? null],
+        );
+
+        // Financial history for the billing page — same row shape Paddle's
+        // credit-pack projector writes, one-time so no subscription id.
+        $this->recordTransaction($org, $sessionId, 'credit_pack', 'completed', $session, [
+            'payment_intent' => $session->payment_intent ?? null,
+            'pack'           => $pack['slug'],
+            'credits'        => $credits,
+        ]);
     }
 
     /**

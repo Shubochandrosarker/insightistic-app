@@ -118,6 +118,60 @@ class BillingController extends Controller
     }
 
     /**
+     * GET /billing/credits/balance — the wallet as the UI meters it: per-bucket
+     * balances, the plan's monthly credit allowance, and the 20% / 5% / zero
+     * warning thresholds. Additive to /billing/credits (which stays the
+     * wallet + transaction-history + catalogue view).
+     */
+    public function creditBalance()
+    {
+        $org = $this->tenancy->organization();
+        $wallet = $this->creditWallet->summary($org); // also grants this period's allowance
+        $resolved = $this->entitlements->resolve($org);
+
+        // Same fallback CreditWallet::ensureCurrentPeriod uses: a persisted
+        // plan with no subscription still owns its monthly allowance.
+        $allowance = (int) ($resolved['limits']['monthly_ai_credits'] ?? 0);
+        if ($allowance <= 0 && ! ($resolved['plan']['id'] ?? null) && $org->plan) {
+            $allowance = $org->plan->limit('monthly_ai_credits');
+        }
+
+        $monthlyRemaining = (int) $wallet['monthly_included']['remaining'];
+        $usable = (int) $wallet['total_usable'];
+        $lowAt = (int) ceil($allowance * 0.20);
+        $criticalAt = (int) ceil($allowance * 0.05);
+
+        // Threshold state tracks what the customer can actually spend, so a
+        // purchased pack keeps the meter out of "zero" once the monthly
+        // allowance is gone.
+        $state = match (true) {
+            $allowance <= 0        => 'none',
+            $usable <= 0           => 'zero',
+            $usable <= $criticalAt => 'critical',
+            $usable <= $lowAt      => 'low',
+            default                => 'ok',
+        };
+
+        return response()->json([
+            'buckets'   => $wallet,
+            'allowance' => [
+                'monthly_ai_credits' => $allowance,
+                'plan_slug'          => $resolved['plan']['slug'] ?? $org->plan?->slug,
+                'remaining'          => $monthlyRemaining,
+                'percent_remaining'  => $allowance > 0 ? round($monthlyRemaining / $allowance * 100, 1) : null,
+            ],
+            'thresholds' => [
+                'low'         => 20,
+                'critical'    => 5,
+                'zero'        => 0,
+                'low_at'      => $lowAt,
+                'critical_at' => $criticalAt,
+                'state'       => $state,
+            ],
+        ]);
+    }
+
+    /**
      * POST /billing/checkout and /billing/stripe/checkout — Stripe Checkout
      * Session. Accepts {plan, kind: monthly|yearly|lifetime} (or the legacy
      * {plan, interval}). Trials come from TrialService only.
@@ -147,6 +201,41 @@ class BillingController extends Controller
             return response()->json(['message' => $e->getMessage(), 'code' => $e->errorCode], 422);
         } catch (\Throwable $e) {
             Log::warning('Stripe checkout failed', ['org' => $org->id, 'error' => class_basename($e)]);
+
+            return response()->json(['message' => 'Billing provider is temporarily unavailable.', 'code' => 'billing_provider_error'], 502);
+        }
+
+        return response()->json($result);
+    }
+
+    /**
+     * POST /billing/credits/checkout — buy an Insight Credit pack with Stripe.
+     *
+     * One-time payment: nothing is charged until the customer confirms on
+     * Stripe's page, so no reauth (same reasoning as billing/stripe/checkout).
+     * Credits are only ever granted by the webhook, never by this response.
+     */
+    public function creditPackCheckout(Request $request, StripeBillingService $stripeBilling)
+    {
+        $org = $this->tenancy->organization();
+
+        $data = $request->validate([
+            'pack' => ['required', 'string', 'in:credits_5000,credits_20000,credits_50000'],
+        ]);
+
+        $app = rtrim(config('insightistic.app_url'), '/');
+        try {
+            $result = $stripeBilling->createCreditsCheckout(
+                $org,
+                $data['pack'],
+                $app . '/dashboard/billing?credits=success&pack=' . rawurlencode($data['pack'])
+                    . '&session_id={CHECKOUT_SESSION_ID}',
+                $app . '/dashboard/billing?credits=cancel&pack=' . rawurlencode($data['pack']),
+            );
+        } catch (BillingConfigurationException $e) {
+            return response()->json(['message' => $e->getMessage(), 'code' => $e->errorCode], 422);
+        } catch (\Throwable $e) {
+            Log::warning('Stripe credit-pack checkout failed', ['org' => $org->id, 'error' => class_basename($e)]);
 
             return response()->json(['message' => 'Billing provider is temporarily unavailable.', 'code' => 'billing_provider_error'], 502);
         }

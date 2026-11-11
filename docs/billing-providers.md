@@ -1,7 +1,8 @@
 # Billing providers: Paddle + Stripe (dual provider)
 
 Status: Stripe is **test mode only** (`feat/stripe-billing`). Paddle remains the
-production processor and the only one for credit packs. Reusable for Bridgistic:
+production processor; both processors can sell credit packs (Paddle via the
+overlay, Stripe via `POST /billing/credits/checkout`). Reusable for Bridgistic:
 every piece below is provider-agnostic except the two adapters.
 
 ## Model
@@ -28,7 +29,19 @@ columns and backfills (Paddle `sub_`/`ctm_` ids → paddle, `stripe_subscription
   `POST /billing/stripe/checkout {plan, kind}` → hosted Checkout Session URL
   (`automatic_tax`, billing address + tax id collection, metadata
   `organization_id`, `plan_slug`, `purchase_kind`, `ltd_reservation_id`).
-  Credit packs on Stripe → 422 `provider_not_supported`.
+  Credit packs on that endpoint → 422 `provider_not_supported`; packs have
+  their own one-time endpoint, below.
+- **Credit packs on Stripe** — `POST /billing/credits/checkout {pack}`
+  (`credits_5000|credits_20000|credits_50000` from `config/commercial.php`)
+  → `mode=payment` Checkout Session, metadata `organization_id`, `pack`,
+  `credits`. Price: `STRIPE_PRICE_CREDITS_*` when set, else inline
+  `price_data` from `price_minor` (no Stripe catalogue needed). Fulfilment on
+  `checkout.session.completed` with `payment_status=paid` **and**
+  `checkout.session.async_payment_succeeded`, granted via `CreditWallet` with
+  reason/source `stripe_credit_pack` keyed on the session id — a replayed
+  session credits exactly once. `GET /billing/credits/balance` serves the
+  per-bucket balances, the plan's monthly allowance and the 20% / 5% / zero
+  warning thresholds.
 - **LTD on Stripe** — `mode=payment`; a slot is reserved before the session,
   session `expires_at` 30 min (reservation 31 min), released on
   `checkout.session.expired` or error. Fulfilment on `checkout.session.completed`

@@ -20,8 +20,10 @@ use Illuminate\Support\Str;
  *   no one ever gets a second trial.
  * - Lifetime (Founding Angel): mode=payment, no trial, reserved against the
  *   shared 100-spot LtdCampaign before the session is created.
- * - Credit packs: Paddle-only for now.
- * - automatic_tax is always on.
+ * - Credit packs: one-time mode=payment via createCreditsCheckout(), priced
+ *   from config/commercial.php credit_packs (a STRIPE_PRICE_CREDITS_* id wins
+ *   when set, else an inline price_data).
+ * - automatic_tax is always on (subscriptions and lifetime).
  */
 final class StripeBillingService
 {
@@ -41,7 +43,10 @@ final class StripeBillingService
     public function createCheckout(Organization $org, string $planSlug, string $kind, string $successUrl, string $cancelUrl): array
     {
         if ($kind === 'credit_pack') {
-            throw new BillingConfigurationException('provider_not_supported', 'Insight Credit packs are sold through Paddle only for now.');
+            // Packs are not plan purchases and have their own one-time
+            // endpoint (createCreditsCheckout → POST /billing/credits/checkout),
+            // which prices them from config/commercial.php credit_packs.
+            throw new BillingConfigurationException('provider_not_supported', 'Insight Credit packs use their own checkout — open the credit packs section of the billing page.');
         }
         if (! in_array($kind, ['monthly', 'yearly', 'lifetime'], true)) {
             throw new BillingConfigurationException('invalid_kind', 'Unknown purchase kind.');
@@ -124,6 +129,79 @@ final class StripeBillingService
         }
 
         return ['provider' => 'stripe', 'url' => $session->url, 'session_id' => $session->id, 'trial_days' => $trialDays];
+    }
+
+    /**
+     * One-time Insight Credit pack (mode=payment).
+     *
+     * The catalogue is config/commercial.php credit_packs — the same array the
+     * Paddle overlay and the public pricing endpoint read — so a Stripe pack
+     * can never advertise a different amount than the rest of the product. A
+     * STRIPE_PRICE_CREDITS_<pack> id is preferred when configured; otherwise an
+     * inline price_data is built from price_minor so packs work with zero
+     * Stripe catalog setup.
+     *
+     * No LtdCampaign reservation, no trial, no automatic_tax: a pack is a
+     * digital top-up charged at the catalogue price, not a plan purchase.
+     * Fulfilment is webhook-only (StripeWebhookProcessor::fulfillCreditPack).
+     *
+     * @return array{provider:string, url:string, session_id:string, pack:string, credits:int}
+     */
+    public function createCreditsCheckout(Organization $org, string $packSlug, string $successUrl, string $cancelUrl): array
+    {
+        $pack = collect(config('commercial.credit_packs', []))
+            ->first(fn (array $candidate): bool => ($candidate['slug'] ?? null) === $packSlug);
+        if (! $pack || (int) $pack['credits'] <= 0) {
+            throw new BillingConfigurationException('invalid_credit_pack', 'Choose a valid Insight Credit pack.');
+        }
+        if (! $this->enabled()) {
+            throw new BillingConfigurationException('stripe_not_configured', 'Stripe checkout is not configured yet. Please choose Paddle or try again later.');
+        }
+
+        $credits = (int) $pack['credits'];
+        $metadata = [
+            'organization_id' => (string) $org->id,
+            'purchase_kind'   => 'credit_pack',
+            'pack'            => $packSlug,
+            'credits'         => (string) $credits,
+            'app'             => 'insightistic',
+        ];
+
+        $priceId = config('billing.stripe.credit_prices.' . $packSlug);
+        $lineItem = $priceId
+            ? ['price' => $priceId, 'quantity' => 1]
+            : [
+                'price_data'   => [
+                    'currency'     => 'usd',
+                    'unit_amount'  => (int) $pack['price_minor'],
+                    'product_data' => [
+                        'name'     => 'Insight Credits — ' . number_format($credits) . ' credits',
+                        'metadata' => ['pack' => $packSlug, 'credits' => (string) $credits],
+                    ],
+                ],
+                'quantity' => 1,
+            ];
+
+        $session = $this->stripe->createCheckoutSession([
+            'mode'                => 'payment',
+            'customer'            => $this->stripe->customerId($org),
+            'line_items'          => [$lineItem],
+            'client_reference_id' => (string) $org->id,
+            'success_url'         => $successUrl,
+            'cancel_url'          => $cancelUrl,
+            'metadata'            => $metadata,
+            // Mirrors the metadata onto the payment intent so a refund or
+            // chargeback can be traced back to the org and pack.
+            'payment_intent_data' => ['metadata' => $metadata],
+        ]);
+
+        return [
+            'provider'   => 'stripe',
+            'url'        => $session->url,
+            'session_id' => $session->id,
+            'pack'       => $packSlug,
+            'credits'    => $credits,
+        ];
     }
 
     /**

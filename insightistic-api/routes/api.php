@@ -219,6 +219,12 @@ Route::middleware(['auth:sanctum', 'tenant', 'restrict.impersonation'])->group(f
     Route::get('billing/providers', [BillingController::class, 'providers'])->middleware('role:owner,admin');
     Route::get('billing/summary', [BillingController::class, 'summary'])->middleware('role:owner,admin');
 
+    // Credit packs bought with Stripe (one-time). Owner-only like the other
+    // checkout creators; credits are granted by the webhook, never by the
+    // response. The balance view is readable by admins, like billing/credits.
+    Route::post('billing/credits/checkout', [BillingController::class, 'creditPackCheckout'])->middleware('role:owner');
+    Route::get('billing/credits/balance', [BillingController::class, 'creditBalance'])->middleware('role:owner,admin');
+
     // Licenses tab (spec §2). Raw keys only ever appear in regenerate/register responses.
     Route::get('licenses', [LicenseController::class, 'index']);
     Route::post('licenses/{license}/regenerate', [LicenseController::class, 'regenerate'])->middleware(['role:owner', 'reauth']);

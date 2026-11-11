@@ -162,7 +162,7 @@ it('refuses a Stripe LTD checkout once the 100 spots are sold across both provid
     expect($params)->toBeNull();
 });
 
-it('keeps credit packs Paddle-only', function () {
+it('keeps the plan checkout endpoint from selling credit packs', function () {
     [, , $token] = dpOwner('dp-credits@example.com');
     Plan::create(['name' => 'Credits', 'slug' => 'insight_credits', 'is_active' => false]);
     dpMockStripe($params);

@@ -123,6 +123,9 @@ class AppServiceProvider extends ServiceProvider
         // Semantic Metric Registry (spec Phase 1): one versioned catalog of
         // canonical metric definitions. Singleton because the catalog is
         // static per-process — no request-scoped state, no DB round trip.
+        // Rank tracker SERP backend (RANK_PROVIDER, default dataforseo).
+        $this->app->bind(\App\Services\Rank\RankProvider::class, fn () => \App\Services\Rank\RankProviderFactory::make());
+
         $this->app->singleton(MetricRegistry::class);
 
         // Safe WooCommerce Query Engine (spec Phase 2 / P1).

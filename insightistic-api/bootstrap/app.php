@@ -59,6 +59,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'super_admin'            => \App\Http\Middleware\SuperAdmin::class,
             'restrict.impersonation' => \App\Http\Middleware\RestrictImpersonation::class,
             'reauth'                 => \App\Http\Middleware\RequireReauth::class,
+            'ai.available'           => \App\Http\Middleware\EnsureAiAvailable::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions) {

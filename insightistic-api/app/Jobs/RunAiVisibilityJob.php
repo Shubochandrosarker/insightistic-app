@@ -6,6 +6,7 @@ use App\Models\AiVisibilityPrompt;
 use App\Models\AiVisibilityRun;
 use App\Models\Site;
 use App\Services\AiVisibility\PromptRunner;
+use App\Services\Ai\AiAvailability;
 use App\Services\UsageService;
 use Carbon\Carbon;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -53,12 +54,25 @@ class RunAiVisibilityJob implements ShouldQueue
         $site = Site::withoutGlobalScope('organization')->find($this->siteId);
 
         if ($site === null || $site->archived_at !== null) {
-            return; // Site deleted or archived between queueing and running.
+            // Site deleted or archived between queueing and running.
+            Log::info('ai_job.ai-visibility.skip', ['site_id' => $this->siteId, 'reason' => 'site_missing_or_archived']);
+
+            return;
         }
 
         $org = $site->organization;
 
         if ($org === null || $org->deletion_scheduled_for !== null) {
+            Log::info('ai_job.ai-visibility.skip', ['site_id' => $site->id, 'reason' => 'organization_missing_or_deleting']);
+
+            return;
+        }
+
+        if (app(AiAvailability::class)->isPaused($org, $site)) {
+            Log::info('AI visibility skipped: AI work paused for site.', [
+                'site_id' => $site->id,
+            ]);
+
             return;
         }
 
@@ -86,7 +100,15 @@ class RunAiVisibilityJob implements ShouldQueue
             return;
         }
 
-        foreach ($this->duePrompts($site, $this->promptId) as $prompt) {
+        $due = $this->duePrompts($site, $this->promptId);
+
+        if ($due->isEmpty()) {
+            Log::info('ai_job.ai-visibility.skip', ['site_id' => $site->id, 'reason' => 'no_due_prompts']);
+
+            return;
+        }
+
+        foreach ($due as $prompt) {
             if ($used >= $limit) {
                 // Plan quota exhausted → metered credit fallback (terms:
                 // "credits power AI visibility runs"). One credit per run;

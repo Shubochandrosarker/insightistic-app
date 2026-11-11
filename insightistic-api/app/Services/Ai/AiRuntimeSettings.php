@@ -57,6 +57,14 @@ class AiRuntimeSettings
                 'agent_slug' => (string) ($stored['knowledge_agent_slug'] ?? $brain['agent_slug'] ?? 'analytics-pro'),
                 'category' => (string) ($stored['knowledge_agent_category'] ?? $brain['category'] ?? 'analytics'),
                 'timeout' => (int) ($brain['timeout'] ?? 4),
+                'driver' => in_array($brain['driver'] ?? 'rest', ['rest', 'mcp'], true) ? $brain['driver'] : 'rest',
+                'mcp_path' => (string) ($brain['mcp_path'] ?? '/mcp'),
+                'mcp_kinds' => (array) ($brain['mcp_kinds'] ?? ['project', 'system']),
+                'cf_access_client_id' => $brain['cf_access_client_id'] ?? null,
+                'cf_access_client_secret' => $brain['cf_access_client_secret'] ?? null,
+                'connect_timeout' => max(1, (int) ($brain['connect_timeout'] ?? 2)),
+                'budget_ms' => max(500, (int) ($brain['budget_ms'] ?? 5000)),
+                'cooldown_seconds' => max(0, (int) ($brain['cooldown_seconds'] ?? 120)),
             ],
             // The order is deliberately fixed in code. An owner can change
             // models, but cannot accidentally bypass the shared WPistic brain.
@@ -94,11 +102,15 @@ class AiRuntimeSettings
                 'base_url' => $brain['base_url'],
                 'agent_slug' => $brain['agent_slug'],
                 'category' => $brain['category'],
+                'driver' => $brain['driver'],
+                // Last failure reason while the cooldown is active (no secrets).
+                'unavailable_reason' => \Illuminate\Support\Facades\Cache::get(\App\Services\Knowledge\WpisticKnowledgeAgentClient::DOWN_KEY),
             ],
             'credential_status' => [
                 'wpistic_configured' => ! empty($gateway['product_key']),
                 'openrouter_configured' => ! empty($router['api_key']),
                 'agent_token_configured' => ! empty($brain['token']),
+                'cf_access_configured' => ! empty($brain['cf_access_client_id']) && ! empty($brain['cf_access_client_secret']),
                 'managed_by' => 'environment',
             ],
         ];

@@ -7,6 +7,7 @@ use App\Domain\Billing\Exceptions\InsufficientCreditsException;
 use App\Http\Controllers\Controller;
 use App\Models\Organization;
 use App\Services\Ai\AiProvider;
+use App\Services\Ai\AiAvailability;
 use App\Services\Ai\ProviderResolver;
 use App\Services\Ai\RuleProvider;
 use App\Services\LicenseService;
@@ -35,6 +36,7 @@ class PluginAiController extends Controller
         private AiProvider $provider,
         private ProviderResolver $providerResolver,
         private AiCreditService $credits,
+        private AiAvailability $availability,
     ) {}
 
     public function generate(Request $request)
@@ -66,6 +68,10 @@ class PluginAiController extends Controller
         // follow the exact same rule rather than calling the configured
         // provider directly.
         $site = $request->attributes->get('connector_site');
+        if ($this->availability->isPaused($org, $site)) {
+            return $this->availability->response();
+        }
+
         $provider = $site ? $this->providerResolver->resolve($this->provider, $site) : $this->provider;
 
         if ($provider instanceof RuleProvider) {

@@ -91,12 +91,37 @@ dying silently an hour later.
 | `INSIGHTISTIC_KNOWLEDGE_MAX_CONTENT_BYTES` | extracted-text cap, default 2 000 000 |
 | `INSIGHTISTIC_KNOWLEDGE_CRAWL_TIMEOUT` / `_CRAWL_MAX_BYTES` | crawler caps |
 
+## Shared knowledge brain (optional enrichment)
+
+| Variable | Default | Notes |
+|---|---|---|
+| `WPISTIC_KNOWLEDGE_AGENT_ENABLED` / `_URL` / `_TOKEN` / `_SLUG` / `_CATEGORY` | off | Existing. Admin → AI configuration can override enabled/url/slug/category (stored in `platform_settings.ai_routing`, never secrets). |
+| `WPISTIC_KNOWLEDGE_AGENT_DRIVER` | `rest` | `rest` = brain-api Worker (`/api/agents` …). `mcp` = WPistic memory MCP server (`tools/call memory_search`), e.g. `https://brain.insightistic.com`. |
+| `WPISTIC_KNOWLEDGE_AGENT_MCP_PATH` | `/mcp` | MCP endpoint path. |
+| `WPISTIC_KNOWLEDGE_AGENT_MCP_KINDS` | `project,system` | Allowlist of memory card kinds that may reach a customer prompt. Never add `client`, `person`, `decision`, `incident`, `run`. |
+| `WPISTIC_KNOWLEDGE_AGENT_CF_ACCESS_CLIENT_ID` | empty | Cloudflare Access service-token Client ID (secret store only). |
+| `WPISTIC_KNOWLEDGE_AGENT_CF_ACCESS_CLIENT_SECRET` | empty | Cloudflare Access service-token Client Secret (secret store only). |
+| `WPISTIC_KNOWLEDGE_AGENT_CONNECT_TIMEOUT` | `2` | Seconds. |
+| `WPISTIC_KNOWLEDGE_AGENT_TIMEOUT` | `4` | Seconds per request (capped by the budget). |
+| `WPISTIC_KNOWLEDGE_AGENT_BUDGET_MS` | `5000` | Total time for one lookup across all calls. |
+| `WPISTIC_KNOWLEDGE_AGENT_COOLDOWN` | `120` | Seconds the brain is skipped after a failure (timeout, 3xx login redirect, 401/403, bad payload). One warning is logged per trip with a reason code; answers use local knowledge only. |
+
 ## Object storage (S3-compatible, optional)
 
 `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_DEFAULT_REGION`,
 `AWS_BUCKET`, `AWS_ENDPOINT` (MinIO/R2), `AWS_USE_PATH_STYLE_ENDPOINT`.
 Point `INSIGHTISTIC_KNOWLEDGE_DISK=s3` / `INSIGHTISTIC_REPORTS_DISK=s3`.
 Local disks remain the development default.
+
+## Rank tracking provider
+
+| Variable | Default | Notes |
+|---|---|---|
+| `RANK_PROVIDER` | `dataforseo` | Rank tracker SERP adapter (see docs/RANK-TRACKING-PROVIDER.md). |
+| `DATAFORSEO_LOGIN` / `DATAFORSEO_PASSWORD` | empty | Checks are skipped (no cost) while empty. Verify with `php artisan insightistic:rank-provider-check`. |
+| `DATAFORSEO_DEPTH` | `100` | Results per keyword check (10..200). Billed per 10 results. |
+| `DATAFORSEO_CONCURRENCY` | `5` | Parallel live requests (one keyword each). |
+| `DATAFORSEO_TIMEOUT` | `60` | Seconds per live request. |
 
 ## Licensing / trials
 
@@ -179,3 +204,15 @@ dashboard that only works under one of those would leave the deployments most
 likely to be neglected uncovered.
 
 `LOG_CHANNEL=stderr` remains the right choice for container log drivers.
+
+## AI pause switch and AI job alerts
+
+| Variable | Default | Notes |
+|---|---|---|
+| `INSIGHTISTIC_AI_PAUSED_DOMAINS` | empty | Comma list of site domains whose variable-cost AI work is paused (subdomains and `www.` included). An organization can also be paused with `ai_settings_json.paused=true`. Paused sites are skipped by the daily AI jobs with a logged `ai_paused` reason and get a 402 `ai_paused` from AI endpoints. |
+| `INSIGHTISTIC_AI_PAUSED_MESSAGE` | invoice notice | Message returned with the 402 `ai_paused` response. |
+| `INSIGHTISTIC_OPS_ALERT_EMAIL` | empty | Comma list. When set, a crash of `insights-generate` / `ai-visibility`, or the 09:30 `insightistic:ai-jobs-watchdog` finding zero `ai_insights` / `ai_visibility_runs` rows for eligible sites, sends one email per alert per day. Empty = CRITICAL log line only. |
+
+Every skip in the daily AI jobs is logged as `ai_job.<job>.skip` with `site_id`
+and `reason`; each run ends with `ai_job.<job>.summary` (eligible / written /
+skipped / reasons), cached and shown under `ai_jobs` on Admin → System Health.

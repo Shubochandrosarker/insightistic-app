@@ -306,7 +306,7 @@ Route::middleware(['auth:sanctum', 'tenant', 'restrict.impersonation'])->group(f
         // Query Engine + Evidence Ledger pipeline as analytics/query, so it
         // shares that route's throttle.
         Route::post('sites/{site}/ask', [AskInsightisticController::class, 'ask'])
-            ->middleware('throttle:query-engine');
+            ->middleware(['throttle:query-engine', 'ai.available']);
 
         // Saved Insights (spec Phase 2 / P5) — a named, reusable plan a
         // user can re-run on demand. "run" shares analytics/query's
@@ -335,10 +335,10 @@ Route::middleware(['auth:sanctum', 'tenant', 'restrict.impersonation'])->group(f
         // emails) — a client_viewer (read-only stakeholder access) must not
         // be able to create/edit/fire one, only see that it exists.
         Route::middleware('role:owner,admin,analyst')->group(function () {
-            Route::post('sites/{site}/automation-rules', [AutomationRuleController::class, 'store']);
-            Route::patch('sites/{site}/automation-rules/{automationRule}', [AutomationRuleController::class, 'update']);
-            Route::delete('sites/{site}/automation-rules/{automationRule}', [AutomationRuleController::class, 'destroy']);
-            Route::post('sites/{site}/automation-rules/{automationRule}/run', [AutomationRuleController::class, 'run']);
+            Route::post('sites/{site}/automation-rules', [AutomationRuleController::class, 'store'])->middleware('ai.available');
+            Route::patch('sites/{site}/automation-rules/{automationRule}', [AutomationRuleController::class, 'update'])->middleware('ai.available');
+            Route::delete('sites/{site}/automation-rules/{automationRule}', [AutomationRuleController::class, 'destroy'])->middleware('ai.available');
+            Route::post('sites/{site}/automation-rules/{automationRule}/run', [AutomationRuleController::class, 'run'])->middleware('ai.available');
         });
 
         // Anomaly Engine (spec Phase 2 / P7) — median/MAD detection across
@@ -355,7 +355,7 @@ Route::middleware(['auth:sanctum', 'tenant', 'restrict.impersonation'])->group(f
         // requested metric.
         Route::get('sites/{site}/investigations', [InvestigationController::class, 'index']);
         Route::post('sites/{site}/investigations', [InvestigationController::class, 'store'])
-            ->middleware('throttle:query-engine');
+            ->middleware(['throttle:query-engine', 'ai.available']);
         Route::get('sites/{site}/investigations/{investigation}', [InvestigationController::class, 'show']);
 
         // Bridgistic Approved Actions (spec Phase 2 / P9) — a proposed
@@ -511,7 +511,7 @@ Route::middleware(['auth:sanctum', 'tenant', 'restrict.impersonation'])->group(f
 
         // AI insights (Week 4)
         Route::get('sites/{site}/insights', [InsightController::class, 'index']);
-        Route::post('sites/{site}/insights/generate', [InsightController::class, 'generate']);
+        Route::post('sites/{site}/insights/generate', [InsightController::class, 'generate'])->middleware('ai.available');
         Route::get('sites/{site}/insights/{insight}', [InsightController::class, 'show']);
         Route::post('sites/{site}/insights/{insight}/mark-read', [InsightController::class, 'markRead']);
         // Lifecycle (spec Phase 6). Saving and dismissing are orthogonal to
@@ -550,7 +550,7 @@ Route::middleware(['auth:sanctum', 'tenant', 'restrict.impersonation'])->group(f
 
         // Reports (Week 4)
         Route::get('sites/{site}/reports', [ReportController::class, 'index']);
-        Route::post('sites/{site}/reports/generate', [ReportController::class, 'generate']);
+        Route::post('sites/{site}/reports/generate', [ReportController::class, 'generate'])->middleware('ai.available');
 
         // Scheduled report delivery (Milestone 5, spec §12). A schedule sends
         // data to an email address on a recurring basis, so configuring one
@@ -585,11 +585,11 @@ Route::middleware(['auth:sanctum', 'tenant', 'restrict.impersonation'])->group(f
         Route::get('sites/{site}/ai-visibility/mentions', [\App\Http\Controllers\Api\AiVisibilityController::class, 'mentions']);
         Route::get('sites/{site}/ai-visibility/competitors', [\App\Http\Controllers\Api\AiVisibilityController::class, 'competitors']);
         Route::middleware('role:owner,admin')->group(function () {
-            Route::post('sites/{site}/ai-visibility/prompts', [\App\Http\Controllers\Api\AiVisibilityController::class, 'storePrompt']);
-            Route::delete('sites/{site}/ai-visibility/prompts/{prompt}', [\App\Http\Controllers\Api\AiVisibilityController::class, 'destroyPrompt']);
-            Route::match(['get', 'post'], 'sites/{site}/ai-visibility/prompts/{prompt}/check', [\App\Http\Controllers\Api\AiVisibilityController::class, 'checkPrompt']);
-            Route::post('sites/{site}/ai-visibility/competitors', [\App\Http\Controllers\Api\AiVisibilityController::class, 'storeCompetitor']);
-            Route::delete('sites/{site}/ai-visibility/competitors/{competitor}', [\App\Http\Controllers\Api\AiVisibilityController::class, 'destroyCompetitor']);
+            Route::post('sites/{site}/ai-visibility/prompts', [\App\Http\Controllers\Api\AiVisibilityController::class, 'storePrompt'])->middleware('ai.available');
+            Route::delete('sites/{site}/ai-visibility/prompts/{prompt}', [\App\Http\Controllers\Api\AiVisibilityController::class, 'destroyPrompt'])->middleware('ai.available');
+            Route::match(['get', 'post'], 'sites/{site}/ai-visibility/prompts/{prompt}/check', [\App\Http\Controllers\Api\AiVisibilityController::class, 'checkPrompt'])->middleware('ai.available');
+            Route::post('sites/{site}/ai-visibility/competitors', [\App\Http\Controllers\Api\AiVisibilityController::class, 'storeCompetitor'])->middleware('ai.available');
+            Route::delete('sites/{site}/ai-visibility/competitors/{competitor}', [\App\Http\Controllers\Api\AiVisibilityController::class, 'destroyCompetitor'])->middleware('ai.available');
         });
     });
 

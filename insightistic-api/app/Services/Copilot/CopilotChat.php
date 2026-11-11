@@ -219,6 +219,7 @@ PROMPT;
         $body = $response->toPsrResponse()->getBody();
         $full = '';
         $tokensIn = $tokensOut = null;
+        $costUsd = null;
         $actualModel = (string) ($cfg['model'] ?? 'unknown');
         $buffer = '';
         // Once the answer-contract fence starts we stop emitting display text.
@@ -247,6 +248,8 @@ PROMPT;
                 if (isset($json['usage'])) {
                     $tokensIn = $json['usage']['prompt_tokens'] ?? null;
                     $tokensOut = $json['usage']['completion_tokens'] ?? null;
+                    // OpenRouter adds the charged cost (USD credits) to usage.
+                    $costUsd = is_numeric($json['usage']['cost'] ?? null) ? (float) $json['usage']['cost'] : $costUsd;
                 }
 
                 if (is_string($json['model'] ?? null) && $json['model'] !== '') {
@@ -284,6 +287,7 @@ PROMPT;
             'model' => $providerName === 'openrouter' ? 'openrouter:'.$actualModel : $actualModel,
             'tokens_in' => $tokensIn,
             'tokens_out' => $tokensOut,
+            'cost_usd' => $costUsd,
         ];
     }
 

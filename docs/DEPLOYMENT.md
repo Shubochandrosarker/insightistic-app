@@ -18,6 +18,28 @@ and `DB_PASSWORD` in git history. Treat both as compromised:
    with their new keys. Schedule this deliberately; do not rotate casually.
 3. Purge the old values from any deployed `.env` files and CI secrets.
 
+## Traefik labels: routing is opt-in per service
+
+Incident 2026-11-07: `insightistic-api:ai-pause-20261107` was made with
+`docker commit` from the routed api container, so the image carried
+`traefik.enable=true` + the `insightistic-api` router. queue and scheduler run
+the same image, joined the same Traefik service, and ~2/3 of
+`api.insightistic.com` requests returned 502 (only api listens on :8000).
+
+Rules:
+
+1. Both Dockerfiles set `LABEL traefik.enable="false"`. Only the compose
+   service that serves HTTP sets `traefik.enable=true` (container labels
+   override image labels).
+2. Worker services (queue, scheduler, migrate) always set
+   `traefik.enable=false` explicitly as well, in case an image ever carries
+   router labels again.
+3. Never ship a release with `docker commit`. Build from a git sha
+   (`deploy-<sha>` tag). If an emergency commit is unavoidable, strip routing:
+   `docker commit --change 'LABEL traefik.enable=false' ...`.
+4. After every deploy run `scripts/check-traefik-labels.sh insightistic-app api app`
+   on the VPS, and curl `https://api.insightistic.com/up` 20 times: all must be 200.
+
 ## Runtime shape (docker-compose.prod.yml)
 
 - `db` — `pgvector/pgvector:pg16` (Postgres + vector extension)

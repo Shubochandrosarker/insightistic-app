@@ -3,6 +3,7 @@
 namespace App\Services\Observability;
 
 use App\Services\Ai\AiProvider;
+use App\Services\Ai\ReportsUsage;
 
 /**
  * Wraps any AiProvider to record latency, outcome and cost (spec Phase 2.3).
@@ -19,7 +20,7 @@ use App\Services\Ai\AiProvider;
  * different questions and reconciling them by excluding one path would leave
  * the aggregate wrong.
  */
-class MeteredAiProvider implements AiProvider
+class MeteredAiProvider implements AiProvider, ReportsUsage
 {
     public function __construct(
         private AiProvider $inner,
@@ -45,16 +46,18 @@ class MeteredAiProvider implements AiProvider
                 $failed = true;
                 throw $e;
             } finally {
+                $usage = $failed ? null : $this->lastUsage();
                 $this->telemetry->recordAiCall(
                     kind: 'insight',
                     provider: $this->providerName,
                     model: $this->model(),
                     organizationId: $identityId,
                     latencyMs: (int) round((microtime(true) - $start) * 1000),
-                    // Token counts are not exposed by AiProvider's contract.
-                    // Recording an estimate would put a fabricated number in
-                    // a cost table, so they stay null and cost is derived
-                    // from the calls that do report usage.
+                    // Only provider-reported usage (ReportsUsage). No
+                    // estimates: unreported stays null/0.
+                    tokensIn: $usage['tokens_in'] ?? null,
+                    tokensOut: $usage['tokens_out'] ?? null,
+                    costUsd: $usage['cost_usd'] ?? null,
                     failed: $failed,
                 );
             }
@@ -69,5 +72,10 @@ class MeteredAiProvider implements AiProvider
     public function model(): string
     {
         return $this->inner->model();
+    }
+
+    public function lastUsage(): ?array
+    {
+        return $this->inner instanceof ReportsUsage ? $this->inner->lastUsage() : null;
     }
 }

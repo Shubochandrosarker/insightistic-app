@@ -5,7 +5,7 @@ namespace App\Services\Ai;
 use Illuminate\Support\Facades\Log;
 
 /** Selects a provider chain from server-resolved billing tier and fails over safely. */
-class PlanAwareAiProvider implements AiProvider
+class PlanAwareAiProvider implements AiProvider, ReportsUsage
 {
     private array $activeChain = [];
 
@@ -46,5 +46,11 @@ class PlanAwareAiProvider implements AiProvider
         return $this->lastProvider?->model()
             ?? ($this->activeChain[0] ?? null)?->model()
             ?? 'rule-based-v1';
+    }
+
+    /** Usage of the provider that answered the last call. */
+    public function lastUsage(): ?array
+    {
+        return $this->lastProvider instanceof ReportsUsage ? $this->lastProvider->lastUsage() : null;
     }
 }

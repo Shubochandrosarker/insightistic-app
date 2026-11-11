@@ -108,6 +108,8 @@ services:
       - api_storage:/var/www/html/storage/app
     labels:
       - com.centurylinklabs.watchtower.enable=true
+      # Workers serve no HTTP: never let Traefik add them to the api router.
+      - traefik.enable=false
 
   scheduler:
     image: ghcr.io/shubochandrosarker/insightistic-app/api:latest
@@ -124,6 +126,8 @@ services:
       - api_storage:/var/www/html/storage/app
     labels:
       - com.centurylinklabs.watchtower.enable=true
+      # Workers serve no HTTP: never let Traefik add them to the api router.
+      - traefik.enable=false
 
   app:
     image: ghcr.io/shubochandrosarker/insightistic-app/app:latest

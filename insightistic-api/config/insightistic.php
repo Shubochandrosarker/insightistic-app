@@ -34,6 +34,16 @@ return [
         // Keep AI calls below the 300s proxy/FastCGI ceiling while allowing
         // slower generation responses to finish instead of dying at 60s.
         'timeout' => (int) env('INSIGHTISTIC_AI_TIMEOUT', 240),
+        // Temporary tenant/site pause switch. Keep this empty by default;
+        // production can pause one site's AI without suspending its account.
+        'paused_domains' => array_values(array_filter(array_map(
+            'trim',
+            explode(',', (string) env('INSIGHTISTIC_AI_PAUSED_DOMAINS', '')),
+        ))),
+        'paused_message' => env(
+            'INSIGHTISTIC_AI_PAUSED_MESSAGE',
+            'AI research is temporarily paused because the pending invoice must be cleared to restore research credits. Please clear the pending invoice, then try again.',
+        ),
     ],
 
     // Plan-aware OpenRouter routing. WPistic is always attempted first by the
@@ -115,9 +125,34 @@ return [
         'agent_slug' => env('WPISTIC_KNOWLEDGE_AGENT_SLUG', 'analytics-pro'),
         'category' => env('WPISTIC_KNOWLEDGE_AGENT_CATEGORY', 'analytics'),
         'timeout' => (int) env('WPISTIC_KNOWLEDGE_AGENT_TIMEOUT', 4),
+        // rest = brain-api Worker (/api/agents, /api/knowledge, /api/skills).
+        // mcp  = WPistic memory MCP server (streamable HTTP, tools/call
+        //        memory_search), e.g. https://brain.insightistic.com/mcp.
+        'driver' => env('WPISTIC_KNOWLEDGE_AGENT_DRIVER', 'rest'),
+        'mcp_path' => env('WPISTIC_KNOWLEDGE_AGENT_MCP_PATH', '/mcp'),
+        // Only these memory card kinds may reach a customer-facing prompt.
+        // The memory graph also holds clients, people, decisions, incidents
+        // and runs — internal data that must never be quoted to a customer.
+        'mcp_kinds' => array_values(array_filter(array_map('trim', explode(',', (string) env('WPISTIC_KNOWLEDGE_AGENT_MCP_KINDS', 'project,system'))))),
+        // Cloudflare Access service token for an Access-protected brain host.
+        // Sent as CF-Access-Client-Id / CF-Access-Client-Secret headers.
+        'cf_access_client_id' => env('WPISTIC_KNOWLEDGE_AGENT_CF_ACCESS_CLIENT_ID'),
+        'cf_access_client_secret' => env('WPISTIC_KNOWLEDGE_AGENT_CF_ACCESS_CLIENT_SECRET'),
+        // Clean fallback: TCP connect cap, a total time budget across all
+        // calls of one lookup, and a cooldown during which an unavailable
+        // brain is not called at all (answers use local knowledge only).
+        'connect_timeout' => (int) env('WPISTIC_KNOWLEDGE_AGENT_CONNECT_TIMEOUT', 2),
+        'budget_ms' => (int) env('WPISTIC_KNOWLEDGE_AGENT_BUDGET_MS', 5000),
+        'cooldown_seconds' => (int) env('WPISTIC_KNOWLEDGE_AGENT_COOLDOWN', 120),
     ],
 
     // Frontend app base (Stripe redirects, invite links).
+    // Operator alerts (AI job crash / zero-rows watchdog). Comma-separated.
+    // Empty = log-only (CRITICAL lines in the scheduler's laravel.log).
+    'ops' => [
+        'alert_email' => env('INSIGHTISTIC_OPS_ALERT_EMAIL'),
+    ],
+
     'app_url' => env('INSIGHTISTIC_APP_URL', 'https://app.insightistic.com'),
 
     // Trial length for new organizations. Keep this aligned with public pricing.
@@ -157,6 +192,12 @@ return [
      * its own redirect URI and read-only analytics scopes, so consent for
      * "sign in with Google" never silently grants analytics access.
      */
+    // Rank tracker SERP backend (RankProviderFactory). DataForSEO is the
+    // default and only adapter today; credentials live in services.dataforseo.
+    'rank' => [
+        'provider' => env('RANK_PROVIDER', 'dataforseo'),
+    ],
+
     'integrations' => [
         'google' => [
             'client_id' => env('GOOGLE_CLIENT_ID'),

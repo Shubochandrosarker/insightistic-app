@@ -8,17 +8,22 @@ use App\Models\EntitlementGrant;
 use App\Models\LtdCampaign;
 use App\Models\LtdCheckoutReservation;
 use App\Models\Organization;
+use App\Models\Plan;
 use App\Models\PlanPrice;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\DB;
 
-/** Atomic, provider-independent inventory for the global Founding Angel cap. */
+/** Atomic, provider-independent inventory for lifetime-deal campaign caps. */
 final class LtdCampaignService
 {
     public function campaign(?string $excludeReference = null): LtdCampaign
     {
-        $cfg = config('commercial.ltd_campaign');
+        return $this->campaignFor(config('commercial.ltd_campaign'), $excludeReference);
+    }
 
+    /** Idempotent campaign row (firstOrCreate) + historical-sales self-heal. */
+    private function campaignFor(array $cfg, ?string $excludeReference = null): LtdCampaign
+    {
         $campaign = LtdCampaign::query()->firstOrCreate(
             ['slug' => $cfg['slug']],
             ['name' => $cfg['name'], 'maximum_sales' => $cfg['maximum_sales'], 'state' => 'active', 'opened_at' => now()],
@@ -29,15 +34,37 @@ final class LtdCampaignService
         return $campaign->fresh();
     }
 
+    /**
+     * Campaign config for an LTD plan slug; null when the slug is not a
+     * campaign tier or its campaign is disabled. Founding Angel stays the
+     * direct-from-site offer; the AppSumo tiers (appsumo_*) are gated by
+     * FEATURE_LTD_APPSUMO and disabled by default.
+     */
+    private function campaignConfigForPlan(string $planSlug): ?array
+    {
+        if (str_starts_with($planSlug, 'angel_')) {
+            return config('commercial.ltd_campaign');
+        }
+
+        if (str_starts_with($planSlug, 'appsumo_')) {
+            return (bool) config('feature-flags.ltd_appsumo')
+                ? config('commercial.appsumo_campaign')
+                : null;
+        }
+
+        return null;
+    }
+
     /** Reserve one slot before Paddle checkout is opened. */
     public function reserve(Organization $organization, string $planSlug, ?string $idempotencyKey = null): LtdCheckoutReservation
     {
-        if (! str_starts_with($planSlug, 'angel_')) {
-            throw new BillingConfigurationException('invalid_ltd_plan', 'This is not a Founding Angel plan.');
+        $campaignConfig = $this->campaignConfigForPlan($planSlug);
+        if (! $campaignConfig) {
+            throw new BillingConfigurationException('invalid_ltd_plan', 'This is not an available lifetime deal plan.');
         }
 
-        return DB::transaction(function () use ($organization, $planSlug, $idempotencyKey) {
-            $campaign = LtdCampaign::whereKey($this->campaign()->id)->lockForUpdate()->firstOrFail();
+        return DB::transaction(function () use ($organization, $planSlug, $idempotencyKey, $campaignConfig) {
+            $campaign = LtdCampaign::whereKey($this->campaignFor($campaignConfig)->id)->lockForUpdate()->firstOrFail();
             $this->expireReservations($campaign);
 
             $existingGrant = EntitlementGrant::withoutGlobalScope('organization')
@@ -56,12 +83,12 @@ final class LtdCampaignService
 
             if ($campaign->state !== 'active' || $campaign->successful_sales >= $campaign->maximum_sales) {
                 $this->close($campaign);
-                throw new BillingConfigurationException('ltd_sold_out', 'Our first 100 Founding Angel licenses have been claimed. Lifetime plans are now closed.');
+                throw new BillingConfigurationException('ltd_sold_out', (string) $campaignConfig['sold_out_message']);
             }
 
             $reserved = (int) $campaign->reservations()->where('status', 'reserved')->count();
             if ($campaign->successful_sales + $reserved >= $campaign->maximum_sales) {
-                throw new BillingConfigurationException('ltd_sold_out', 'The remaining Founding Angel checkout inventory is currently reserved. Please try again later.');
+                throw new BillingConfigurationException('ltd_sold_out', 'The remaining ' . $campaignConfig['name'] . ' checkout inventory is currently reserved. Please try again later.');
             }
 
             return LtdCheckoutReservation::create([
@@ -79,13 +106,13 @@ final class LtdCampaignService
     public function confirmSale(BillingTransaction $transaction, ?array $customData = null, ?PlanPrice $price = null): void
     {
         $price ??= PlanPrice::where('provider_price_id', $transaction->provider_price_id)->first();
-        $slug = $price?->plan?->slug;
-        if (! $slug || ! str_starts_with($slug, 'angel_')) {
+        $campaignConfig = $price?->plan ? $this->campaignConfigForPlan((string) $price->plan->slug) : null;
+        if (! $campaignConfig) {
             return;
         }
 
-        DB::transaction(function () use ($transaction, $customData) {
-            $campaign = LtdCampaign::whereKey($this->campaign((string) $transaction->provider_transaction_id)->id)->lockForUpdate()->firstOrFail();
+        DB::transaction(function () use ($transaction, $customData, $campaignConfig) {
+            $campaign = LtdCampaign::whereKey($this->campaignFor($campaignConfig, (string) $transaction->provider_transaction_id)->id)->lockForUpdate()->firstOrFail();
             $reservationId = $customData['ltd_reservation_id'] ?? null;
             $reservation = $reservationId
                 ? LtdCheckoutReservation::whereKey($reservationId)->lockForUpdate()->first()
@@ -99,7 +126,7 @@ final class LtdCampaignService
                     'reviewed_at' => null,
                 ];
                 $transaction->forceFill(['summary_json' => $summary])->save();
-                throw new \RuntimeException('Verified Angel payment has no local reservation; hold for manual billing reconciliation.');
+                throw new \RuntimeException('Verified lifetime payment has no local reservation; hold for manual billing reconciliation.');
             }
 
             if ($reservation->status === 'consumed') {
@@ -107,7 +134,7 @@ final class LtdCampaignService
             }
 
             if ($reservation->organization_id !== $transaction->organization_id) {
-                throw new \RuntimeException('Angel reservation organization does not match the verified transaction.');
+                throw new \RuntimeException('Lifetime reservation organization does not match the verified transaction.');
             }
 
             // A reservation that was valid when checkout opened remains
@@ -169,17 +196,40 @@ final class LtdCampaignService
      * Without it, a completed transaction row written before confirmSale()
      * was counted here AND incremented there — every LTD sale used two of
      * the 100 spots (found 2026-11-04 while adding Stripe).
+     *
+     * Sales are attributed per campaign by plan-slug prefix: appsumo_2026
+     * owns appsumo_* plans; Founding Angel keeps every other lifetime sale
+     * (angel_* and the legacy founder tiers), so its count is unchanged by
+     * the second campaign. Rows whose price/plan cannot be resolved stay in
+     * the Founding Angel bucket — the pre-campaign default.
      */
     private function synchroniseHistoricalSales(LtdCampaign $campaign, ?string $excludeReference = null): void
     {
+        $appsumoOnly = $campaign->slug === (string) config('commercial.appsumo_campaign.slug');
+        $planSlugs = Plan::query()->pluck('slug', 'id');
+        $pricePlanIds = PlanPrice::query()->pluck('plan_id', 'provider_price_id');
+
         $transactionRefs = BillingTransaction::withoutGlobalScope('organization')
             ->where('kind', 'lifetime')
             ->where('status', 'completed')
+            ->get(['provider_transaction_id', 'provider_price_id'])
+            ->filter(function (BillingTransaction $transaction) use ($appsumoOnly, $planSlugs, $pricePlanIds) {
+                $planId = $pricePlanIds[(string) $transaction->provider_price_id] ?? null;
+                $isAppsumo = str_starts_with((string) ($planId !== null ? $planSlugs[$planId] ?? '' : ''), 'appsumo_');
+
+                return $appsumoOnly ? $isAppsumo : ! $isAppsumo;
+            })
             ->pluck('provider_transaction_id');
 
         $grantRefs = EntitlementGrant::withoutGlobalScope('organization')
             ->whereIn('source', \App\Models\EntitlementGrant::LIFETIME_SOURCES)
             ->whereNull('revoked_at')
+            ->get(['source_reference', 'plan_id'])
+            ->filter(function (EntitlementGrant $grant) use ($appsumoOnly, $planSlugs) {
+                $isAppsumo = str_starts_with((string) ($grant->plan_id !== null ? $planSlugs[$grant->plan_id] ?? '' : ''), 'appsumo_');
+
+                return $appsumoOnly ? $isAppsumo : ! $isAppsumo;
+            })
             ->pluck('source_reference');
 
         $sales = collect($transactionRefs)

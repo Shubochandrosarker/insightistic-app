@@ -94,6 +94,29 @@ Evaluate:
 
 Do not list on multiple platforms simultaneously without operational capacity.
 
+### Stage 3 decision — AppSumo Option A (founder-locked, 2026-11-07)
+
+AppSumo gets an exclusive three-tier campaign; the direct Founding Angel offer
+($149/$299/$699, campaign `founding-angel-2026`) stays unchanged as the
+direct-from-site deal.
+
+| Tier | Price | Sites | AI allowance (plan-based) |
+|---|---:|---:|---|
+| AppSumo Solo | $79 | 3 | Growth-level standard AI requests (200/mo) |
+| AppSumo Studio | $149 | 10 | Agency-level standard AI requests (600/mo) |
+| AppSumo Agency | $269 | 25 | Agency-level standard AI requests (600/mo) |
+
+Locked constraints:
+
+- site-count entitlements only (3/10/25) — the site limit is the deal axis
+- NO AI credits for LTD buyers: `monthly_ai_credits` is 0 on all three plans;
+  the AI allowance is the plan-based `standard_ai_requests` (same mechanism as
+  Growth/Agency), never credit grants
+- implemented as the `appsumo_2026` campaign (`config/commercial.php`),
+  disabled by default behind `FEATURE_LTD_APPSUMO=false`; Paddle price IDs map
+  from env (`PADDLE_PRICE_LTD_APPSUMO_*`) at launch
+- catalog creation, seeding and go-live steps: `docs/LTD-APPSUMO-2026-LAUNCH.md`
+
 ## Case studies
 
 Build stories around outcomes:

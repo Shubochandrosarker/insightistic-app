@@ -352,3 +352,21 @@ it('counts one Paddle LTD sale as exactly one Founding Angel spot, even on repla
     app(\App\Domain\Billing\PaddleEventProcessor::class)->process('transaction.completed', $data);
     expect(app(\App\Domain\Billing\LtdCampaignService::class)->campaign()->successful_sales)->toBe(1);
 });
+
+/** AppSumo 2026 (Option A): the second campaign counts its own sales only. */
+it('counts an AppSumo LTD sale against appsumo_2026 and never the Founding Angel cap', function () {
+    config()->set('feature-flags.ltd_appsumo', true);
+    $plan = \App\Models\Plan::create(['name' => 'AppSumo Solo', 'slug' => 'appsumo_solo', 'is_active' => false]);
+    \App\Models\PlanPrice::create(['plan_id' => $plan->id, 'provider' => 'paddle', 'kind' => 'lifetime', 'provider_price_id' => 'pri_pdl_appsumo', 'currency' => 'USD', 'amount_minor' => 7900, 'is_active' => true]);
+    [, $org] = makeOrgUser('appsumo-ltd@example.com');
+    $service = app(\App\Domain\Billing\LtdCampaignService::class);
+    $reservation = $service->reserve($org, 'appsumo_solo', (string) \Illuminate\Support\Str::uuid());
+
+    $data = paddleTransactionData('lifetime', ['custom_data' => ['organization_id' => $org->id, 'ltd_reservation_id' => $reservation->id]]);
+    app(\App\Domain\Billing\PaddleEventProcessor::class)->process('transaction.completed', $data);
+    app(\App\Domain\Billing\PaddleEventProcessor::class)->process('transaction.completed', $data);
+
+    // AppSumo owns the sale; Founding Angel's count is untouched by it.
+    expect(\App\Models\LtdCampaign::where('slug', 'appsumo_2026')->value('successful_sales'))->toBe(1)
+        ->and($service->campaign()->successful_sales)->toBe(0);
+});

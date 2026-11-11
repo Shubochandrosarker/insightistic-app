@@ -22,4 +22,9 @@ return [
     // Phase 12: uptime monitors / incidents.
     'uptime' => env('FEATURE_UPTIME', false),
 
+    // AppSumo 2026 LTD campaign (Option A, docs/LTD-APPSUMO-2026-LAUNCH.md).
+    // Disabled until the Paddle prices exist and the marketplace listing goes
+    // live; remove the flag when the campaign closes.
+    'ltd_appsumo' => env('FEATURE_LTD_APPSUMO', false),
+
 ];

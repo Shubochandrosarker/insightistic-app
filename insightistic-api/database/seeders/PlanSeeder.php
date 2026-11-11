@@ -20,6 +20,12 @@ class PlanSeeder extends Seeder
             $this->upsertPlan($slug, $plan, $plan['price'] * 100, 0, false, false, 'lifetime');
         }
 
+        // AppSumo 2026 LTD tiers (Option A): hidden lifetime plans like the
+        // angel tiers; purchasability comes from the mapped Paddle price.
+        foreach ($catalog['appsumo_plans'] ?? [] as $slug => $plan) {
+            $this->upsertPlan($slug, $plan, $plan['price'] * 100, 0, false, false, 'lifetime');
+        }
+
         // Historical rows remain readable for old subscriptions and webhook
         // replays, but can never appear as new offers.
         $legacy = [
@@ -58,11 +64,11 @@ class PlanSeeder extends Seeder
             'client_ready_reports_monthly' => (int) ($plan['reports'] ?? 0),
             'crawl_pages_per_run' => min(5000, max(50, (int) ($plan['crawl_pages'] ?? 50))),
             'ai_prompt_runs_monthly' => (int) ($plan['standard_ai_requests'] ?? 0),
-            'knowledge_bases' => in_array($slug, ['free', 'starter', 'angel_solo'], true) ? 1 : 3,
+            'knowledge_bases' => in_array($slug, ['free', 'starter', 'angel_solo', 'appsumo_solo'], true) ? 1 : 3,
             'knowledge_sources' => $slug === 'free' ? 5 : 50,
             'storage_mb' => $slug === 'free' ? 25 : 250,
             'monthly_ai_messages' => $slug === 'free' ? 25 : 300,
-            'scheduled_reports' => in_array($slug, ['growth', 'agency', 'agency_pro', 'angel_studio', 'angel_agency'], true) ? 1 : 0,
+            'scheduled_reports' => in_array($slug, ['growth', 'agency', 'agency_pro', 'angel_studio', 'angel_agency', 'appsumo_studio', 'appsumo_agency'], true) ? 1 : 0,
             'data_retention_days' => $billingModel === 'lifetime' ? 1825 : 730,
         ];
 

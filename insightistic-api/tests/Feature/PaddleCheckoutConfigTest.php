@@ -204,3 +204,69 @@ it('selects the requested credit pack instead of silently taking the first price
             ],
         ]);
 });
+
+/**
+ * AppSumo 2026 LTD (Option A): disabled by default. Even a mapped, active
+ * Paddle price cannot open checkout while FEATURE_LTD_APPSUMO is off.
+ */
+it('rejects AppSumo LTD checkout while FEATURE_LTD_APPSUMO is off', function () {
+    config()->set('feature-flags.paddle', true);
+    config()->set('billing.paddle.client_token', 'tok_appsumo_off');
+
+    [, , $token] = paddleConfigOwner('paddle-appsumo-off@example.com');
+
+    $plan = Plan::create([
+        'name'      => 'AppSumo Solo (hidden) ' . Str::random(4),
+        'slug'      => 'appsumo_solo',
+        'is_active' => false,
+    ]);
+    PlanPrice::create([
+        'plan_id'           => $plan->id,
+        'provider'          => 'paddle',
+        'kind'              => 'lifetime',
+        'provider_price_id' => 'pri_appsumo_off_' . Str::random(8),
+        'currency'          => 'USD',
+        'amount_minor'      => 7900,
+        'is_active'         => true,
+    ]);
+
+    $this->withToken($token)
+        ->postJson('/api/billing/checkout-config', ['plan' => 'appsumo_solo', 'kind' => 'lifetime'])
+        ->assertStatus(422)
+        ->assertJson(['code' => 'invalid_ltd_plan']);
+
+    expect(\App\Models\LtdCampaign::where('slug', 'appsumo_2026')->exists())->toBeFalse();
+});
+
+/** With the flag on, checkout-config reserves AppSumo campaign inventory. */
+it('opens AppSumo LTD checkout and reserves campaign inventory when the flag is on', function () {
+    config()->set('feature-flags.paddle', true);
+    config()->set('feature-flags.ltd_appsumo', true);
+    config()->set('billing.paddle.client_token', 'tok_appsumo_on');
+
+    [, , $token] = paddleConfigOwner('paddle-appsumo-on@example.com');
+
+    $plan = Plan::create([
+        'name'      => 'AppSumo Studio (hidden) ' . Str::random(4),
+        'slug'      => 'appsumo_studio',
+        'is_active' => false,
+    ]);
+    PlanPrice::create([
+        'plan_id'           => $plan->id,
+        'provider'          => 'paddle',
+        'kind'              => 'lifetime',
+        'provider_price_id' => 'pri_appsumo_on_' . Str::random(8),
+        'currency'          => 'USD',
+        'amount_minor'      => 14900,
+        'is_active'         => true,
+    ]);
+
+    $response = $this->withToken($token)
+        ->postJson('/api/billing/checkout-config', ['plan' => 'appsumo_studio', 'kind' => 'lifetime'])
+        ->assertOk()
+        ->assertJsonPath('amount_minor', 14900);
+
+    expect($response->json('custom_data.ltd_reservation_id'))->not->toBeNull()
+        ->and(\App\Models\LtdCheckoutReservation::where('plan_slug', 'appsumo_studio')->where('status', 'reserved')->exists())->toBeTrue()
+        ->and(\App\Models\LtdCampaign::where('slug', 'appsumo_2026')->value('maximum_sales'))->toBe(500);
+});

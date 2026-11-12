@@ -64,8 +64,17 @@ class AppSumoLicenseService
             throw new InvalidArgumentException('Invalid AppSumo license key.');
         }
 
-        $tier = filter_var($payload['tier'] ?? null, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
-        $planSlug = $this->tierToPlanSlug($tier === false ? null : $tier);
+        // Deactivation messages may omit tier: retain the last known one.
+        // If the key was never seen, record the revoke without inventing a
+        // paid tier. Provided but invalid tiers still fail closed.
+        $providedTier = array_key_exists('tier', $payload) && $payload['tier'] !== null;
+        $incomingTier = $providedTier
+            ? filter_var($payload['tier'], FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]])
+            : null;
+        if ($incomingTier === false) {
+            throw new InvalidArgumentException('Invalid AppSumo license tier.');
+        }
+
         $isReplacement = in_array($event, ['upgrade', 'downgrade'], true);
         $previousKey = $isReplacement ? trim((string) ($payload['prev_license_key'] ?? '')) : null;
 
@@ -73,9 +82,15 @@ class AppSumoLicenseService
             throw new InvalidArgumentException('Replacement AppSumo license is missing a valid previous key.');
         }
 
-        return DB::transaction(function () use ($payload, $event, $key, $tier, $planSlug, $isReplacement, $previousKey) {
+        return DB::transaction(function () use ($payload, $event, $key, $incomingTier, $isReplacement, $previousKey) {
             $row = AppSumoLicense::query()->where('license_key', $key)->lockForUpdate()->first()
                 ?? new AppSumoLicense(['license_key' => $key]);
+
+            $tier = $incomingTier ?? $row->tier;
+            if ($tier === null && ! in_array($event, ['deactivate', 'migrate'], true)) {
+                throw new InvalidArgumentException('AppSumo event has no paid tier.');
+            }
+            $planSlug = $tier !== null ? $this->tierToPlanSlug((int) $tier) : null;
 
             // A delayed purchase replay must not revive a cancelled license.
             if ($row->exists && $row->event === 'deactivate' && $event === 'purchase') {

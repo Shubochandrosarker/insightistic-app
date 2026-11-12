@@ -7,137 +7,208 @@ use App\Models\License;
 use App\Models\Organization;
 use App\Models\Plan;
 use App\Models\User;
+use DomainException;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
+use InvalidArgumentException;
 
-/**
- * Shared AppSumo Licensing API v2 intake logic (partner guide). Used by both
- * the webhook controller and the OAuth callback controller so every path —
- * purchase, tier change, claim — upserts the appsumo_licenses row the same way.
- *
- * Partner-guide invariants encoded here:
- *  - license_key is the only stable identifier; upsert on it, keep history in raw.
- *  - upgrade/downgrade always issue a NEW key; prev_license_key names the old
- *    one, which AppSumo deactivates simultaneously (we don't wait for that
- *    webhook — we mark the prev row ourselves).
- *  - tier maps to a plan slug by commercial.appsumo_plans declaration order
- *    (1→appsumo_solo, 2→appsumo_studio, 3→appsumo_agency; anything unknown
- *    falls back to the first tier).
- */
 class AppSumoLicenseService
 {
-    /** Tier number → plan slug via config order; unknown tier → appsumo_solo. */
+    /**
+     * Fail closed: an unknown paid tier must never silently receive Tier 1.
+     */
     public function tierToPlanSlug(?int $tier): string
     {
         $slugs = array_keys((array) config('commercial.appsumo_plans', []));
 
         if ($tier === null || $tier < 1 || $tier > count($slugs)) {
-            return 'appsumo_solo';
+            throw new InvalidArgumentException('Unknown AppSumo license tier.');
         }
 
         return $slugs[$tier - 1];
     }
 
     /**
-     * Upsert one webhook/OAuth payload keyed by license_key, then apply
-     * entitlements when the row is already claimed by an org. Returns null
-     * when the payload carries no license_key (nothing to key the row on).
+     * AppSumo sends "inactive" with a legitimate activate/upgrade/downgrade
+     * webhook, and only marks it active AFTER receiving our 200 response.
+     * A mere purchase or a deactivation is not enough to claim an account.
      */
-    public function upsertFromPayload(array $payload): ?AppSumoLicense
+    public function isClaimable(AppSumoLicense $row): bool
     {
-        $event = (string) ($payload['event'] ?? 'unknown');
-        $tier = isset($payload['tier']) ? (int) $payload['tier'] : null;
-        $licenseKey = (string) ($payload['license_key'] ?? '');
-
-        if ($licenseKey === '') {
-            Log::warning('AppSumo payload without license_key ignored', ['event' => $event]);
-
-            return null;
-        }
-
-        $row = AppSumoLicense::query()->firstOrNew(['license_key' => $licenseKey]);
-
-        $row->fill([
-            'event'              => $event,
-            'license_status'     => (string) ($payload['license_status'] ?? 'inactive'),
-            'tier'               => $tier,
-            'parent_license_key' => $payload['parent_license_key'] ?? null,
-            'partner_plan_name'  => $payload['partner_plan_name'] ?? null,
-            'unit_quantity'      => isset($payload['unit_quantity']) ? (int) $payload['unit_quantity'] : null,
-            'plan_slug'          => $this->tierToPlanSlug($tier),
-            'raw'                => $payload,
-            'event_timestamp'    => (int) ($payload['event_timestamp'] ?? 0),
-            'is_test'            => (bool) ($payload['test'] ?? false),
-        ]);
-
-        if (! empty($payload['prev_license_key'])) {
-            $row->prev_license_key = (string) $payload['prev_license_key'];
-
-            if (in_array($event, ['upgrade', 'downgrade'], true)) {
-                $this->deactivatePrevious($row->prev_license_key, $payload['extra']['reason'] ?? null);
-            }
-        }
-
-        $row->save();
-
-        if ($row->license_id || $row->org_id) {
-            $this->applyEntitlements($row);
-        }
-
-        return $row;
+        return in_array($row->event, ['activate', 'upgrade', 'downgrade'], true)
+            && in_array($row->license_status, ['inactive', 'active'], true)
+            && ! $row->is_test
+            && $row->parent_license_key === null
+            && ! AppSumoLicense::query()
+                ->where('prev_license_key', $row->license_key)
+                ->whereIn('license_status', ['inactive', 'active'])
+                ->exists();
     }
 
     /**
-     * Bind an AppSumo license to a user's organization (OAuth claim flow).
-     * Resolves the user's primary org, applies entitlements, and returns the
-     * row so callers can react (the raw Insightistic license key, when one
-     * must be issued for the plugin handshake, is the claim endpoint's
-     * concern: it is shown once and never stored).
+     * Save a signed AppSumo event and project its entitlement atomically.
+     * Upgrades replace the key; the existing user's identity and local
+     * license MUST move to the replacement before the old key is revoked.
+     */
+    public function upsertFromPayload(array $payload): AppSumoLicense
+    {
+        $event = (string) ($payload['event'] ?? '');
+        $key = trim((string) ($payload['license_key'] ?? ''));
+
+        if (! in_array($event, ['purchase', 'activate', 'upgrade', 'downgrade', 'deactivate', 'migrate'], true)) {
+            throw new InvalidArgumentException('Unknown AppSumo event.');
+        }
+
+        if (! Str::isUuid($key) || strlen($key) > 64) {
+            throw new InvalidArgumentException('Invalid AppSumo license key.');
+        }
+
+        // Deactivation messages may omit tier: retain the last known one.
+        // If the key was never seen, record the revoke without inventing a
+        // paid tier. Provided but invalid tiers still fail closed.
+        $providedTier = array_key_exists('tier', $payload) && $payload['tier'] !== null;
+        $incomingTier = $providedTier
+            ? filter_var($payload['tier'], FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]])
+            : null;
+        if ($incomingTier === false) {
+            throw new InvalidArgumentException('Invalid AppSumo license tier.');
+        }
+
+        $isReplacement = in_array($event, ['upgrade', 'downgrade'], true);
+        $previousKey = $isReplacement ? trim((string) ($payload['prev_license_key'] ?? '')) : null;
+
+        if ($isReplacement && (! Str::isUuid($previousKey) || $previousKey === $key)) {
+            throw new InvalidArgumentException('Replacement AppSumo license is missing a valid previous key.');
+        }
+
+        return DB::transaction(function () use ($payload, $event, $key, $incomingTier, $isReplacement, $previousKey) {
+            $row = AppSumoLicense::query()->where('license_key', $key)->lockForUpdate()->first()
+                ?? new AppSumoLicense(['license_key' => $key]);
+
+            $tier = $incomingTier ?? $row->tier;
+            if ($tier === null && ! in_array($event, ['deactivate', 'migrate'], true)) {
+                throw new InvalidArgumentException('AppSumo event has no paid tier.');
+            }
+            $planSlug = $tier !== null ? $this->tierToPlanSlug((int) $tier) : null;
+
+            // A delayed purchase replay must not revive a cancelled license.
+            if ($row->exists && $row->event === 'deactivate' && $event === 'purchase') {
+                return $row;
+            }
+
+            $previous = $isReplacement
+                ? AppSumoLicense::query()->where('license_key', $previousKey)->lockForUpdate()->first()
+                : null;
+
+            if ($previous && $previous->org_id) {
+                // Never redirect a previously claimed license to another user.
+                if ($row->org_id && $row->org_id !== $previous->org_id) {
+                    throw new DomainException('Replacement license belongs to a different organization.');
+                }
+                if ($row->user_id && $row->user_id !== $previous->user_id) {
+                    throw new DomainException('Replacement license belongs to a different user.');
+                }
+                if ($row->license_id && $row->license_id !== $previous->license_id) {
+                    throw new DomainException('Replacement license has a conflicting entitlement.');
+                }
+
+                $row->org_id = $previous->org_id;
+                $row->user_id = $previous->user_id;
+                $row->license_id = $previous->license_id;
+            }
+
+            $row->fill([
+                'license_key'        => $key,
+                'event'              => $event,
+                'license_status'     => (string) ($payload['license_status'] ?? 'inactive'),
+                'tier'               => $tier,
+                'prev_license_key'   => $previousKey ?? $row->prev_license_key,
+                'parent_license_key' => $payload['parent_license_key'] ?? null,
+                'partner_plan_name'  => $payload['partner_plan_name'] ?? null,
+                'unit_quantity'      => isset($payload['unit_quantity']) ? (int) $payload['unit_quantity'] : null,
+                'plan_slug'          => $planSlug,
+                'raw'                => $payload,
+                'event_timestamp'    => (int) ($payload['event_timestamp'] ?? 0),
+                'is_test'            => (bool) ($payload['test'] ?? false),
+            ]);
+            $row->save();
+
+            if ($previous) {
+                $previous->license_status = 'deactivated';
+                $previous->event = 'deactivate';
+                $reason = $payload['extra']['reason'] ?? null;
+                if (is_string($reason) && $reason !== '') {
+                    $previous->raw = array_merge((array) $previous->raw, ['deactivation_reason' => $reason]);
+                }
+                $previous->save();
+            }
+
+            // Add-ons are NOT sold by this deal. Persist their history, but
+            // never project an add-on as a whole paid AppSumo site plan.
+            if ($row->parent_license_key !== null) {
+                Log::warning('AppSumo add-on event stored without entitlement projection', [
+                    'event' => $event,
+                    'license_id' => $row->id,
+                ]);
+            } elseif ($row->org_id) {
+                $this->applyEntitlements($row);
+            }
+
+            if ($previous && $previous->license_id && $previous->license_id !== $row->license_id) {
+                $this->applyEntitlements($previous);
+            }
+
+            return $row;
+        }, 3);
+    }
+
+    /**
+     * Link only to an organization the buyer owns. Guard this again inside a
+     * DB lock so simultaneous claim submissions cannot transfer a key.
      */
     public function linkToOrganization(string $licenseKey, User $user): AppSumoLicense
     {
-        $row = AppSumoLicense::query()->where('license_key', $licenseKey)->firstOrFail();
+        return DB::transaction(function () use ($licenseKey, $user) {
+            $row = AppSumoLicense::query()->where('license_key', $licenseKey)->lockForUpdate()->firstOrFail();
+            $org = $this->primaryOrganization($user);
 
-        $org = $this->primaryOrganization($user);
+            if (! $org || ! $this->isClaimable($row)) {
+                throw new DomainException('This AppSumo license is not eligible for activation.');
+            }
+            if (($row->user_id !== null && $row->user_id !== $user->id)
+                || ($row->org_id !== null && $row->org_id !== $org->id)) {
+                throw new DomainException('This AppSumo license has already been linked to another account.');
+            }
 
-        $row->user_id = $user->id;
-        $row->org_id = $org?->id;
-        $row->save();
+            $row->user_id = $user->id;
+            $row->org_id = $org->id;
+            $row->save();
 
-        if ($org) {
             $this->applyEntitlements($row);
-        }
 
-        return $row;
+            return $row->refresh();
+        }, 3);
     }
 
-    /**
-     * The user's primary org — owned first, then first membership. Shared by
-     * linkToOrganization and the claim controller (which must decide between
-     * linking and provisioning an org BEFORE binding, so both paths resolve
-     * the org with one rule).
-     */
     public function primaryOrganization(User $user): ?Organization
     {
-        return Organization::query()->where('owner_user_id', $user->id)->orderBy('id')->first()
-            ?? Organization::query()
-                ->whereHas('users', fn ($q) => $q->where('users.id', $user->id))
-                ->orderBy('id')
-                ->first();
+        // A team member may belong to other customers' organizations; they
+        // must never silently apply a personal LTD purchase to those orgs.
+        return Organization::query()->where('owner_user_id', $user->id)->orderBy('id')->first();
     }
 
     /**
-     * Project an AppSumo row's tier/status onto the linked org-level
-     * `licenses` row (the one the plugin validates against): plan from the
-     * tier mapping, status active/deactivated. `deactivated` sits outside
-     * License::STATUSES on purpose — License::isEntitled() treats anything
-     * not in ENTITLED_STATUSES as unentitled, which is the effect we want.
-     *
-     * The org-level billing_provider is set to the generic 'license' value
-     * (never 'appsumo') only when empty, so it stays inside the allowed
-     * provider set and never clobbers a real Stripe/Paddle attribution.
+     * A replacement is the active source of truth for a reused local license.
+     * A late "deactivate" notification for the OLD key must not turn off the
+     * new key's plan. Likewise an old activation must not downgrade it.
      */
     public function applyEntitlements(AppSumoLicense $row): void
     {
+        if ($row->parent_license_key !== null) {
+            return;
+        }
+
         $license = $row->license;
 
         if (! $license && $row->org_id) {
@@ -153,60 +224,61 @@ class AppSumoLicenseService
         }
 
         if (! $license) {
-            Log::warning('AppSumo license has no linked licenses row to update', [
-                'license_key' => $row->license_key,
-                'org_id'      => $row->org_id,
+            Log::warning('AppSumo license has no linked local license', [
+                'appsumo_license_id' => $row->id,
+                'org_id' => $row->org_id,
             ]);
-
             return;
+        }
+
+        if ($row->org_id && $license->organization_id !== $row->org_id) {
+            throw new DomainException('AppSumo and local license organizations do not match.');
+        }
+
+        // Only the currently active replacement key can mutate a reused
+        // org-level license, including during out-of-order retries.
+        $hasActiveReplacement = AppSumoLicense::query()
+            ->where('license_id', $license->id)
+            ->where('id', '>', $row->id)
+            ->whereIn('event', ['activate', 'upgrade', 'downgrade'])
+            ->whereIn('license_status', ['inactive', 'active'])
+            ->exists();
+
+        if ($hasActiveReplacement) {
+            return;
+        }
+
+        $deactivated = $row->event === 'deactivate' || $row->license_status === 'deactivated';
+        if ($deactivated) {
+            $hasOtherActiveKey = AppSumoLicense::query()
+                ->where('license_id', $license->id)
+                ->where('id', '!=', $row->id)
+                ->whereIn('event', ['activate', 'upgrade', 'downgrade'])
+                ->whereIn('license_status', ['inactive', 'active'])
+                ->exists();
+
+            if ($hasOtherActiveKey) {
+                return;
+            }
         }
 
         if ($row->plan_slug) {
             $plan = Plan::query()->where('slug', $row->plan_slug)->first();
-            if ($plan) {
-                $license->plan_id = $plan->id;
+            if (! $plan) {
+                throw new DomainException('AppSumo tier plan is not seeded.');
             }
+            $license->plan_id = $plan->id;
         }
 
-        // Guide nuance: a deactivate event arrives with license_status still
-        // "active" (AppSumo flips it only after our 200 ack) — the event type
-        // decides, not just the payload status. 'inactive' (valid, not yet
-        // activated) keeps the local license usable: the purchase is real.
-        $deactivated = $row->event === 'deactivate' || $row->license_status === 'deactivated';
         $license->status = $deactivated ? 'deactivated' : 'active';
         $license->save();
 
-        if ($row->org_id) {
+        if ($row->org_id && ! $deactivated) {
+            Organization::query()->whereKey($row->org_id)->update([
+                'plan_id' => $license->plan_id,
+            ]);
             Organization::query()->whereKey($row->org_id)->whereNull('billing_provider')
                 ->update(['billing_provider' => 'license']);
-        }
-    }
-
-    /**
-     * Mark the replaced license row deactivated on upgrade/downgrade. The
-     * reason goes into raw (the table has no dedicated column) so support can
-     * see why the old key died even if AppSumo's own deactivate webhook is
-     * still in flight.
-     */
-    private function deactivatePrevious(string $prevKey, mixed $reason): void
-    {
-        $prev = AppSumoLicense::query()->where('license_key', $prevKey)->first();
-
-        if (! $prev) {
-            // Not seen before — AppSumo's simultaneous deactivate webhook will
-            // upsert it with license_status deactivated on its own.
-            return;
-        }
-
-        $prev->license_status = 'deactivated';
-        $reason = is_string($reason) ? $reason : null;
-        if ($reason !== null && $reason !== '') {
-            $prev->raw = array_merge((array) $prev->raw, ['deactivation_reason' => $reason]);
-        }
-        $prev->save();
-
-        if ($prev->license_id || $prev->org_id) {
-            $this->applyEntitlements($prev);
         }
     }
 }

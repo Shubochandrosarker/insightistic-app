@@ -6,6 +6,18 @@ import { useAuth } from "@/lib/auth";
 import { AuthShell } from "@/components/auth/AuthShell";
 import { OAuthButtons } from "@/components/auth/OAuthButtons";
 
+/** Only same-origin relative redirects are allowed after authentication. */
+function signedInDestination(isSuperAdmin: boolean): string {
+  if (typeof window !== "undefined") {
+    const next = new URLSearchParams(window.location.search).get("next");
+    if (next && next.startsWith("/") && !next.startsWith("//") && !next.includes("\\")) {
+      return next;
+    }
+  }
+
+  return isSuperAdmin ? "/admin" : "/dashboard";
+}
+
 export default function Login() {
   const { login, completeMfa, user, loading } = useAuth();
   const router = useRouter();
@@ -19,7 +31,7 @@ export default function Login() {
 
   // Already signed in → send them where they belong.
   useEffect(() => {
-    if (!loading && user) router.replace(user.is_super_admin ? "/admin" : "/dashboard");
+    if (!loading && user) router.replace(signedInDestination(user.is_super_admin));
   }, [user, loading, router]);
 
   async function submit(e: React.FormEvent) {
@@ -36,7 +48,7 @@ export default function Login() {
         return;
       }
 
-      router.push(result.user?.is_super_admin ? "/admin" : "/dashboard");
+      router.push(signedInDestination(Boolean(result.user?.is_super_admin)));
     } catch (e: any) {
       setErr(e.message || "Login failed");
       setBusy(false);
@@ -50,7 +62,7 @@ export default function Login() {
     setBusy(true);
     try {
       const u = await completeMfa(challenge, code.trim());
-      router.push(u?.is_super_admin ? "/admin" : "/dashboard");
+      router.push(signedInDestination(Boolean(u?.is_super_admin)));
     } catch (e: any) {
       setErr(e.message || "That code wasn't accepted.");
       setBusy(false);

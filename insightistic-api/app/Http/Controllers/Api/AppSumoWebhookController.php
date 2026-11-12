@@ -14,10 +14,9 @@ use Throwable;
  * route, no auth — the HMAC signature is the authentication:
  * X-Appsumo-Signature = hash_hmac('sha256', X-Appsumo-Timestamp . rawBody, API key).
  *
- * AppSumo treats any non-200 as a failed delivery, so the endpoint ALWAYS
- * answers 200 {"event": <received event>, "success": true} once the signature
- * checks out — a side-effect failure is logged for ops, never surfaced to
- * AppSumo (a non-200 would only trigger a redelivery into the same failure).
+ * Acknowledge with 200 only AFTER persistent processing succeeds. A real
+ * processing failure returns 503, so the provider can retry and operations
+ * can reconcile it; test pings remain side-effect-free 200 responses.
  * Test deliveries (Partner Portal "save" ping, payload.test === true) are
  * acknowledged without any side effects.
  */
@@ -41,16 +40,30 @@ class AppSumoWebhookController extends Controller
         }
         $payload = is_array($payload) ? $payload : [];
 
-        if (! ($payload['test'] ?? false)) {
-            try {
-                $this->licenses->upsertFromPayload($payload);
-            } catch (Throwable $e) {
-                Log::error('AppSumo webhook processing failed', [
-                    'event'       => $payload['event'] ?? null,
-                    'license_key' => $payload['license_key'] ?? null,
-                    'error'       => $e->getMessage(),
-                ]);
-            }
+        if (($payload['test'] ?? false) === true) {
+            // AppSumo's validation ping: never allocate an account or license.
+            return response()->json(['event' => $payload['event'] ?? null, 'success' => true]);
+        }
+
+        try {
+            $this->licenses->upsertFromPayload($payload);
+        } catch (Throwable $e) {
+            // A 200 here tells AppSumo the delivery succeeded and can lose a
+            // paid customer forever. Fail retryably without exposing keys or
+            // provider secrets in responses or application logs.
+            Log::error('AppSumo webhook processing failed', [
+                'event' => $payload['event'] ?? null,
+                'license_fingerprint' => isset($payload['license_key'])
+                    ? substr(hash('sha256', (string) $payload['license_key']), 0, 12)
+                    : null,
+                'exception' => get_class($e),
+            ]);
+
+            return response()->json([
+                'event' => $payload['event'] ?? null,
+                'success' => false,
+                'error' => 'delivery_not_processed',
+            ], 503);
         }
 
         return response()->json(['event' => $payload['event'] ?? null, 'success' => true]);

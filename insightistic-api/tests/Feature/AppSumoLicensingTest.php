@@ -332,3 +332,29 @@ it('returns a retryable failure instead of silently acknowledging an invalid pai
 
     expect(AppSumoLicense::where('license_key', $key)->exists())->toBeFalse();
 });
+
+
+it('revokes an existing license when AppSumo omits the tier on deactivate', function () {
+    config()->set('services.appsumo.key', APPSUMO_TEST_KEY);
+    [$org, $agency, $license] = appsumoOrgWithLicense();
+    $key = (string) Str::uuid();
+
+    AppSumoLicense::create([
+        'license_key' => $key, 'event' => 'activate', 'license_status' => 'active',
+        'tier' => 3, 'plan_slug' => 'appsumo_agency',
+        'org_id' => $org->id, 'user_id' => $org->owner_user_id,
+        'license_id' => $license->id, 'raw' => [], 'event_timestamp' => 1,
+    ]);
+
+    [$body, $headers] = appsumoWebhook([
+        'license_key' => $key, 'event' => 'deactivate',
+        'license_status' => 'active', 'event_timestamp' => 2,
+        'extra' => ['reason' => 'Refunded by the user'],
+    ]);
+
+    $this->call('POST', '/api/appsumo/webhook', [], [], [], $headers, $body)->assertOk();
+
+    expect($license->fresh()->status)->toBe('deactivated')
+        ->and($license->fresh()->plan_id)->toBe($agency->id)
+        ->and(AppSumoLicense::where('license_key', $key)->first()->tier)->toBe(3);
+});

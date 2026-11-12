@@ -216,6 +216,13 @@ class AppSumoClaimController extends Controller
     public function claimAuthenticated(Request $request)
     {
         $user = $request->user();
+        $abilities = $user?->currentAccessToken()?->abilities ?? [];
+
+        // Even an elevated support-impersonation session cannot move paid
+        // AppSumo entitlements or bind a customer license to an account.
+        if (in_array('impersonated', $abilities, true)) {
+            return response()->json(['message' => 'License claiming is unavailable during impersonation.'], 403);
+        }
 
         if (! $user || $user->status !== 'active' || $user->archived_at !== null) {
             return response()->json(['message' => 'Sign in to an active account first.'], 403);

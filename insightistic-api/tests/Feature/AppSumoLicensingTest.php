@@ -195,15 +195,16 @@ it('applies tier changes and deactivation to the linked Insightistic license', f
     expect($license->fresh()->status)->toBe('deactivated');
 });
 
-it('maps AppSumo tiers to plan slugs by config order with an appsumo_solo fallback', function () {
+it('maps known AppSumo tiers and refuses unknown tiers rather than granting a wrong plan', function () {
     $service = app(AppSumoLicenseService::class);
 
     expect($service->tierToPlanSlug(1))->toBe('appsumo_solo')
         ->and($service->tierToPlanSlug(2))->toBe('appsumo_studio')
-        ->and($service->tierToPlanSlug(3))->toBe('appsumo_agency')
-        ->and($service->tierToPlanSlug(null))->toBe('appsumo_solo')
-        ->and($service->tierToPlanSlug(0))->toBe('appsumo_solo')
-        ->and($service->tierToPlanSlug(99))->toBe('appsumo_solo');
+        ->and($service->tierToPlanSlug(3))->toBe('appsumo_agency');
+
+    expect(fn () => $service->tierToPlanSlug(null))->toThrow(InvalidArgumentException::class);
+    expect(fn () => $service->tierToPlanSlug(0))->toThrow(InvalidArgumentException::class);
+    expect(fn () => $service->tierToPlanSlug(99))->toThrow(InvalidArgumentException::class);
 });
 
 it('answers the OAuth redirect validation ping with 200', function () {
@@ -260,4 +261,74 @@ it('redirects to pricing with an error flag when the OAuth exchange fails', func
         ->assertRedirect('https://app.insightistic.com/pricing?appsumo_error=1');
 
     expect(AppSumoLicense::count())->toBe(0);
+});
+
+
+it('preserves linked customer entitlement across upgrade and old-key deactivate callbacks', function () {
+    config()->set('services.appsumo.key', APPSUMO_TEST_KEY);
+    [$org, , $license] = appsumoOrgWithLicense();
+
+    $studio = Plan::create([
+        'name' => 'AppSumo Studio', 'slug' => 'appsumo_studio',
+        'site_limit' => 10, 'user_limit' => 3, 'ai_insight_limit' => 600,
+        'report_limit' => 25, 'is_active' => true,
+    ]);
+
+    $owner = $org->owner_user_id;
+    $oldKey = (string) Str::uuid();
+    $newKey = (string) Str::uuid();
+
+    AppSumoLicense::create([
+        'license_key' => $oldKey, 'event' => 'activate', 'license_status' => 'active',
+        'tier' => 1, 'plan_slug' => 'appsumo_solo',
+        'org_id' => $org->id, 'user_id' => $owner, 'license_id' => $license->id,
+        'raw' => [], 'event_timestamp' => 100,
+    ]);
+
+    [$upgrade, $headers] = appsumoWebhook([
+        'license_key' => $newKey, 'prev_license_key' => $oldKey,
+        'event' => 'upgrade', 'license_status' => 'inactive',
+        'event_timestamp' => 200, 'tier' => 2,
+    ]);
+    $this->call('POST', '/api/appsumo/webhook', [], [], [], $headers, $upgrade)->assertOk();
+
+    $current = AppSumoLicense::where('license_key', $newKey)->firstOrFail();
+    expect($current->user_id)->toBe($owner)
+        ->and($current->org_id)->toBe($org->id)
+        ->and($current->license_id)->toBe($license->id)
+        ->and($license->fresh()->status)->toBe('active')
+        ->and($license->fresh()->plan_id)->toBe($studio->id)
+        ->and($org->fresh()->plan_id)->toBe($studio->id);
+
+    // AppSumo sends this separately, sometimes after the new key was applied.
+    [$oldDeactivate, $oldHeaders] = appsumoWebhook([
+        'license_key' => $oldKey, 'event' => 'deactivate',
+        'license_status' => 'deactivated', 'event_timestamp' => 300, 'tier' => 1,
+    ]);
+    $this->call('POST', '/api/appsumo/webhook', [], [], [], $oldHeaders, $oldDeactivate)->assertOk();
+    expect($license->fresh()->status)->toBe('active')
+        ->and($license->fresh()->plan_id)->toBe($studio->id);
+
+    // But a refund of the CURRENT key genuinely revokes it.
+    [$refunded, $refundHeaders] = appsumoWebhook([
+        'license_key' => $newKey, 'event' => 'deactivate',
+        'license_status' => 'active', 'event_timestamp' => 400, 'tier' => 2,
+    ]);
+    $this->call('POST', '/api/appsumo/webhook', [], [], [], $refundHeaders, $refunded)->assertOk();
+    expect($license->fresh()->status)->toBe('deactivated');
+});
+
+it('returns a retryable failure instead of silently acknowledging an invalid paid tier', function () {
+    config()->set('services.appsumo.key', APPSUMO_TEST_KEY);
+    $key = (string) Str::uuid();
+
+    [$body, $headers] = appsumoWebhook([
+        'license_key' => $key, 'event' => 'activate',
+        'license_status' => 'inactive', 'event_timestamp' => 100, 'tier' => 99,
+    ]);
+
+    $this->call('POST', '/api/appsumo/webhook', [], [], [], $headers, $body)
+        ->assertStatus(503)->assertJson(['success' => false, 'error' => 'delivery_not_processed']);
+
+    expect(AppSumoLicense::where('license_key', $key)->exists())->toBeFalse();
 });

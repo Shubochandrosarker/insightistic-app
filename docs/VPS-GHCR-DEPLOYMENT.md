@@ -1,5 +1,11 @@
 # Insightistic VPS GHCR Deployment
 
+> **GitHub Actions billing/outage fallback:** use
+> docs/VPS-LOCAL-BUILD-DEPLOY.md to build images directly on the existing
+> Hostinger VPS from a pinned Git SHA. Do not depend on GHCR :latest while
+> Actions is unavailable. This file documents the GHCR publishing path.
+> Do not overwrite any production .env file with an example.
+
 This runbook deploys Insightistic as a separate Docker Compose project at
 `/opt/stacks/insightistic`. It assumes Traefik already owns public HTTP/HTTPS on
 the VPS. The Insightistic compose file does not publish host port 80.
@@ -93,13 +99,14 @@ MAIL_USERNAME=
 MAIL_PASSWORD=
 STRIPE_SECRET=
 STRIPE_WEBHOOK_SECRET=
-BILLING_PROVIDER=paddle
+STRIPE_ALLOW_LIVE=false  # enable only after verified live checkout and webhook tests
+BILLING_PROVIDER=stripe
 PADDLE_ENV=production
 PADDLE_API_KEY=
 PADDLE_CLIENT_TOKEN=
 PADDLE_WEBHOOK_SECRET=
-FEATURE_PADDLE=true
-SEED_BILLING_CATALOG=true
+FEATURE_PADDLE=false
+SEED_BILLING_CATALOG=false
 INSIGHTISTIC_RELEASE=<commit-sha>
 INSIGHTISTIC_BUILD_TIME=<utc-build-time>
 ```

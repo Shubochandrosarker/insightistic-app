@@ -39,7 +39,11 @@ class AppSumoLicenseService
         return in_array($row->event, ['activate', 'upgrade', 'downgrade'], true)
             && in_array($row->license_status, ['inactive', 'active'], true)
             && ! $row->is_test
-            && $row->parent_license_key === null;
+            && $row->parent_license_key === null
+            && ! AppSumoLicense::query()
+                ->where('prev_license_key', $row->license_key)
+                ->whereIn('license_status', ['inactive', 'active'])
+                ->exists();
     }
 
     /**

@@ -358,3 +358,31 @@ it('revokes an existing license when AppSumo omits the tier on deactivate', func
         ->and($license->fresh()->plan_id)->toBe($agency->id)
         ->and(AppSumoLicense::where('license_key', $key)->first()->tier)->toBe(3);
 });
+
+
+it('stores an official tierless purchase until activation supplies its real tier', function () {
+    config()->set('services.appsumo.key', APPSUMO_TEST_KEY);
+    $key = (string) Str::uuid();
+
+    [$purchase, $purchaseHeaders] = appsumoWebhook([
+        'license_key' => $key, 'event' => 'purchase',
+        'license_status' => 'inactive', 'event_timestamp' => 1,
+    ]);
+    $this->call('POST', '/api/appsumo/webhook', [], [], [], $purchaseHeaders, $purchase)->assertOk();
+
+    $row = AppSumoLicense::where('license_key', $key)->firstOrFail();
+    expect($row->tier)->toBeNull()
+        ->and($row->plan_slug)->toBeNull()
+        ->and(app(AppSumoLicenseService::class)->isClaimable($row))->toBeFalse();
+
+    [$activate, $activateHeaders] = appsumoWebhook([
+        'license_key' => $key, 'event' => 'activate',
+        'license_status' => 'inactive', 'event_timestamp' => 2, 'tier' => 1,
+    ]);
+    $this->call('POST', '/api/appsumo/webhook', [], [], [], $activateHeaders, $activate)->assertOk();
+
+    $row->refresh();
+    expect($row->tier)->toBe(1)
+        ->and($row->plan_slug)->toBe('appsumo_solo')
+        ->and(app(AppSumoLicenseService::class)->isClaimable($row))->toBeTrue();
+});

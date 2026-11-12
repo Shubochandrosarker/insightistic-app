@@ -87,7 +87,7 @@ class AppSumoLicenseService
                 ?? new AppSumoLicense(['license_key' => $key]);
 
             $tier = $incomingTier ?? $row->tier;
-            if ($tier === null && ! in_array($event, ['deactivate', 'migrate'], true)) {
+            if ($tier === null && ! in_array($event, ['purchase', 'deactivate', 'migrate'], true)) {
                 throw new InvalidArgumentException('AppSumo event has no paid tier.');
             }
             $planSlug = $tier !== null ? $this->tierToPlanSlug((int) $tier) : null;

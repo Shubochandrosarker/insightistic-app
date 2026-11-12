@@ -208,6 +208,74 @@ class AppSumoClaimController extends Controller
     }
 
     /**
+     * Existing customers, including MFA-enabled customers, redeem with their
+     * already authenticated Sanctum session. No password-only MFA bypass.
+     * This endpoint sits outside tenant middleware because a signed-in user
+     * can be waiting for their first owned organization.
+     */
+    public function claimAuthenticated(Request $request)
+    {
+        $user = $request->user();
+
+        if (! $user || $user->status !== 'active' || $user->archived_at !== null) {
+            return response()->json(['message' => 'Sign in to an active account first.'], 403);
+        }
+
+        $data = $request->validate([
+            'license_key' => ['required', 'string', 'max:64'],
+        ]);
+
+        if (! AppSumoLicense::query()->where('license_key', $data['license_key'])->exists()) {
+            return response()->json(['message' => 'We could not find that AppSumo license.'], 404);
+        }
+
+        try {
+            [$org, $row] = DB::transaction(function () use ($data, $user) {
+                $row = AppSumoLicense::query()
+                    ->where('license_key', $data['license_key'])
+                    ->lockForUpdate()
+                    ->firstOrFail();
+
+                if (! $this->licenses->isClaimable($row)
+                    || ($row->user_id !== null && $row->user_id !== $user->id)) {
+                    throw new DomainException('AppSumo license is not available.');
+                }
+
+                $org = $this->licenses->primaryOrganization($user)
+                    ?? $this->provisioner->bootstrapOrganization($user, $user->name);
+
+                if ($row->org_id !== null && $row->org_id !== $org->id) {
+                    throw new DomainException('AppSumo license belongs to another organization.');
+                }
+
+                $this->applyTierPlan($org, $row);
+                $row = $this->licenses->linkToOrganization($row->license_key, $user);
+
+                return [$org->refresh(), $row];
+            });
+
+            $plan = Plan::query()->where('slug', $row->plan_slug)->first();
+
+            return response()->json([
+                'plan_slug' => $row->plan_slug,
+                'sites_limit' => (int) ($plan?->site_limit ?? 0),
+                'organization_id' => $org->id,
+                'linked' => true,
+            ]);
+        } catch (DomainException $e) {
+            return response()->json([
+                'message' => 'This AppSumo license is no longer available for this account.',
+            ], 409);
+        } catch (Throwable $e) {
+            report($e);
+
+            return response()->json([
+                'message' => 'We could not activate this license right now. Please retry or contact support.',
+            ], 500);
+        }
+    }
+
+    /**
      * Point the org at the tier's lifetime plan (appsumo_solo/studio/agency).
      * The org-level `licenses` row projection happens inside
      * AppSumoLicenseService::applyEntitlements, called by linkToOrganization.

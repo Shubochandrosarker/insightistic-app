@@ -283,3 +283,60 @@ it('does not allow password-only first claims to bypass multi-factor authenticat
     expect($row->fresh()->user_id)->toBeNull()
         ->and($row->fresh()->org_id)->toBeNull();
 });
+
+
+it('lets an MFA customer claim through an authenticated session without a password-only bypass', function () {
+    [$row, $plan] = appsumoClaimLicense(tier: 2);
+    [$user, $org] = makeOrgUser('mfa-claim-' . Str::random(6) . '@example.com');
+    $license = appsumoClaimOrgLicense($org);
+
+    $user->forceFill([
+        'mfa_secret' => 'test-mfa-secret',
+        'mfa_confirmed_at' => now(),
+    ])->save();
+
+    $this->withToken($user->createToken('spa')->plainTextToken)
+        ->postJson('/api/appsumo/claim/authenticated', [
+            'license_key' => $row->license_key,
+        ])
+        ->assertOk()
+        ->assertJsonPath('plan_slug', 'appsumo_studio')
+        ->assertJsonPath('sites_limit', 10)
+        ->assertJsonPath('linked', true);
+
+    expect($row->fresh()->user_id)->toBe($user->id)
+        ->and($row->fresh()->org_id)->toBe($org->id)
+        ->and($license->fresh()->plan_id)->toBe($plan->id);
+});
+
+it('requires a logged-in account for the authenticated claim path', function () {
+    [$row,] = appsumoClaimLicense(tier: 1);
+
+    $this->postJson('/api/appsumo/claim/authenticated', [
+        'license_key' => $row->license_key,
+    ])->assertUnauthorized();
+
+    expect($row->fresh()->user_id)->toBeNull();
+});
+
+it('does not transfer a claimed AppSumo key between authenticated accounts', function () {
+    [$row,] = appsumoClaimLicense(tier: 1);
+    [$owner, $org] = makeOrgUser('first-' . Str::random(6) . '@example.com');
+    [$other, $otherOrg] = makeOrgUser('second-' . Str::random(6) . '@example.com');
+
+    $license = appsumoClaimOrgLicense($org);
+    appsumoClaimOrgLicense($otherOrg);
+    $row->forceFill([
+        'user_id' => $owner->id,
+        'org_id' => $org->id,
+        'license_id' => $license->id,
+    ])->save();
+
+    $this->withToken($other->createToken('spa')->plainTextToken)
+        ->postJson('/api/appsumo/claim/authenticated', [
+            'license_key' => $row->license_key,
+        ])->assertStatus(409);
+
+    expect($row->fresh()->user_id)->toBe($owner->id)
+        ->and($row->fresh()->org_id)->toBe($org->id);
+});

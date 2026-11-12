@@ -82,7 +82,7 @@ it('claims an unclaimed license for a brand-new account and applies the tier pla
 
     $user = User::where('email', 'sumo.buyer@example.com')->firstOrFail();
     expect($user->status)->toBe('active')
-        ->and($user->email_verified_at)->not->toBeNull();
+        ->and($user->email_verified_at)->toBeNull();
 
     $row->refresh();
     $org = Organization::findOrFail($row->org_id);
@@ -248,4 +248,38 @@ it('exposes license state for the SPA pre-check and 404s unknown keys', function
     $this->getJson("/api/appsumo/claim/{$row->license_key}")
         ->assertOk()
         ->assertJsonPath('linked', true);
+});
+
+
+it('allows claim after AppSumo activate while provider status is still inactive', function () {
+    [$row,] = appsumoClaimLicense(tier: 1, status: 'inactive');
+
+    $this->getJson("/api/appsumo/claim/{$row->license_key}")
+        ->assertOk()->assertJsonPath('status', 'active');
+
+    $this->postJson('/api/appsumo/claim', [
+        'license_key' => $row->license_key,
+        'email' => 'pending-buyer-' . Str::random(6) . '@example.com',
+        'password' => 'long-secret-123',
+    ])->assertCreated()->assertJsonPath('plan_slug', 'appsumo_solo');
+});
+
+it('does not allow password-only first claims to bypass multi-factor authentication', function () {
+    [$row,] = appsumoClaimLicense(tier: 1);
+    [$user, $org] = makeOrgUser('mfa-sumo-' . Str::random(6) . '@example.com');
+    appsumoClaimOrgLicense($org);
+
+    $user->forceFill([
+        'mfa_secret' => 'test-totp-secret',
+        'mfa_confirmed_at' => now(),
+    ])->save();
+
+    $this->postJson('/api/appsumo/claim', [
+        'license_key' => $row->license_key,
+        'email' => $user->email,
+        'password' => 'secret-password',
+    ])->assertStatus(403);
+
+    expect($row->fresh()->user_id)->toBeNull()
+        ->and($row->fresh()->org_id)->toBeNull();
 });

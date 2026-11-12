@@ -1,0 +1,32 @@
+# Overlay for emergency releases built locally on the VPS.
+# Usage: docker compose --env-file .env.production \
+#   -f docker-compose.prod.yml -f docker-compose.local-images.yml up -d
+# An IMAGE_TAG pinned to the git commit is REQUIRED. Do not use latest.
+# Never let Watchtower replace a locally built image with a stale GHCR build.
+services:
+  migrate:
+    pull_policy: never
+    labels:
+      traefik.enable: "false"
+  api:
+    pull_policy: never
+    labels:
+      com.centurylinklabs.watchtower.enable: "false"
+      traefik.enable: "false"
+  queue:
+    pull_policy: never
+    labels:
+      com.centurylinklabs.watchtower.enable: "false"
+      traefik.enable: "false"
+  scheduler:
+    pull_policy: never
+    labels:
+      com.centurylinklabs.watchtower.enable: "false"
+      traefik.enable: "false"
+  app:
+    pull_policy: never
+    labels:
+      com.centurylinklabs.watchtower.enable: "false"
+      traefik.enable: "false"
+  nginx:
+    pull_policy: if_not_present

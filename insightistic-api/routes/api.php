@@ -860,6 +860,8 @@ Route::get('appsumo/oauth/callback', [AppSumoOAuthController::class, 'callback']
 // GET is the unauthenticated page pre-check.
 Route::get('appsumo/claim/{licenseKey}', [AppSumoClaimController::class, 'show'])->middleware('throttle:public');
 Route::post('appsumo/claim', [AppSumoClaimController::class, 'claim'])->middleware('throttle:auth');
+Route::post('appsumo/claim/authenticated', [AppSumoClaimController::class, 'claimAuthenticated'])
+    ->middleware(['auth:sanctum', 'restrict.impersonation', 'throttle:auth']);
 
 // ---- Uptime monitoring (Phase 12, docs/roadmap-2026/16-PERFORMANCE-UPTIME.md)
 // Appended as its own group rather than spliced into the site.access group

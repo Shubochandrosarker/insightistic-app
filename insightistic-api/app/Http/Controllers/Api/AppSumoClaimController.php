@@ -9,6 +9,7 @@ use App\Models\Plan;
 use App\Models\User;
 use App\Services\AccountProvisioner;
 use App\Services\AppSumoLicenseService;
+use DomainException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
@@ -45,7 +46,7 @@ class AppSumoClaimController extends Controller
         }
 
         return response()->json([
-            'status'    => $row->license_status,
+            'status'    => $this->licenses->isClaimable($row) ? 'active' : $row->license_status,
             'tier'      => $row->tier,
             'plan_slug' => $row->plan_slug,
             'linked'    => $row->user_id !== null,
@@ -82,7 +83,7 @@ class AppSumoClaimController extends Controller
             ], 404);
         }
 
-        if ($row->license_status !== 'active') {
+        if (! $this->licenses->isClaimable($row)) {
             return response()->json([
                 'message' => 'This AppSumo license is not active. Contact AppSumo support if you believe this is a mistake.',
             ], 422);
@@ -121,16 +122,15 @@ class AppSumoClaimController extends Controller
                 ], 403);
             }
 
-            if ($row->user_id) {
-                // Already claimed by this very user — re-login. MFA accounts
-                // go through the normal login (its challenge flow) so two
-                // factor is never bypassed by the license key.
-                if ($user->hasMfa()) {
-                    return response()->json([
-                        'message' => 'This license is already active on your account. Please sign in normally — extra sign-in verification is enabled.',
-                    ], 403);
-                }
+            // MFA must also guard the FIRST claim, not just subsequent
+            // logins. The public claim endpoint can only check a password.
+            if ($user->hasMfa()) {
+                return response()->json([
+                    'message' => 'Sign in normally with multi-factor verification, then contact support to attach this AppSumo license.',
+                ], 403);
+            }
 
+            if ($row->user_id) {
                 $token = $user->createToken('spa')->plainTextToken;
 
                 return response()->json($this->payload(
@@ -143,17 +143,23 @@ class AppSumoClaimController extends Controller
 
             // Existing account, unclaimed license: bind it to their primary
             // org (provisioning one first if they somehow have none).
-            [$user, $org] = DB::transaction(function () use ($user, $row) {
+            try {
+                [$user, $org] = DB::transaction(function () use ($user, $row) {
                 $org = $this->licenses->primaryOrganization($user)
                     ?? $this->provisioner->bootstrapOrganization($user, $user->name);
 
                 $this->applyTierPlan($org, $row);
                 $this->licenses->linkToOrganization($row->license_key, $user);
 
-                return [$user->refresh(), $org->refresh()];
-            });
+                    return [$user->refresh(), $org->refresh()];
+                });
+            } catch (DomainException $e) {
+                return response()->json([
+                    'message' => 'This AppSumo license is no longer available for this account.',
+                ], 409);
+            }
 
-            return response()->json($this->payload($user, $org, $row, $user->createToken('spa')->plainTextToken));
+            return response()->json($this->payload($user, $org, $row->refresh(), $user->createToken('spa')->plainTextToken));
         }
 
         // New account: create user + org, apply the tier plan, bind the key.
@@ -170,9 +176,9 @@ class AppSumoClaimController extends Controller
                     'email'             => $data['email'],
                     'password'          => $data['password'], // hashed cast
                     'status'            => 'active',
-                    // OAuth-verified buyer: the purchase already proves the
-                    // address, so no verification email loop is needed.
-                    'email_verified_at' => now(),
+                    // The buyer typed this email; AppSumo OAuth validates the
+                    // license, NOT control of an arbitrary email address.
+                    'email_verified_at' => null,
                 ]);
 
                 $rawLicenseKey = null;
@@ -183,6 +189,10 @@ class AppSumoClaimController extends Controller
 
                 return [$user->refresh(), $org->refresh()];
             });
+        } catch (DomainException $e) {
+            return response()->json([
+                'message' => 'This AppSumo license is no longer available for this account.',
+            ], 409);
         } catch (Throwable $e) {
             report($e);
 

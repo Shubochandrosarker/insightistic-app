@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth";
 import { AuthShell } from "@/components/auth/AuthShell";
-import { apiGet, apiPost, type ApiError } from "@/lib/api";
+import { apiGet, apiPost, getToken, type ApiError } from "@/lib/api";
 
 const PLAN_LABELS: Record<string, string> = {
   appsumo_solo: "AppSumo Solo — lifetime",
@@ -26,7 +26,7 @@ interface Precheck {
  * password, and POSTs /appsumo/claim which returns a Sanctum token.
  */
 export default function AppSumoClaim() {
-  const { applyToken } = useAuth();
+  const { applyToken, user, loading } = useAuth();
   const router = useRouter();
   const [licenseKey, setLicenseKey] = useState<string | null>(null);
   const [pre, setPre] = useState<Precheck | null>(null);
@@ -68,6 +68,21 @@ export default function AppSumoClaim() {
       })
       .finally(() => setChecking(false));
   }, []);
+
+  async function claimSignedIn() {
+    if (!licenseKey || busy) return;
+    setBusy(true);
+    setErr(null);
+    try {
+      await apiPost("/appsumo/claim/authenticated", { license_key: licenseKey });
+      const token = getToken();
+      if (token) await applyToken(token);
+      router.push("/dashboard");
+    } catch (e: any) {
+      setErr(e.message || "We could not activate this license. Please retry.");
+      setBusy(false);
+    }
+  }
 
   function validate(): string | null {
     if (!f.email.trim()) return "Please enter the email for your account.";
@@ -111,7 +126,7 @@ export default function AppSumoClaim() {
       footer={
         <>
           Already have an account?{" "}
-          <Link href="/login" className="font-semibold text-brand hover:text-brand2">
+          <Link href={licenseKey ? `/login?next=${encodeURIComponent(`/appsumo/claim?license=${licenseKey}`)}` : "/login"} className="font-semibold text-brand hover:text-brand2">
             Sign in
           </Link>
         </>
@@ -131,7 +146,21 @@ export default function AppSumoClaim() {
         </p>
       )}
 
-      {!checking && !fatal && licenseKey && (
+      {!checking && !fatal && licenseKey && !loading && user && (
+        <div>
+          <p className="mb-3 text-sm text-slate-600">
+            You are signed in as <strong>{user.email}</strong>. Activate this lifetime license on your owned workspace.
+          </p>
+          {err && (
+            <p className="mb-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600">{err}</p>
+          )}
+          <button type="button" className="ins-btn mt-3" disabled={busy} onClick={claimSignedIn}>
+            {busy ? "Activating…" : "Activate on my account"}
+          </button>
+        </div>
+      )}
+
+      {!checking && !fatal && licenseKey && !loading && !user && (
         <form onSubmit={submit} noValidate>
           {err && (
             <p className="mb-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600">

@@ -386,3 +386,26 @@ it('stores an official tierless purchase until activation supplies its real tier
         ->and($row->plan_slug)->toBe('appsumo_solo')
         ->and(app(AppSumoLicenseService::class)->isClaimable($row))->toBeTrue();
 });
+
+
+it('does not let a late purchase retry undo a completed activation', function () {
+    config()->set('services.appsumo.key', APPSUMO_TEST_KEY);
+    $key = (string) Str::uuid();
+
+    [$activation, $activationHeaders] = appsumoWebhook([
+        'license_key' => $key, 'event' => 'activate',
+        'license_status' => 'inactive', 'event_timestamp' => 20, 'tier' => 1,
+    ]);
+    $this->call('POST', '/api/appsumo/webhook', [], [], [], $activationHeaders, $activation)->assertOk();
+
+    [$purchase, $purchaseHeaders] = appsumoWebhook([
+        'license_key' => $key, 'event' => 'purchase',
+        'license_status' => 'inactive', 'event_timestamp' => 99,
+    ]);
+    $this->call('POST', '/api/appsumo/webhook', [], [], [], $purchaseHeaders, $purchase)->assertOk();
+
+    $row = AppSumoLicense::where('license_key', $key)->firstOrFail();
+    expect($row->event)->toBe('activate')
+        ->and($row->plan_slug)->toBe('appsumo_solo')
+        ->and(app(AppSumoLicenseService::class)->isClaimable($row))->toBeTrue();
+});

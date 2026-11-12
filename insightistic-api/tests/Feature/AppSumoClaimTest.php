@@ -340,3 +340,21 @@ it('does not transfer a claimed AppSumo key between authenticated accounts', fun
     expect($row->fresh()->user_id)->toBe($owner->id)
         ->and($row->fresh()->org_id)->toBe($org->id);
 });
+
+
+it('blocks license transfers through elevated support impersonation sessions', function () {
+    [$row,] = appsumoClaimLicense(tier: 1);
+    [$user, $org] = makeOrgUser('impersonation-' . Str::random(6) . '@example.com');
+    appsumoClaimOrgLicense($org);
+
+    $impersonationToken = $user->createToken('impersonation', [
+        'impersonated', 'impersonated-elevated',
+    ])->plainTextToken;
+
+    $this->withToken($impersonationToken)
+        ->postJson('/api/appsumo/claim/authenticated', [
+            'license_key' => $row->license_key,
+        ])->assertStatus(403);
+
+    expect($row->fresh()->user_id)->toBeNull();
+});

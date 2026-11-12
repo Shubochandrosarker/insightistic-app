@@ -92,8 +92,11 @@ class AppSumoLicenseService
             }
             $planSlug = $tier !== null ? $this->tierToPlanSlug((int) $tier) : null;
 
-            // A delayed purchase replay must not revive a cancelled license.
-            if ($row->exists && $row->event === 'deactivate' && $event === 'purchase') {
+            // AppSumo may retry a purchase after activation, upgrade or
+            // deactivation. Never allow a placeholder to undo later events.
+            if ($row->exists
+                && in_array($row->event, ['activate', 'upgrade', 'downgrade', 'deactivate'], true)
+                && $event === 'purchase') {
                 return $row;
             }
 

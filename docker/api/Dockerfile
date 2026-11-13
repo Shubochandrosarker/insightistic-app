@@ -33,6 +33,11 @@ ARG INSIGHTISTIC_RELEASE=unknown
 ARG INSIGHTISTIC_BUILD_TIME=
 ENV INSIGHTISTIC_RELEASE=${INSIGHTISTIC_RELEASE}
 ENV INSIGHTISTIC_BUILD_TIME=${INSIGHTISTIC_BUILD_TIME}
+# Keep release identity attached to the image as well as the compose
+# environment. This prevents a stale VPS-level metadata value from masking the
+# actual code revision after an image-only deployment.
+ENV INSIGHTISTIC_IMAGE_RELEASE=${INSIGHTISTIC_RELEASE}
+ENV INSIGHTISTIC_IMAGE_BUILD_TIME=${INSIGHTISTIC_BUILD_TIME}
 
 RUN apk add --no-cache \
         nginx supervisor curl \

@@ -14,6 +14,11 @@ on:
 permissions:
   contents: read
   packages: write
+  # The reusable CI workflow contains the gitleaks job, which requires these
+  # grants. They must be available at the caller level before the reusable
+  # workflow can start; otherwise GitHub rejects the workflow at startup.
+  security-events: write
+  pull-requests: write
 
 concurrency:
   group: insightistic-docker-${{ github.ref }}

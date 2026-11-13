@@ -42,7 +42,7 @@ describe("AppSumo claim page", () => {
     apiPostMock.mockResolvedValue({ token: "tok", plan_slug: "appsumo_studio", sites_limit: 10 });
 
     mount("?license=lic-key");
-    expect(await screen.findByText(/AppSumo Studio — lifetime/i)).toBeInTheDocument();
+    expect(await screen.findByText(/AppSumo legacy tier 2 — lifetime/i)).toBeInTheDocument();
 
     await userEvent.type(screen.getByLabelText("Email"), "buyer@example.com");
     await userEvent.type(screen.getByLabelText("Password"), "super-secret-9");
@@ -82,7 +82,7 @@ describe("AppSumo claim page", () => {
     apiGetMock.mockResolvedValue({ status: "active", tier: 1, plan_slug: "appsumo_solo", linked: false });
 
     mount("?license=lic-key");
-    await screen.findByText(/AppSumo Solo — lifetime/i);
+    await screen.findByText(/AppSumo legacy tier 1 — lifetime/i);
 
     await userEvent.type(screen.getByLabelText("Email"), "buyer@example.com");
     await userEvent.type(screen.getByLabelText("Password"), "short");

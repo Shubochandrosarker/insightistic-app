@@ -20,7 +20,21 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Publishing is gated on the FULL CI suite (frontend typecheck/build/audit,
+  # backend Pest on PostgreSQL+Redis, migration up/rollback/up, plugin
+  # checks, docker build, secret scan) — see .github/workflows/ci.yml.
+  ci:
+    uses: ./.github/workflows/ci.yml
+    permissions:
+      contents: read
+      # ci.yml's secrets-scan job needs these; a reusable-workflow call is
+      # capped at what the caller grants, and an over-grant there is a
+      # startup_failure (all jobs dropped, images never built).
+      security-events: write
+      pull-requests: write
+
   docker:
+    needs: ci
     runs-on: ubuntu-latest
     steps:
       - name: Checkout

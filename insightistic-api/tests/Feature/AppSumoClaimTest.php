@@ -18,9 +18,11 @@ use Illuminate\Support\Str;
  */
 
 const APPSUMO_CLAIM_TIERS = [
-    1 => ['appsumo_solo', 3],
-    2 => ['appsumo_studio', 10],
-    3 => ['appsumo_agency', 25],
+    1 => ['appsumo_tier_1', 1],
+    2 => ['appsumo_tier_2', 3],
+    3 => ['appsumo_tier_3', 10],
+    4 => ['appsumo_tier_4', 25],
+    5 => ['appsumo_tier_5', 50],
 ];
 
 /** An active AppSumo license row + its seeded lifetime plan for tier N. */
@@ -75,8 +77,8 @@ it('claims an unclaimed license for a brand-new account and applies the tier pla
     ]);
 
     $res->assertCreated()
-        ->assertJsonPath('plan_slug', 'appsumo_studio')
-        ->assertJsonPath('sites_limit', 10)
+        ->assertJsonPath('plan_slug', 'appsumo_tier_2')
+        ->assertJsonPath('sites_limit', 3)
         ->assertJsonPath('user.email', 'sumo.buyer@example.com')
         ->assertJsonStructure(['token', 'user', 'org', 'plan_slug', 'sites_limit']);
 
@@ -113,7 +115,7 @@ it('lets an existing unlinked user claim by password sign-in and binds to their 
         'password' => 'secret-password',
     ]);
 
-    $res->assertOk()->assertJsonPath('plan_slug', 'appsumo_solo');
+    $res->assertOk()->assertJsonPath('plan_slug', 'appsumo_tier_1');
 
     $row->refresh();
     expect($row->user_id)->toBe($user->id)
@@ -235,7 +237,7 @@ it('exposes license state for the SPA pre-check and 404s unknown keys', function
         ->assertJson([
             'status' => 'active',
             'tier' => 3,
-            'plan_slug' => 'appsumo_agency',
+            'plan_slug' => 'appsumo_tier_3',
             'linked' => false,
         ]);
 
@@ -261,7 +263,7 @@ it('allows claim after AppSumo activate while provider status is still inactive'
         'license_key' => $row->license_key,
         'email' => 'pending-buyer-' . Str::random(6) . '@example.com',
         'password' => 'long-secret-123',
-    ])->assertCreated()->assertJsonPath('plan_slug', 'appsumo_solo');
+    ])->assertCreated()->assertJsonPath('plan_slug', 'appsumo_tier_1');
 });
 
 it('does not allow password-only first claims to bypass multi-factor authentication', function () {
@@ -300,8 +302,8 @@ it('lets an MFA customer claim through an authenticated session without a passwo
             'license_key' => $row->license_key,
         ])
         ->assertOk()
-        ->assertJsonPath('plan_slug', 'appsumo_studio')
-        ->assertJsonPath('sites_limit', 10)
+        ->assertJsonPath('plan_slug', 'appsumo_tier_2')
+        ->assertJsonPath('sites_limit', 3)
         ->assertJsonPath('linked', true);
 
     expect($row->fresh()->user_id)->toBe($user->id)

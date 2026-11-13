@@ -248,6 +248,14 @@ class RankController extends Controller
         ));
 
         $org = $site->organization;
+        $hasLocalKeyword = collect($items)->contains(fn (array $item) => filled($item['attributes']['location'] ?? null));
+        if ($hasLocalKeyword && ! app(\App\Domain\Billing\EntitlementResolver::class)->hasFeature($org, 'local_seo_analytics')) {
+            return response()->json([
+                'code' => 'feature_not_included',
+                'feature' => 'local_seo_analytics',
+                'message' => 'Local SEO analytics is not included in your current plan.',
+            ], 402);
+        }
         $limit = app(\App\Services\UsageService::class)->limit($org, 'tracked_keywords');
         $used = RankKeyword::where('site_id', $site->id)->where('active', true)->count();
 

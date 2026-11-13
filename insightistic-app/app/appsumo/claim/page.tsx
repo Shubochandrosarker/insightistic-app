@@ -7,9 +7,14 @@ import { AuthShell } from "@/components/auth/AuthShell";
 import { apiGet, apiPost, getToken, type ApiError } from "@/lib/api";
 
 const PLAN_LABELS: Record<string, string> = {
-  appsumo_solo: "AppSumo Solo — lifetime",
-  appsumo_studio: "AppSumo Studio — lifetime",
-  appsumo_agency: "AppSumo Agency — lifetime",
+  appsumo_tier_1: "AppSumo Tier 1 — lifetime",
+  appsumo_tier_2: "AppSumo Tier 2 — lifetime",
+  appsumo_tier_3: "AppSumo Tier 3 — lifetime",
+  appsumo_tier_4: "AppSumo Tier 4 — lifetime",
+  appsumo_tier_5: "AppSumo Tier 5 — lifetime",
+  appsumo_solo: "AppSumo legacy tier 1 — lifetime",
+  appsumo_studio: "AppSumo legacy tier 2 — lifetime",
+  appsumo_agency: "AppSumo legacy tier 3 — lifetime",
 };
 
 interface Precheck {

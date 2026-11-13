@@ -40,6 +40,17 @@ const FEATURE_LABELS: Record<string, string> = {
   multi_site: "Multiple connected sites",
   agency_white_label: "White-label reports",
   team_access: "Team roles and access",
+  ga4_analytics: "GA4 analytics",
+  search_console_analytics: "Search Console analytics",
+  cloudflare_analytics: "Cloudflare analytics",
+  pagespeed_analytics: "PageSpeed analytics",
+  rank_tracking: "Rank tracking",
+  local_seo_analytics: "Local SEO analytics",
+  competitor_insights: "AI competitor insights",
+  market_insights: "Market insights",
+  custom_workflow_builder: "Custom Workflow Builder",
+  custom_knowledge_base: "Custom KnowledgeBase",
+  priority_support: "Priority support",
 };
 
 function apiPlanToCard(plan: ApiPlan) {

@@ -31,7 +31,7 @@ export default function Login() {
 
   // Already signed in → send them where they belong.
   useEffect(() => {
-    if (!loading && user) router.replace(signedInDestination(user.is_super_admin));
+    if (!loading && user) router.replace(signedInDestination(Boolean(user.is_super_admin)));
   }, [user, loading, router]);
 
   async function submit(e: React.FormEvent) {

@@ -1,6 +1,7 @@
 import { Nav } from "@/components/marketing/Nav";
 import { Footer } from "@/components/marketing/Footer";
 import { PricingCards } from "@/components/marketing/PricingCards";
+import { AppSumoPricing } from "@/components/marketing/AppSumoPricing";
 import Link from "next/link";
 import { appsumoAffiliateUrl } from "@/lib/ltd";
 
@@ -42,6 +43,7 @@ export default function Pricing() {
           <p className="mt-3 text-slate-600">Start free and upgrade as your business grows. Get WordPress and WooCommerce analytics, SEO intelligence, AI insights and automated reporting in one workspace.</p>
         </div>
         <PricingCards />
+        <AppSumoPricing affiliateUrl={appsumoAffiliateUrl()} />
 
         {ltdLive && (
           <p className="mt-10 text-center text-sm">

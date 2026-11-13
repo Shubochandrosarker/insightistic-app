@@ -347,6 +347,8 @@ export default function BillingPage() {
         price: Number(pack.price_minor) / 100,
       }))
     : CREDIT_PACK_FALLBACK;
+  const appsumoTiers = Array.isArray(plansData?.appsumo?.plans) ? plansData.appsumo.plans : [];
+  const currentAppSumoTier = appsumoTiers.find((tier: any) => String(tier.slug) === currentSlug);
 
   return (
     <div>
@@ -408,6 +410,24 @@ export default function BillingPage() {
         </div>
         <p className="mt-3 text-xs text-muted">Total usable now: {num(data.credits?.total_usable ?? monthlyCreditsRemaining)}. Next monthly reset: {data.credits?.next_reset_at ? new Date(data.credits.next_reset_at).toLocaleDateString() : "—"}. AI actions use included credits before purchased credits.</p>
       </Card>
+
+      {currentAppSumoTier && (
+        <Card className="mt-5" title="AppSumo lifetime entitlement" subtitle="Your AppSumo license controls the capacity below; AppSumo manages the one-time purchase and license lifecycle.">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <div><div className="text-xs text-muted">Connected sites</div><div className="mt-1 text-xl font-bold text-fg">{num(Number(currentAppSumoTier.sites))}</div></div>
+            <div><div className="text-xs text-muted">Page crawling / month</div><div className="mt-1 text-xl font-bold text-fg">{num(Number(currentAppSumoTier.limits?.crawl_pages_monthly ?? 0))} pages</div></div>
+            <div><div className="text-xs text-muted">Browser rendering / month</div><div className="mt-1 text-xl font-bold text-fg">{num(Number(currentAppSumoTier.limits?.browser_rendering_minutes_monthly ?? 0))} min</div></div>
+            <div><div className="text-xs text-muted">Weekly tracked keywords</div><div className="mt-1 text-xl font-bold text-fg">{num(Number(currentAppSumoTier.limits?.tracked_keywords ?? 0))}</div></div>
+            <div><div className="text-xs text-muted">AI actions / month</div><div className="mt-1 text-xl font-bold text-fg">{num(Number(currentAppSumoTier.standard_ai_requests ?? 0))}</div></div>
+            <div><div className="text-xs text-muted">Included Insight Credits / month</div><div className="mt-1 text-xl font-bold text-fg">{num(Number(currentAppSumoTier.monthly_ai_credits ?? 0))}</div></div>
+            <div><div className="text-xs text-muted">Reports generated / month</div><div className="mt-1 text-xl font-bold text-fg">{num(Number(currentAppSumoTier.limits?.client_ready_reports_monthly ?? 0))}</div></div>
+            <div><div className="text-xs text-muted">Active report schedules</div><div className="mt-1 text-xl font-bold text-fg">{num(Number(currentAppSumoTier.limits?.scheduled_report_limit ?? 0))}</div></div>
+            <div><div className="text-xs text-muted">Team members</div><div className="mt-1 text-xl font-bold text-fg">{Number(currentAppSumoTier.team_member_limit) === 0 ? "Unlimited" : `${num(Number(currentAppSumoTier.team_member_limit))} added`}</div></div>
+            <div><div className="text-xs text-muted">Added member cost</div><div className="mt-1 text-xl font-bold text-fg">{num(Number(currentAppSumoTier.team_member_add_credits ?? 10))} credits</div></div>
+          </div>
+          <p className="mt-3 text-xs text-muted">Local SEO rank tracking is available by market and device. Tier 3 and above also include AI competitor visibility insights; rank checks and other variable work use your Insight Credit wallet. Monthly allowances are shared across connected sites and reset monthly.</p>
+        </Card>
+      )}
 
       {!ltdIntent && <Card id="change-plan" className="mt-5" title="Change plan">
         {msg && <p className="mb-3 text-sm text-warn">{msg}</p>}

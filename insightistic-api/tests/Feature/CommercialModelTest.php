@@ -54,9 +54,11 @@ it('seeds the approved tracked-keyword caps and rank cadence for every tier', fu
         'angel_solo' => [20, 'weekly'],
         'angel_studio' => [60, 'weekly'],
         'angel_agency' => [150, 'weekly'],
-        'appsumo_solo' => [20, 'weekly'],
-        'appsumo_studio' => [40, 'weekly'],
-        'appsumo_agency' => [100, 'weekly'],
+        'appsumo_tier_1' => [10, 'weekly'],
+        'appsumo_tier_2' => [20, 'weekly'],
+        'appsumo_tier_3' => [40, 'weekly'],
+        'appsumo_tier_4' => [100, 'weekly'],
+        'appsumo_tier_5' => [250, 'weekly'],
     ];
 
     $catalog = array_merge(
@@ -72,6 +74,26 @@ it('seeds the approved tracked-keyword caps and rank cadence for every tier', fu
     }
 
     expect(count($catalog))->toBe(count($expected));
+});
+
+it('keeps the AppSumo capacity matrix explicit and enforceable', function () {
+    $expected = [
+        'appsumo_tier_1' => [10000, 15, 5, 1, 100, 5000],
+        'appsumo_tier_2' => [40000, 60, 25, 3, 200, 10000],
+        'appsumo_tier_3' => [100000, 180, 100, 10, 600, 30000],
+        'appsumo_tier_4' => [250000, 300, 250, 25, 1500, 75000],
+        'appsumo_tier_5' => [600000, 600, 500, 50, 5000, 250000],
+    ];
+
+    foreach ($expected as $slug => [$crawl, $browser, $reports, $schedules, $actions, $credits]) {
+        $plan = config("commercial.appsumo_plans.$slug");
+        expect($plan['crawl_pages'])->toBe($crawl)
+            ->and($plan['browser_minutes'])->toBe($browser)
+            ->and($plan['reports'])->toBe($reports)
+            ->and($plan['scheduled_report_limit'])->toBe($schedules)
+            ->and($plan['standard_ai_requests'])->toBe($actions)
+            ->and($plan['monthly_credits'])->toBe($credits);
+    }
 });
 
 it('reconciles completed lifetime sales and active grants into the Angel cap once', function () {

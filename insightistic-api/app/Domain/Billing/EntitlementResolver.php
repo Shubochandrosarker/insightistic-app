@@ -92,9 +92,13 @@ final class EntitlementResolver
                 ? $organization->getRelation('plan')
                 : Plan::find($organization->plan_id);
 
-            if ($organizationPlan?->slug === 'free') {
+            // AppSumo licenses are provider-neutral lifetime entitlements
+            // projected onto organizations with billing_provider=license;
+            // unlike a cancelled subscription, that persisted plan remains
+            // authoritative until the license webhook deactivates it.
+            if ($organizationPlan?->slug === 'free' || $organization->billing_provider === 'license') {
                 $plan = $organizationPlan;
-                $source = 'free';
+                $source = $organizationPlan?->slug === 'free' ? 'free' : 'license';
                 $features = $this->strings($plan->features_json);
                 $limits = $this->planLimits($plan);
             }

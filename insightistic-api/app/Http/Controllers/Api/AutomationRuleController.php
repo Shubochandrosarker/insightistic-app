@@ -32,6 +32,9 @@ class AutomationRuleController extends Controller
     public function store(Request $request)
     {
         $site = $this->site($request);
+        if ($error = $this->workflowFeatureError($site)) {
+            return $error;
+        }
         $userId = $request->user()?->id;
 
         $error = $this->validatePayload($request);
@@ -71,6 +74,9 @@ class AutomationRuleController extends Controller
     public function update(Request $request, int $siteId, int $automationRule)
     {
         $rule = $this->find($request, $automationRule);
+        if ($error = $this->workflowFeatureError($rule->site)) {
+            return $error;
+        }
 
         if ($request->has('name') || $request->has('trigger_type') || $request->has('action_type')) {
             $error = $this->validatePayload($request, partial: true, existing: $rule);
@@ -102,6 +108,9 @@ class AutomationRuleController extends Controller
     public function destroy(Request $request, int $siteId, int $automationRule)
     {
         $rule = $this->find($request, $automationRule);
+        if ($error = $this->workflowFeatureError($rule->site)) {
+            return $error;
+        }
         $rule->delete();
 
         return response()->json(['deleted' => true]);
@@ -112,6 +121,9 @@ class AutomationRuleController extends Controller
     {
         $rule = $this->find($request, $automationRule);
         $site = $this->site($request);
+        if ($error = $this->workflowFeatureError($site)) {
+            return $error;
+        }
 
         $run = $this->dispatcher->fire($rule, $site, ['manual' => true]);
 
@@ -176,5 +188,18 @@ class AutomationRuleController extends Controller
     private function site(Request $request): Site
     {
         return $request->attributes->get('site');
+    }
+
+    private function workflowFeatureError(Site $site): ?\Illuminate\Http\JsonResponse
+    {
+        if (app(\App\Domain\Billing\EntitlementResolver::class)->hasFeature($site->organization, 'custom_workflow_builder')) {
+            return null;
+        }
+
+        return response()->json([
+            'code' => 'feature_not_included',
+            'feature' => 'custom_workflow_builder',
+            'message' => 'Custom Workflow Builder is included from AppSumo Tier 2 upward.',
+        ], 402);
     }
 }

@@ -98,6 +98,7 @@ export function AddKeywordsDialog({
   const [input, setInput] = useState("");
   const [country, setCountry] = useState("");
   const [device, setDevice] = useState("");
+  const [location, setLocation] = useState("");
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<{ tone: "ok" | "warn" | "bad"; text: string } | null>(null);
 
@@ -116,6 +117,7 @@ export function AddKeywordsDialog({
           keyword: k,
           ...(country ? { country } : {}),
           ...(device ? { device } : {}),
+            ...(location.trim() ? { location: location.trim() } : {}),
         })),
       });
       setResult({
@@ -168,6 +170,14 @@ export function AddKeywordsDialog({
               <option value="desktop">Desktop</option>
               <option value="mobile">Mobile</option>
             </select>
+            <input
+              value={location}
+              onChange={(e) => setLocation(e.target.value)}
+              className={`${selectCls} min-w-48`}
+              aria-label="Local market"
+              placeholder="Local market (e.g. Mesa, AZ)"
+              maxLength={64}
+            />
             <Button onClick={add} disabled={keywords.length === 0 || busy}>
               {busy ? "Adding…" : keywords.length ? `Add ${keywords.length} keyword${keywords.length === 1 ? "" : "s"}` : "Add keywords"}
             </Button>

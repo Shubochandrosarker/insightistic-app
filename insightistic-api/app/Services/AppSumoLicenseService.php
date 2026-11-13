@@ -20,13 +20,19 @@ class AppSumoLicenseService
      */
     public function tierToPlanSlug(?int $tier): string
     {
-        $slugs = array_keys((array) config('commercial.appsumo_plans', []));
+        // Keep the event-to-plan contract explicit instead of relying on
+        // associative-array ordering. This makes a catalog reordering safe
+        // and gives the five-tier listing one auditable mapping.
+        $slugs = config('commercial.appsumo_tier_plan_slugs', []);
+        if (! is_array($slugs) || $slugs === []) {
+            $slugs = array_values(array_keys((array) config('commercial.appsumo_plans', [])));
+        }
 
         if ($tier === null || $tier < 1 || $tier > count($slugs)) {
             throw new InvalidArgumentException('Unknown AppSumo license tier.');
         }
 
-        return $slugs[$tier - 1];
+        return (string) ($slugs[$tier] ?? $slugs[$tier - 1] ?? throw new InvalidArgumentException('Unknown AppSumo license tier.'));
     }
 
     /**

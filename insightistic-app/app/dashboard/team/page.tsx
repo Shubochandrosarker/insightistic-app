@@ -29,6 +29,7 @@ const LEGEND = [
 
 export default function TeamPage() {
   const { data, loading, reload } = useApi<any>("/organizations/users");
+  const { data: billing } = useApi<any>("/billing/subscription");
   const { sites } = useDashboard();
   const [open, setOpen] = useState(false);
   const [f, setF] = useState<any>({ name: "", email: "", role: "analyst", site_ids: [] as number[] });
@@ -41,7 +42,7 @@ export default function TeamPage() {
   async function invite() {
     setBusy(true); setMsg(null);
     try { await apiPost("/organizations/users/invite", f); setF({ name: "", email: "", role: "analyst", site_ids: [] }); setMsg("Invite sent."); setOpen(false); reload(); }
-    catch (e: any) { setMsg(e.message); }
+    catch (e: any) { setMsg(e?.data?.message || e.message); }
     finally { setBusy(false); }
   }
   async function changeRole(id: number, role: string) {
@@ -54,6 +55,9 @@ export default function TeamPage() {
 
   if (loading) return <Spinner />;
   const members = data?.members || [];
+  const currentPlanSlug = String(billing?.plan?.slug || "");
+  const isAppSumo = currentPlanSlug.startsWith("appsumo_tier_");
+  const addedMemberCost = Number(billing?.plan?.limits?.team_member_add_credits ?? (isAppSumo ? 10 : 0));
 
   return (
     <div>
@@ -68,6 +72,12 @@ export default function TeamPage() {
         }
       />
       {msg && <p className="mb-4 text-sm text-warn">{msg}</p>}
+
+      {isAppSumo && (
+        <p className="mb-4 rounded-xl border border-brand/20 bg-brand/5 px-4 py-3 text-sm text-muted">
+          AppSumo team access: {currentPlanSlug === "appsumo_tier_1" ? "up to 3 added members" : "unlimited added members"}. Each added member uses <strong className="text-fg">{addedMemberCost} Insight Credits</strong> from the workspace wallet.
+        </p>
+      )}
 
       {open && (
         <Card className="mb-5" title="Invite teammate">

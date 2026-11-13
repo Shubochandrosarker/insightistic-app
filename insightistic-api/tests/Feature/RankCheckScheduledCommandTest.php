@@ -140,7 +140,7 @@ it('dispatches a weekly plan only on its crc32 slot day', function () {
 });
 
 it('bypasses cadence with --force', function () {
-    $org = rankCadenceOrg('appsumo_studio', 'rank-cadence-force@example.com');
+    $org = rankCadenceOrg('appsumo_tier_2', 'rank-cadence-force@example.com');
     $site = rankCadenceSite($org, 'force-cadence.example');
     rankCadenceKeyword($site, 'forced keyword');
 

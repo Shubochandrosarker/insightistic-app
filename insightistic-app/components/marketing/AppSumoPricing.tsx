@@ -51,7 +51,7 @@ const FEATURE_ROWS: Array<{ label: string; feature: string; from?: number }> = [
   { label: "PageSpeed analytics", feature: "pagespeed_analytics" },
   { label: "Local SEO + rank tracking", feature: "local_seo_analytics" },
   { label: "WooCommerce analysis", feature: "woocommerce_analytics" },
-  { label: "AI copilot", feature: "ai_copilot" },
+  { label: "Agent JOLLY — AI Business Helper", feature: "ai_copilot" },
   { label: "Scheduled PDF reports", feature: "scheduled_reports" },
   { label: "Custom KnowledgeBase", feature: "custom_knowledge_base" },
   { label: "Custom Workflow Builder", feature: "custom_workflow_builder" },
@@ -88,7 +88,7 @@ export function AppSumoPricing({ affiliateUrl }: { affiliateUrl: string | null }
         <p className="text-xs font-semibold uppercase tracking-[0.18em] text-brand">AppSumo lifetime deal</p>
         <h2 className="mt-2 text-2xl font-bold text-slate-900">Choose the lifetime tier that fits your growth</h2>
         <p className="mt-3 text-sm leading-6 text-slate-600">
-          One-time access to the Insightistic workspace, with real rank and local SEO data. Variable work uses the included Insight Credits, and purchased credit packs are available when you need more tracking.
+          One-time access to the Insightistic workspace, with real rank and local SEO data. Agent JOLLY is your AI Business Helper. Every included standard AI action is backed by 50 Insight Credits; variable work uses the same wallet, and purchased credit packs are available when you need more tracking.
         </p>
       </div>
 
@@ -124,7 +124,7 @@ export function AppSumoPricing({ affiliateUrl }: { affiliateUrl: string | null }
       </div>
 
       <div className="mt-6 flex flex-col items-center justify-between gap-3 text-center sm:flex-row sm:text-left">
-        <p className="text-xs leading-5 text-slate-500">AppSumo listing and redemption are managed by AppSumo. Team additions use 10 credits each; Tiers 2–5 have unlimited added members.</p>
+        <p className="text-xs leading-5 text-slate-500">AppSumo listing and redemption are managed by AppSumo. Agent JOLLY uses the included standard AI actions; each added team member costs 10 credits, and Tiers 2–5 have unlimited added members.</p>
         {affiliateUrl ? <a href={affiliateUrl} target="_blank" rel="noopener noreferrer" className="shrink-0 rounded-lg bg-brand px-5 py-2.5 text-sm font-semibold text-white hover:bg-brand2">Get the AppSumo deal</a> : <span className="shrink-0 rounded-lg border border-slate-300 px-5 py-2.5 text-sm font-medium text-slate-500">Listing pending approval</span>}
       </div>
     </section>

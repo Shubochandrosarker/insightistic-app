@@ -77,6 +77,8 @@ it('seeds the approved tracked-keyword caps and rank cadence for every tier', fu
 });
 
 it('keeps the AppSumo capacity matrix explicit and enforceable', function () {
+    expect(config('commercial.standard_ai_action_credit_multiplier'))->toBe(50);
+
     $expected = [
         'appsumo_tier_1' => [10000, 15, 5, 1, 100, 5000],
         'appsumo_tier_2' => [40000, 60, 25, 3, 200, 10000],
@@ -92,7 +94,8 @@ it('keeps the AppSumo capacity matrix explicit and enforceable', function () {
             ->and($plan['reports'])->toBe($reports)
             ->and($plan['scheduled_report_limit'])->toBe($schedules)
             ->and($plan['standard_ai_requests'])->toBe($actions)
-            ->and($plan['monthly_credits'])->toBe($credits);
+            ->and($plan['monthly_credits'])->toBe($credits)
+            ->and($credits)->toBe($actions * config('commercial.standard_ai_action_credit_multiplier'));
     }
 });
 

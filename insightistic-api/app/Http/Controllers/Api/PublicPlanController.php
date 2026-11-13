@@ -106,6 +106,7 @@ class PublicPlanController extends Controller
                 'credit_packs' => config('commercial.credit_packs'),
                 'ai_action_costs' => config('commercial.ai_action_costs'),
                 'usage_credit_costs' => config('commercial.usage_credit_costs'),
+                'standard_ai_action_credit_multiplier' => config('commercial.standard_ai_action_credit_multiplier', 50),
             ])
             ->header('Cache-Control', 'public, max-age=300');
     }

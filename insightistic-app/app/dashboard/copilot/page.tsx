@@ -607,7 +607,7 @@ export default function CopilotPage() {
     <div>
       <PageHeader
         title="Agent JOLLY"
-        subtitle="Ask questions about your analytics and your own knowledge bases — answers cite their sources."
+        subtitle="Your AI Business Helper for analytics and knowledge-base questions — answers cite their sources."
         right={remaining != null ? (
           <span className="text-xs text-muted">{remaining} AI message{remaining === 1 ? "" : "s"} left this month</span>
         ) : undefined}

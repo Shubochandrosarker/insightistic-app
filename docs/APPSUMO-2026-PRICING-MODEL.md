@@ -16,16 +16,15 @@ These tiers are deliberately not Stripe subscription products.
 Tier 1 permits three added team members. Tiers 2–5 permit unlimited added team
 members. Every added member costs 10 Insight Credits. Rank checks cost 10
 credits for a standard market and 15 credits when a local market is supplied.
-The monthly credit amounts are an explicit launch draft (50 credits per
-included standard AI action) and can be changed in the catalog before listing
-submission without changing the entitlement code. Reports/mo means generated
+The approved launch tariff is 50 Insight Credits per included standard AI
+action. Reports/mo means generated
 client reports; active schedules means recurring report schedules that may be
 configured simultaneously. Page crawl limits are organization-wide and shared
 across connected sites.
 
 All tiers include GA4, Search Console, Cloudflare, PageSpeed, SEO analytics,
-rank tracking, local SEO market targeting, AI insights/copilot, scheduled PDF
-reports and a custom KnowledgeBase. Tiers 2–5 include WooCommerce analytics and
+rank tracking, local SEO market targeting, Agent JOLLY (the AI Business Helper),
+scheduled PDF reports and a custom KnowledgeBase. Tiers 2–5 include WooCommerce analytics and
 the Custom Workflow Builder. Tiers 3–5 include AI competitor visibility
 insights, market insights, white-label reports and priority support. Tier 4–5
 also include the white-label dashboard; Tier 5 adds a custom domain.

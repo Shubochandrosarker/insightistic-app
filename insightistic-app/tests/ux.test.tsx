@@ -64,7 +64,7 @@ describe("Route error boundary", () => {
 
 const NAV = [
   { href: "/dashboard", label: "Overview", icon: LayoutGrid },
-  { href: "/dashboard/copilot", label: "AI Copilot", icon: Bot },
+  { href: "/dashboard/copilot", label: "Agent JOLLY", icon: Bot },
   { href: "/dashboard/orders", label: "Orders", icon: ShoppingCart },
 ];
 
@@ -86,10 +86,10 @@ describe("Command palette", () => {
     render(<CommandPalette items={NAV} />);
     await user.keyboard("{Control>}k{/Control}");
 
-    // "aic" is not a substring of "AI Copilot", but it is a subsequence.
-    await user.type(await screen.findByLabelText("Search pages"), "aic");
+    // "ajl" is not a substring of "Agent JOLLY", but it is a subsequence.
+    await user.type(await screen.findByLabelText("Search pages"), "ajl");
 
-    expect(screen.getByText("AI Copilot")).toBeInTheDocument();
+    expect(screen.getByText("Agent JOLLY")).toBeInTheDocument();
     expect(screen.queryByText("Orders")).not.toBeInTheDocument();
   });
 

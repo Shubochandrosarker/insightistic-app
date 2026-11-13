@@ -53,6 +53,10 @@ return [
         'rank_keyword_check' => 10,
         'local_rank_keyword_check' => 15,
     ],
+    // AppSumo launch tariff: one included standard AI action is backed by
+    // 50 Insight Credits. Keep this explicit so the public catalog, wallet
+    // grants and AppSumo listing stay easy to audit together.
+    'standard_ai_action_credit_multiplier' => 50,
     'credit_packs' => [
         ['slug' => 'credits_5000', 'credits' => 5000, 'price_minor' => 1500],
         ['slug' => 'credits_20000', 'credits' => 20000, 'price_minor' => 4900],
@@ -175,8 +179,8 @@ return [
     // allowance. It is intentionally separate from `standard_ai_requests`:
     // standard requests are the predictable included AI actions, while the
     // wallet pays for variable work such as rank checks, team seats and AI
-    // overage. The allowance is a draft commercial ratio of 50 credits per
-    // included standard AI action and can be changed here before launch.
+    // overage. The allowance follows the approved launch tariff of 50
+    // credits per included standard AI action.
     'appsumo_tier_plan_slugs' => [
         1 => 'appsumo_tier_1',
         2 => 'appsumo_tier_2',

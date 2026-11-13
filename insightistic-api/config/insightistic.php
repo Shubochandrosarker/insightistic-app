@@ -2,8 +2,8 @@
 
 return [
     'release' => [
-        'sha' => env('INSIGHTISTIC_IMAGE_RELEASE', env('INSIGHTISTIC_RELEASE', 'unknown')),
-        'built_at' => env('INSIGHTISTIC_IMAGE_BUILD_TIME', env('INSIGHTISTIC_BUILD_TIME')),
+        'sha' => env('INSIGHTISTIC_RELEASE', 'unknown'),
+        'built_at' => env('INSIGHTISTIC_BUILD_TIME'),
     ],
 
     'marketing' => [

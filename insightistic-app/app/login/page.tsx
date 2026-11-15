@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -29,9 +29,9 @@ export default function Login() {
   const [challenge, setChallenge] = useState<string | null>(null);
   const [code, setCode] = useState("");
 
-  // Already signed in → send them where they belong.
+  // Already signed in â†’ send them where they belong.
   useEffect(() => {
-    if (!loading && user) router.replace(signedInDestination(user.is_super_admin));
+    if (!loading && user) router.replace(signedInDestination(Boolean(user.is_super_admin)));
   }, [user, loading, router]);
 
   async function submit(e: React.FormEvent) {
@@ -112,11 +112,11 @@ export default function Login() {
           />
 
           <p className="mt-2 text-xs text-slate-500">
-            Lost your device? Enter one of your recovery codes instead — each works once.
+            Lost your device? Enter one of your recovery codes instead â€” each works once.
           </p>
 
           <button type="submit" disabled={busy || code.trim().length < 6} className="ins-btn mt-6">
-            {busy ? "Verifying…" : "Verify →"}
+            {busy ? "Verifyingâ€¦" : "Verify â†’"}
           </button>
         </form>
       </AuthShell>
@@ -161,7 +161,7 @@ export default function Login() {
           <input
             id="password"
             className="ins-input"
-            placeholder="••••••••"
+            placeholder="â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢"
             type="password"
             autoComplete="current-password"
             value={password}
@@ -181,7 +181,7 @@ export default function Login() {
         </div>
 
         <button type="submit" disabled={busy} className="ins-btn mt-6">
-          {busy ? "Signing in…" : "Sign in →"}
+          {busy ? "Signing inâ€¦" : "Sign in â†’"}
         </button>
       </form>
     </AuthShell>

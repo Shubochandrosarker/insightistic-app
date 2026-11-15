@@ -34,12 +34,16 @@ final class TrialService
         $hasLifetime = EntitlementGrant::withoutGlobalScope('organization')
             ->where('organization_id', $org->id)->whereIn('source', \App\Models\EntitlementGrant::LIFETIME_SOURCES)
             ->whereNull('revoked_at')->exists();
+        $isAppSumo = $org->billing_provider === 'license'
+            || str_starts_with((string) $org->plan?->slug, 'appsumo_');
 
         if ($org->trial_started_at !== null) {
             $reason = 'trial_already_used';
         } elseif ($sub && in_array($sub->status, ['active', 'trialing', 'past_due', 'paused'], true)) {
             $reason = 'paid_subscription_active';
         } elseif ($hasLifetime) {
+            $reason = 'lifetime_plan_active';
+        } elseif ($isAppSumo) {
             $reason = 'lifetime_plan_active';
         }
 

@@ -2,6 +2,10 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Domain\Billing\CreditWallet;
+use App\Domain\Billing\EntitlementResolver;
+use App\Domain\Billing\Exceptions\InsufficientCreditsException;
+
 use App\Http\Controllers\Controller;
 use App\Mail\InviteMail;
 use App\Models\Site;
@@ -17,7 +21,11 @@ use Illuminate\Support\Str;
 
 class TeamController extends Controller
 {
-    public function __construct(private Tenancy $tenancy) {}
+    public function __construct(
+        private Tenancy $tenancy,
+        private CreditWallet $creditWallet,
+        private EntitlementResolver $entitlements,
+    ) {}
 
     public function index()
     {
@@ -71,13 +79,33 @@ class TeamController extends Controller
             }
         }
 
-        // Enforce plan user limit.
-        $limit = $usage->limit($org, 'team_seats');
-        if ($limit <= 0) {
-            $limit = 1;
-        }
-        if ($org->users()->count() >= $limit) {
-            return response()->json(['message' => "User limit reached for your plan ({$limit}).", 'code' => 'user_limit_reached'], 402);
+        $resolved = $this->entitlements->resolve($org);
+        $planSlug = (string) ($resolved['plan']['slug'] ?? $org->plan?->slug ?? '');
+        $appsumoPlan = config("commercial.appsumo_plans.{$planSlug}");
+        $isAppSumoPlan = is_array($appsumoPlan) && array_key_exists('team_member_limit', $appsumoPlan);
+
+        if ($isAppSumoPlan) {
+            // AppSumo's Tier 1 limit counts added members, not the owner.
+            // Tiers 2-5 publish zero here to mean unlimited.
+            $memberLimit = (int) $appsumoPlan['team_member_limit'];
+            $addedMembers = $org->users()->where('users.id', '!=', $org->owner_user_id)->count();
+            if ($memberLimit > 0 && $addedMembers >= $memberLimit) {
+                return response()->json([
+                    'message' => "Your AppSumo tier allows {$memberLimit} added team members.",
+                    'code' => 'appsumo_team_member_limit_reached',
+                    'limit' => ['key' => 'team_member_limit', 'max' => $memberLimit, 'used' => $addedMembers],
+                ], 402);
+            }
+        } else {
+            // Preserve the existing total-seat contract for subscriptions and
+            // historical plans.
+            $limit = $usage->limit($org, 'team_seats');
+            if ($limit <= 0) {
+                $limit = 1;
+            }
+            if ($org->users()->count() >= $limit) {
+                return response()->json(['message' => "User limit reached for your plan ({$limit}).", 'code' => 'user_limit_reached'], 402);
+            }
         }
 
         $user = User::where('email', $data['email'])->first();
@@ -94,32 +122,53 @@ class TeamController extends Controller
             return response()->json(['message' => 'That account is not available to invite.'], 422);
         }
 
-        // New users are created in an "invited" state with a random password.
-        // Credential delivery / set-password lands with the auth email flow (Week 6).
-        if (! $user) {
-            $user = User::create([
-                'name'     => $data['name'] ?? Str::before($data['email'], '@'),
-                'email'    => $data['email'],
-                'password' => Str::random(40),
-                'status'   => 'invited',
-            ]);
-        }
+        $chargeReference = 'team-member:' . $org->id . ':' . Str::uuid();
+        $createdInTransaction = false;
 
-        DB::transaction(function () use ($org, $user, $data, $siteIds) {
-            $org->users()->attach($user->id, ['role' => $data['role']]);
-            foreach ($siteIds as $sid) {
-                SiteUserAccess::firstOrCreate(
-                    ['site_id' => $sid, 'user_id' => $user->id],
-                    ['role' => 'client_viewer'],
-                );
-            }
-        });
+        try {
+            $user = DB::transaction(function () use ($org, $user, $data, $siteIds, $isAppSumoPlan, $appsumoPlan, $chargeReference, &$createdInTransaction) {
+                // Keep creation, credit spend and attachment atomic so a
+                // failed wallet spend never leaves an orphan invitation.
+                if (! $user) {
+                    $user = User::create([
+                        'name'     => $data['name'] ?? Str::before($data['email'], '@'),
+                        'email'    => $data['email'],
+                        'password' => Str::random(40),
+                        'status'   => 'invited',
+                    ]);
+                    $createdInTransaction = true;
+                }
+
+                if ($isAppSumoPlan) {
+                    $cost = (int) ($appsumoPlan['team_member_add_credits'] ?? 10);
+                    if ($cost > 0) {
+                        $this->creditWallet->consume($org, $cost, 'team_member_added', $chargeReference);
+                    }
+                }
+
+                $org->users()->attach($user->id, ['role' => $data['role']]);
+                foreach ($siteIds as $sid) {
+                    SiteUserAccess::firstOrCreate(
+                        ['site_id' => $sid, 'user_id' => $user->id],
+                        ['role' => 'client_viewer'],
+                    );
+                }
+
+                return $user;
+            });
+        } catch (InsufficientCreditsException $e) {
+            return response()->json([
+                'message' => 'Adding a team member needs 10 Insight Credits. Buy a credit pack or wait for the next monthly allowance.',
+                'code' => 'insufficient_credits',
+                'credits' => ['needed' => $e->expected, 'available' => $e->available],
+            ], 402);
+        }
 
         // Email a set-password (accept-invite) link for brand-new users, and
         // RE-send it when re-inviting an existing pending user: invite tokens
         // expire after an hour, and the 409 above means re-inviting someone
         // who never accepted is the owner's only resend path.
-        $sendInvite = $user->wasRecentlyCreated || $user->status === 'invited';
+        $sendInvite = $createdInTransaction || $user->status === 'invited';
         if ($sendInvite) {
             try {
                 $token = PasswordBroker::broker()->createToken($user);

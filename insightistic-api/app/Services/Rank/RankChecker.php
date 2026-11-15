@@ -2,6 +2,8 @@
 
 namespace App\Services\Rank;
 
+use App\Domain\Billing\CreditWallet;
+
 use App\Models\Alert;
 use App\Models\RankKeyword;
 use App\Models\RankObservation;
@@ -9,6 +11,7 @@ use App\Models\Site;
 use App\Services\Automation\AutomationDispatcher;
 use App\Services\Integrations\IntegrationFailure;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 
 /**
  * Rank check orchestrator (Phase 10, doc 13): loads a site's active tracked
@@ -51,13 +54,16 @@ class RankChecker
 
     private readonly AutomationDispatcher $dispatcher;
 
-    public function __construct(?RankProvider $provider = null, ?AutomationDispatcher $dispatcher = null)
+    private readonly CreditWallet $wallet;
+
+    public function __construct(?RankProvider $provider = null, ?AutomationDispatcher $dispatcher = null, ?CreditWallet $wallet = null)
     {
         // RankProvider is bound in AppServiceProvider through
         // RankProviderFactory (RANK_PROVIDER, default dataforseo). Tests pass
         // a fake directly or rebind the interface.
         $this->provider = $provider ?? app(RankProvider::class);
         $this->dispatcher = $dispatcher ?? app(AutomationDispatcher::class);
+        $this->wallet = $wallet ?? app(CreditWallet::class);
     }
 
     /**
@@ -101,44 +107,68 @@ class RankChecker
             );
         }
 
+        // Preflight before making a provider request. A failed balance check
+        // must not still spend DataForSEO budget. Local searches carry the
+        // slightly higher tariff because they use a market-specific SERP.
+        $plannedCredits = $keywords->sum(fn (RankKeyword $keyword) => $this->creditCost($keyword));
+        $availableCredits = $this->wallet->available($site->organization);
+        if ($plannedCredits > $availableCredits) {
+            throw new \App\Domain\Billing\Exceptions\InsufficientCreditsException($plannedCredits, $availableCredits);
+        }
+
         $results = $this->provider->checkBatch($keywords->all());
 
         $now = Carbon::now();
-        $checked = 0;
-
-        foreach ($keywords as $keyword) {
-            $result = $results[$keyword->id] ?? null;
-
-            if ($result === null) {
-                continue; // Provider lost a keyword — no observation, stays due.
-            }
-
-            $previous = RankObservation::query()
-                ->where('keyword_id', $keyword->id)
-                ->orderByDesc('checked_at')
-                ->orderByDesc('id')
-                ->first();
-
-            RankObservation::query()->create([
-                'keyword_id'          => $keyword->id,
-                'site_id'             => $site->id,
-                'checked_at'          => $now,
-                'position'            => $result['position'],
-                'ranking_url'         => $result['ranking_url'],
-                'serp_features_json'  => $result['serp_features'],
-                'provider'            => $this->provider->name(),
-                'provider_request_id' => $result['provider_request_id'],
-                'cost_units'          => $result['cost_units'],
-                'created_at'          => $now,
-            ]);
-
-            $keyword->forceFill(['last_checked_at' => $now])->save();
-            $checked++;
-
-            $this->evaluateAlerts($site, $keyword, $previous, $result, $todayStartUtc);
+        $successful = $keywords->filter(fn (RankKeyword $keyword) => ($results[$keyword->id] ?? null) !== null)->values();
+        if ($successful->isEmpty()) {
+            return 0; // Provider lost every keyword — all remain due.
         }
 
-        return $checked;
+        $actualCredits = $successful->sum(fn (RankKeyword $keyword) => $this->creditCost($keyword));
+        $reference = 'rank-check:'.$site->id.':'.Carbon::today($timezone)->format('Y-m-d').':'
+            .sha1($successful->pluck('id')->implode(','));
+
+        // Keep the wallet deduction and append-only observations atomic. If
+        // persistence fails, the customer is not charged for that attempt.
+        DB::transaction(function () use ($site, $successful, $results, $now, $actualCredits, $reference, $todayStartUtc): void {
+            if ($actualCredits > 0) {
+                $this->wallet->consume($site->organization, $actualCredits, 'rank_keyword_check', $reference);
+            }
+
+            foreach ($successful as $keyword) {
+                $result = $results[$keyword->id];
+                $previous = RankObservation::query()
+                    ->where('keyword_id', $keyword->id)
+                    ->orderByDesc('checked_at')
+                    ->orderByDesc('id')
+                    ->first();
+
+                RankObservation::query()->create([
+                    'keyword_id'          => $keyword->id,
+                    'site_id'             => $site->id,
+                    'checked_at'          => $now,
+                    'position'            => $result['position'],
+                    'ranking_url'         => $result['ranking_url'],
+                    'serp_features_json'  => $result['serp_features'],
+                    'provider'            => $this->provider->name(),
+                    'provider_request_id' => $result['provider_request_id'],
+                    'cost_units'          => $result['cost_units'],
+                    'created_at'          => $now,
+                ]);
+
+                $keyword->forceFill(['last_checked_at' => $now])->save();
+                $this->evaluateAlerts($site, $keyword, $previous, $result, $todayStartUtc);
+            }
+        });
+
+        return $successful->count();
+    }
+
+    private function creditCost(RankKeyword $keyword): int
+    {
+        $costs = config('commercial.usage_credit_costs', []);
+
+        return (int) ($costs[$keyword->location ? 'local_rank_keyword_check' : 'rank_keyword_check'] ?? 10);
     }
 
     /**

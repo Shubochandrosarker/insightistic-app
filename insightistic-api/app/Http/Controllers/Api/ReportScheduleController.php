@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\ReportSchedule;
 use App\Models\Site;
+use App\Services\UsageService;
 use Illuminate\Http\Request;
 
 /**
@@ -17,6 +18,8 @@ use Illuminate\Http\Request;
  */
 class ReportScheduleController extends Controller
 {
+    public function __construct(private UsageService $usage) {}
+
     /** GET /sites/{site}/report-schedules */
     public function index(Request $request)
     {
@@ -30,6 +33,14 @@ class ReportScheduleController extends Controller
     {
         $site = $this->site($request);
         $data = $this->validated($request);
+
+        if (($data['is_active'] ?? true) && ! $this->canCreate($site->organization)) {
+            return response()->json($this->usage->limitError(
+                $site->organization,
+                'scheduled_report_limit',
+                $this->usage->scheduledReportsUsed($site->organization),
+            ), 402);
+        }
 
         $schedule = ReportSchedule::create(array_merge($data, ['site_id' => $site->id]));
 
@@ -46,7 +57,15 @@ class ReportScheduleController extends Controller
     public function update(Request $request, int $siteId, int $scheduleId)
     {
         $schedule = $this->find($request, $scheduleId);
-        $schedule->update($this->validated($request, partial: true));
+        $data = $this->validated($request, partial: true);
+        if (($data['is_active'] ?? $schedule->is_active) && ! $schedule->is_active && ! $this->canCreate($schedule->site->organization)) {
+            return response()->json($this->usage->limitError(
+                $schedule->site->organization,
+                'scheduled_report_limit',
+                $this->usage->scheduledReportsUsed($schedule->site->organization, $schedule->id),
+            ), 402);
+        }
+        $schedule->update($data);
 
         return response()->json(['schedule' => $schedule->fresh()]);
     }
@@ -86,5 +105,10 @@ class ReportScheduleController extends Controller
     private function site(Request $request): Site
     {
         return $request->attributes->get('site');
+    }
+
+    private function canCreate(\App\Models\Organization $organization): bool
+    {
+        return $this->usage->scheduledReportLimit($organization) > $this->usage->scheduledReportsUsed($organization);
     }
 }

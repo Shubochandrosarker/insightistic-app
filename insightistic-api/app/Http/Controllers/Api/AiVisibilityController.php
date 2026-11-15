@@ -217,6 +217,14 @@ class AiVisibilityController extends Controller
     {
         $site = $this->site($request);
 
+        if (! app(\App\Domain\Billing\EntitlementResolver::class)->hasFeature($site->organization, 'competitor_insights')) {
+            return response()->json([
+                'code' => 'feature_not_included',
+                'feature' => 'competitor_insights',
+                'message' => 'Competitor insights are included from AppSumo Tier 3 upward.',
+            ], 402);
+        }
+
         $validated = $request->validate([
             'name'       => ['required', 'string', 'max:120'],
             'aliases'    => ['sometimes', 'nullable', 'array', 'max:20'],
@@ -261,6 +269,14 @@ class AiVisibilityController extends Controller
     public function destroyCompetitor(Request $request, int $siteId, int $competitor): JsonResponse
     {
         $site = $this->site($request);
+
+        if (! app(\App\Domain\Billing\EntitlementResolver::class)->hasFeature($site->organization, 'competitor_insights')) {
+            return response()->json([
+                'code' => 'feature_not_included',
+                'feature' => 'competitor_insights',
+                'message' => 'Competitor insights are included from AppSumo Tier 3 upward.',
+            ], 402);
+        }
 
         $row = AiVisibilityCompetitor::query()
             ->where('site_id', $site->id)

@@ -56,6 +56,32 @@ class UsageService
         return max(0, $this->reportLimit($org) - $this->counter($org)->reports_generated);
     }
 
+    /** Maximum number of active recurring report schedules for the organization. */
+    public function scheduledReportLimit(Organization $org): int
+    {
+        $resolved = $this->resolved($org);
+        if (array_key_exists('scheduled_report_limit', $resolved['limits'])) {
+            return (int) $resolved['limits']['scheduled_report_limit'];
+        }
+
+        // Preserve the legacy boolean entitlement for plans created before the
+        // numeric schedule limit was introduced.
+        return ((int) ($resolved['limits']['scheduled_reports'] ?? 0)) > 0 ? 4 : 0;
+    }
+
+    public function scheduledReportsUsed(Organization $org, ?int $exceptId = null): int
+    {
+        $query = \App\Models\ReportSchedule::withoutGlobalScope('organization')
+            ->where('is_active', true)
+            ->whereHas('site', fn ($sites) => $sites->withoutGlobalScope('organization')->where('organization_id', $org->id));
+
+        if ($exceptId !== null) {
+            $query->where('id', '<>', $exceptId);
+        }
+
+        return (int) $query->count();
+    }
+
     // ------------------------------------------------------------------
     // Knowledge base + Copilot entitlements (spec Phase 8). Every limit is
     // resolved from plans.limits_json (Plan::limit) and enforced HERE, on

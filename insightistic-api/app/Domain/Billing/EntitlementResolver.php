@@ -41,10 +41,23 @@ final class EntitlementResolver
 
         $subscription = $this->subscriptionFor($organization);
         $override = (bool) ($subscription?->internal_override_active ?? false);
+        $organizationPlan = $organization->relationLoaded('plan')
+            ? $organization->getRelation('plan')
+            : ($organization->plan_id ? Plan::find($organization->plan_id) : null);
 
         $plan = null;
         $source = 'none';
         $status = $this->statusEcho($organization, $subscription);
+
+        // A redeemed AppSumo license is the customer's lifetime entitlement.
+        // It must win over a stale trial/subscription projection left on an
+        // account that existed before the redemption.
+        if ($organization->billing_provider === 'license'
+            && str_starts_with((string) $organizationPlan?->slug, 'appsumo_')) {
+            $plan = $organizationPlan;
+            $source = 'license';
+            $status = 'active';
+        }
 
         // A platform admin can assign a support/complementary plan without
         // changing the customer's provider subscription. This explicit grant
@@ -88,13 +101,13 @@ final class EntitlementResolver
         }
 
         if (! $plan && ! $subscription && $organization->plan_id) {
-            $organizationPlan = $organization->relationLoaded('plan')
-                ? $organization->getRelation('plan')
-                : Plan::find($organization->plan_id);
-
-            if ($organizationPlan?->slug === 'free') {
+            // AppSumo licenses are provider-neutral lifetime entitlements
+            // projected onto organizations with billing_provider=license;
+            // unlike a cancelled subscription, that persisted plan remains
+            // authoritative until the license webhook deactivates it.
+            if ($organizationPlan?->slug === 'free' || $organization->billing_provider === 'license') {
                 $plan = $organizationPlan;
-                $source = 'free';
+                $source = $organizationPlan?->slug === 'free' ? 'free' : 'license';
                 $features = $this->strings($plan->features_json);
                 $limits = $this->planLimits($plan);
             }

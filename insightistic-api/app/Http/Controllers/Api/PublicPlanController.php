@@ -48,6 +48,7 @@ class PublicPlanController extends Controller
                     'standard_ai_requests_monthly' => $p->limit('standard_ai_requests_monthly'),
                     'monthly_ai_credits' => $p->limit('monthly_ai_credits'),
                     'client_ready_reports_monthly' => $p->limit('client_ready_reports_monthly'),
+                    'scheduled_report_limit' => $p->limit('scheduled_report_limit'),
                 ],
                 'is_featured'      => (bool) $p->is_featured,
                 'is_purchasable'   => (bool) $p->is_active,
@@ -62,8 +63,36 @@ class PublicPlanController extends Controller
                 'crawl_pages_monthly' => $p['crawl_pages'],
                 'browser_rendering_minutes_monthly' => $p['browser_minutes'],
                 'tracked_keywords' => $p['keywords'],
+                'rank_depth' => $p['rank_depth'] ?? 100,
                 'standard_ai_requests_monthly' => $p['standard_ai_requests'],
                 'client_ready_reports_monthly' => $p['reports'],
+                'scheduled_report_limit' => $p['scheduled_report_limit'] ?? 0,
+            ],
+        ])->values();
+
+        $appsumo = collect(config('commercial.appsumo_plans'))->map(fn (array $p, string $slug) => [
+            'slug' => $slug,
+            'name' => $p['name'],
+            'price' => $p['price'],
+            'sites' => $p['sites'],
+            'team_member_limit' => $p['team_member_limit'] ?? null,
+            'team_member_add_credits' => $p['team_member_add_credits'] ?? 10,
+            'standard_ai_requests' => $p['standard_ai_requests'],
+            'monthly_ai_credits' => $p['monthly_credits'],
+            'features' => $p['features'],
+            'limits' => [
+                'billing_model' => 'lifetime',
+                'crawl_pages_monthly' => $p['crawl_pages'],
+                'browser_rendering_minutes_monthly' => $p['browser_minutes'],
+                'tracked_keywords' => $p['keywords'],
+                'rank_cadence' => $p['rank_cadence'] ?? 'weekly',
+                'rank_depth' => $p['rank_depth'] ?? 100,
+                'standard_ai_requests_monthly' => $p['standard_ai_requests'],
+                'monthly_ai_credits' => $p['monthly_credits'],
+                'client_ready_reports_monthly' => $p['reports'],
+                'team_member_limit' => $p['team_member_limit'] ?? null,
+                'team_member_add_credits' => $p['team_member_add_credits'] ?? 10,
+                'scheduled_report_limit' => $p['scheduled_report_limit'] ?? 0,
             ],
         ])->values();
 
@@ -73,8 +102,11 @@ class PublicPlanController extends Controller
                 'trial_days' => config('commercial.trial_days'),
                 'plans' => $plans,
                 'ltd' => ['campaign' => $campaign->status(), 'plans' => $ltd],
+                'appsumo' => ['campaign' => config('commercial.appsumo_campaign'), 'plans' => $appsumo],
                 'credit_packs' => config('commercial.credit_packs'),
                 'ai_action_costs' => config('commercial.ai_action_costs'),
+                'usage_credit_costs' => config('commercial.usage_credit_costs'),
+                'standard_ai_action_credit_multiplier' => config('commercial.standard_ai_action_credit_multiplier', 50),
             ])
             ->header('Cache-Control', 'public, max-age=300');
     }

@@ -296,7 +296,18 @@ class AppSumoClaimController extends Controller
         $plan = Plan::query()->where('slug', $row->plan_slug)->first();
 
         if ($plan) {
-            $org->forceFill(['plan_id' => $plan->id])->save();
+            // An AppSumo redemption is a paid lifetime entitlement. If the
+            // buyer first created an organic account, that account may still
+            // be carrying the no-payment trial projection. Clear that
+            // projection atomically so the dashboard cannot show a 7-day
+            // trial after the license has been activated.
+            $org->forceFill([
+                'plan_id' => $plan->id,
+                'billing_provider' => 'license',
+                'status' => 'active',
+                'trial_ends_at' => null,
+                'trial_plan_slug' => null,
+            ])->save();
         }
     }
 

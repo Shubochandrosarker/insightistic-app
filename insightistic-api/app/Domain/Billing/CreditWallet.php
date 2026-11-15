@@ -83,6 +83,12 @@ final class CreditWallet
         ];
     }
 
+    /** Current spendable balance, including a lazy monthly grant. */
+    public function available(Organization $organization): int
+    {
+        return (int) ($this->summary($organization)['total_usable'] ?? 0);
+    }
+
     /**
      * Purchased (non-expiring) credits from a one-time pack. `reference` is
      * the provider transaction/session id and doubles as the ledger's

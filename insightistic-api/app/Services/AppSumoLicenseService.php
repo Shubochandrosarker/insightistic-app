@@ -20,13 +20,19 @@ class AppSumoLicenseService
      */
     public function tierToPlanSlug(?int $tier): string
     {
-        $slugs = array_keys((array) config('commercial.appsumo_plans', []));
+        // Keep the event-to-plan contract explicit instead of relying on
+        // associative-array ordering. This makes a catalog reordering safe
+        // and gives the five-tier listing one auditable mapping.
+        $slugs = config('commercial.appsumo_tier_plan_slugs', []);
+        if (! is_array($slugs) || $slugs === []) {
+            $slugs = array_values(array_keys((array) config('commercial.appsumo_plans', [])));
+        }
 
         if ($tier === null || $tier < 1 || $tier > count($slugs)) {
             throw new InvalidArgumentException('Unknown AppSumo license tier.');
         }
 
-        return $slugs[$tier - 1];
+        return (string) ($slugs[$tier] ?? $slugs[$tier - 1] ?? throw new InvalidArgumentException('Unknown AppSumo license tier.'));
     }
 
     /**
@@ -278,10 +284,12 @@ class AppSumoLicenseService
 
         if ($row->org_id && ! $deactivated) {
             Organization::query()->whereKey($row->org_id)->update([
-                'plan_id' => $license->plan_id,
+                'plan_id'           => $license->plan_id,
+                'billing_provider'  => 'license',
+                'status'            => 'active',
+                'trial_ends_at'     => null,
+                'trial_plan_slug'   => null,
             ]);
-            Organization::query()->whereKey($row->org_id)->whereNull('billing_provider')
-                ->update(['billing_provider' => 'license']);
         }
     }
 }

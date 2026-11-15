@@ -133,6 +133,7 @@ class DataForSeoProvider implements RankProvider
 
         $sites = Site::withoutGlobalScope('organization')
             ->whereIn('id', collect($keywords)->pluck('site_id')->unique())
+            ->with('organization')
             ->get()
             ->keyBy('id');
 
@@ -214,7 +215,7 @@ class DataForSeoProvider implements RankProvider
                     ->withBasicAuth($login, $password)
                     ->timeout($timeout)
                     ->asJson()
-                    ->post(self::ENDPOINT, [$this->buildTask($keyword)]);
+                    ->post(self::ENDPOINT, [$this->buildTask($keyword, $sites->get($keyword->site_id))]);
             }
 
             return $requests;
@@ -294,11 +295,11 @@ class DataForSeoProvider implements RankProvider
     }
 
     /** @return array<string, mixed> */
-    private function buildTask(RankKeyword $keyword): array
+    private function buildTask(RankKeyword $keyword, ?Site $site = null): array
     {
         $task = [
             'keyword' => trim((string) $keyword->keyword),
-            'depth'   => $this->depth(),
+            'depth'   => $this->depthFor($site),
             'device'  => $keyword->device === RankKeyword::DEVICE_MOBILE ? 'mobile' : 'desktop',
             'tag'     => (string) $keyword->id,
         ];
@@ -311,6 +312,19 @@ class DataForSeoProvider implements RankProvider
         $task['language_name'] = $this->languageNameFor($keyword) ?? 'English';
 
         return $task;
+    }
+
+    private function depthFor(?Site $site): int
+    {
+        $default = $this->depth();
+        $slug = $site?->organization?->plan?->slug;
+        $configured = $slug ? config("commercial.appsumo_plans.{$slug}.rank_depth") : null;
+
+        if (! is_numeric($configured)) {
+            return $default;
+        }
+
+        return max(10, min(self::MAX_DEPTH, (int) $configured));
     }
 
     private function timeout(): int

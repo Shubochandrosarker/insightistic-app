@@ -116,7 +116,7 @@ export default function Login() {
           </p>
 
           <button type="submit" disabled={busy || code.trim().length < 6} className="ins-btn mt-6">
-            {busy ? "Verifyingâ€¦" : "Verify â†’"}
+            {busy ? "Verifying..." : "Verify"}
           </button>
         </form>
       </AuthShell>
@@ -181,7 +181,7 @@ export default function Login() {
         </div>
 
         <button type="submit" disabled={busy} className="ins-btn mt-6">
-          {busy ? "Signing inâ€¦" : "Sign in â†’"}
+          {busy ? "Signing in..." : "Sign in"}
         </button>
       </form>
     </AuthShell>

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\Connector;
 
 use App\Http\Controllers\Controller;
+use App\Models\DataSourceConnection;
 use App\Models\Site;
 use App\Models\SyncLog;
 use Illuminate\Http\Request;
@@ -50,6 +51,15 @@ class HandshakeController extends Controller
             'finished_at' => now(),
         ]);
 
+        // The v1 plugin handshake is the source of truth for the optional
+        // platform connectors. Older deployments only flipped the Site row,
+        // which left the app's Integrations page showing “Not connected”
+        // despite a healthy license and connector handshake.
+        $this->recordPluginSource($site, 'wordpress');
+        if ($site->wc_version) {
+            $this->recordPluginSource($site, 'woocommerce');
+        }
+
         $plan = $site->organization->plan;
 
         return response()->json([
@@ -77,6 +87,20 @@ class HandshakeController extends Controller
                 'engagement_rows_per_request' => 400,
                 'broken_links_per_request'    => 200,
             ],
+        ]);
+    }
+
+    private function recordPluginSource(Site $site, string $source): void
+    {
+        DataSourceConnection::recordAttempt($site->organization_id, $site->id, $source, [
+            'state'             => 'connected',
+            'connection_method' => 'wordpress_plugin',
+            'label'             => 'WordPress plugin',
+            'last_attempted_at' => now(),
+            'last_successful_at'=> now(),
+            'latest_data_at'    => now(),
+            'freshness'         => 'fresh',
+            'metadata_json'     => ['plugin_fed_at' => now()->toIso8601String()],
         ]);
     }
 }

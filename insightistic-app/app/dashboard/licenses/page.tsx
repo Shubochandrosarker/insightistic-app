@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { useApi } from "@/lib/useApi";
 import { apiPost, apiDelete } from "@/lib/api";
 import { Card } from "@/components/ui/Card";
@@ -22,6 +23,13 @@ type LicenseRow = {
   features: string[];
   created_at: string | null;
   last_validated_at: string | null;
+};
+
+type CreditSummary = {
+  monthly_included?: { granted?: number; remaining?: number };
+  purchased?: { remaining?: number };
+  total_usable?: number;
+  next_reset_at?: string;
 };
 
 type ActivationRow = {
@@ -148,7 +156,12 @@ const CONNECT_STEPS = [
 ];
 
 export default function LicensesPage() {
-  const { data, loading, reload } = useApi<{ licenses: LicenseRow[]; trial_ends_at: string | null; renewal_at: string | null }>("/licenses");
+  const { data, loading, reload } = useApi<{
+    licenses: LicenseRow[];
+    trial_ends_at: string | null;
+    renewal_at: string | null;
+    credits?: CreditSummary;
+  }>("/licenses");
   const license = data?.licenses?.[0] ?? null;
 
   const { data: actData, reload: reloadActs } = useApi<{ activations: ActivationRow[] }>(
@@ -288,6 +301,25 @@ export default function LicensesPage() {
               )}
             </Card>
           </div>
+
+          {data?.credits && (
+            <Card className="mt-5" title="Insightistic AI credits" subtitle="Use Cloud AI without a separate paid subscription. Reports and Free Connected plugin insights use the shared account balance.">
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="text-3xl font-bold text-fg">{data.credits.total_usable ?? 0}</p>
+                  <p className="text-xs text-muted">credits remaining</p>
+                </div>
+                <div className="grid gap-2 text-sm text-muted sm:grid-cols-2 sm:text-right">
+                  <span>Monthly: <strong className="text-fg">{data.credits.monthly_included?.remaining ?? 0}</strong></span>
+                  <span>Purchased: <strong className="text-fg">{data.credits.purchased?.remaining ?? 0}</strong></span>
+                </div>
+              </div>
+              <div className="mt-4 rounded-xl border border-brand/25 bg-brand/[0.06] px-4 py-3 text-sm text-fg">
+                Each plugin insight and downloadable AI report uses 50 credits when it is not covered by an included plan request.
+                <Link href="/dashboard/billing" className="ml-1 font-semibold text-brand hover:text-brand2">Get extra credits →</Link>
+              </div>
+            </Card>
+          )}
 
           {/* Connected sites */}
           <Card

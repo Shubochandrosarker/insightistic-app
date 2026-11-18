@@ -782,6 +782,12 @@ Route::prefix('plugin')->group(function () {
     Route::post('ai-insights', [PluginAiController::class, 'generate'])
         ->middleware(['connector.auth', 'throttle:plugin-ai']);
 
+    // The WordPress plugin renders the premium PDF locally after this
+    // successful, credit-metered charge. Keeping it on the same HMAC route
+    // prevents blank report tabs and avoids exposing a public charge action.
+    Route::post('ai-reports', [PluginAiController::class, 'chargeReport'])
+        ->middleware(['connector.auth', 'throttle:plugin-ai']);
+
     // Hosted Cloudflare Traffic Insights (docs/APP-CONNECT-WORKFLOW.md §10).
     // Read-heavy but plugin-side cached for 15 min; the connector limiter
     // (shared with WooCommerce sync traffic) is generous enough.

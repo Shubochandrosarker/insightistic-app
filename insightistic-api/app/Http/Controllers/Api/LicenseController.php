@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Domain\Billing\CreditWallet;
 use App\Http\Controllers\Controller;
 use App\Models\License;
 use App\Models\LicenseActivation;
@@ -22,6 +23,7 @@ class LicenseController extends Controller
         private LicenseService $licenses,
         private LifecycleMailer $mailer,
         private Tenancy $tenancy,
+        private CreditWallet $creditWallet,
     ) {}
 
     public function index()
@@ -54,6 +56,11 @@ class LicenseController extends Controller
             'licenses'      => $items,
             'trial_ends_at' => $org->trial_ends_at?->toIso8601String(),
             'renewal_at'    => $org->subscription?->current_period_end?->toIso8601String(),
+            'credits'       => $this->creditWallet->summary($org),
+            'credit_costs'  => [
+                'plugin_insight' => (int) config('commercial.ai_action_costs.plugin_dashboard_insight', 50),
+                'plugin_report'  => (int) config('commercial.ai_action_costs.plugin_ai_report', 50),
+            ],
         ]);
     }
 

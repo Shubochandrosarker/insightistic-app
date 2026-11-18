@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\Connector;
 
 use App\Http\Controllers\Controller;
 use App\Jobs\RebuildSiteSnapshots;
+use App\Models\DataSourceConnection;
 use App\Models\Site;
 use App\Models\SyncLog;
 use App\Models\WcCustomer;
@@ -30,6 +31,10 @@ class SyncController extends Controller
         ]);
 
         $site->fill(array_filter($data, fn ($v) => $v !== null))->save();
+        $this->recordPluginSource($site, 'wordpress');
+        if ($site->wc_version) {
+            $this->recordPluginSource($site, 'woocommerce');
+        }
         $this->log($site, 'site_health', 'success', 0);
 
         return response()->json(['status' => 'ok']);
@@ -128,6 +133,7 @@ class SyncController extends Controller
         });
 
         $count = count($orderRows);
+        $this->recordPluginSource($site, 'woocommerce');
         $this->log($site, 'orders', 'success', $count);
 
         return response()->json(['status' => 'ok', 'received' => $count]);
@@ -177,6 +183,7 @@ class SyncController extends Controller
         );
 
         $this->log($site, 'products', 'success', count($rows));
+        $this->recordPluginSource($site, 'woocommerce');
 
         return response()->json(['status' => 'ok', 'received' => count($rows)]);
     }
@@ -225,6 +232,7 @@ class SyncController extends Controller
         );
 
         $this->log($site, 'customers', 'success', count($rows));
+        $this->recordPluginSource($site, 'woocommerce');
 
         return response()->json(['status' => 'ok', 'received' => count($rows)]);
     }
@@ -234,6 +242,10 @@ class SyncController extends Controller
     {
         $site = $this->site($request);
         $site->update(['last_sync_at' => now(), 'connection_status' => 'connected']);
+        $this->recordPluginSource($site, 'wordpress');
+        if ($site->wc_version) {
+            $this->recordPluginSource($site, 'woocommerce');
+        }
         $this->log($site, 'sync_complete', 'success', 0, 'Full sync finished');
 
         // Rebuild analytics snapshots from the freshly synced orders on the
@@ -272,6 +284,20 @@ class SyncController extends Controller
             'message'     => $message,
             'started_at'  => now(),
             'finished_at' => now(),
+        ]);
+    }
+
+    private function recordPluginSource(Site $site, string $source): void
+    {
+        DataSourceConnection::recordAttempt($site->organization_id, $site->id, $source, [
+            'state'             => 'connected',
+            'connection_method' => 'wordpress_plugin',
+            'label'             => 'WordPress plugin',
+            'last_attempted_at' => now(),
+            'last_successful_at' => now(),
+            'latest_data_at'    => now(),
+            'freshness'         => 'fresh',
+            'metadata_json'     => ['plugin_fed_at' => now()->toIso8601String()],
         ]);
     }
 }

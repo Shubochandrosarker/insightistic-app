@@ -2,10 +2,12 @@
 
 namespace App\Http\Controllers\Api;
 
-use App\Domain\Billing\AiAllowanceContext;
+use App\Domain\Billing\AiAllowanceGuard;
 use App\Domain\Billing\AiCreditService;
 use App\Domain\Billing\Exceptions\InsufficientCreditsException;
+use App\Domain\Billing\EntitlementResolver;
 use App\Http\Controllers\Controller;
+use App\Models\AiAllowanceReservation;
 use App\Models\Organization;
 use App\Services\Ai\AiProvider;
 use App\Services\Ai\AiAvailability;
@@ -39,7 +41,8 @@ class PluginAiController extends Controller
         private ProviderResolver $providerResolver,
         private AiCreditService $credits,
         private AiAvailability $availability,
-        private AiAllowanceContext $allowance,
+        private AiAllowanceGuard $allowance,
+        private EntitlementResolver $entitlements,
     ) {}
 
     public function generate(Request $request)
@@ -93,18 +96,36 @@ class PluginAiController extends Controller
         }
 
         $creditModel = $this->credits->walletEnabled($org);
-        $action = 'basic_wordpress_dashboard_insight';
+        $planSlug = (string) ($this->entitlements->resolve($org)['plan']['slug'] ?? $org->plan?->slug ?? 'free');
+        // Preserve paid-plan standard requests and their existing overage
+        // tariff. Free Connected plugin calls use the published 50-credit
+        // plugin tariff instead of the SaaS dashboard tariff.
+        $action = $planSlug === 'free'
+            ? 'plugin_dashboard_insight'
+            : 'basic_wordpress_dashboard_insight';
         $eligibleForStandard = $this->credits->standardEligible($org, $action);
 
         $usesStandardRequest = $creditModel
             && $this->credits->willUseStandardRequest($org, $action, $eligibleForStandard);
 
+        $operationReference = $this->operationReference($request, $data);
+        $reservation = null;
+
         if ($creditModel && ! $usesStandardRequest) {
-            // Hold the tariff before the paid call. The plugin's own operation
-            // id is the idempotency key, so a retried request charges once; a
-            // short balance falls through to the free-tier models instead of
-            // a 402 the plugin cannot act on.
-            $this->allowance->for($org->id, $action, $this->operationReference($request, $data));
+            // Free Connected accounts are wallet-metered too. Reserve before
+            // the model call so concurrent plugin requests cannot overspend;
+            // the provider chain itself is still selected by the account tier.
+            $decision = $this->allowance->reserve($org->id, $action, $operationReference);
+            if (! $decision['allowed']) {
+                return response()->json([
+                    'code'             => 'insufficient_credits',
+                    'message'          => 'Your Insightistic AI credits are finished for this period. Buy extra credits or wait for the monthly reset.',
+                    'required_credits' => $decision['cost'],
+                    'credits'          => $this->credits->walletSummary($org),
+                ], 402);
+            }
+
+            $reservation = $decision['reservation'];
         }
 
         if (! $creditModel && ! $this->usage->canGenerateInsight($org)) {
@@ -115,13 +136,24 @@ class PluginAiController extends Controller
             );
         }
 
-        $result = $provider->generate($data['system_prompt'], [
-            'engine'        => $data['model'],
-            'skill_profile' => $data['skill_profile'] ?? 'basic',
-            'instructions'  => $data['prompt'],
-        ], $org->id);
+        try {
+            $result = $provider->generate($data['system_prompt'], [
+                'engine'        => $data['model'],
+                'skill_profile' => $data['skill_profile'] ?? 'basic',
+                'instructions'  => $data['prompt'],
+            ], $org->id);
+        } catch (\Throwable $e) {
+            $this->allowance->release($reservation);
+            Log::warning('plugin_ai.provider_exception', [
+                'organization_id' => $org->id,
+                'exception'       => $e::class,
+            ]);
+
+            return $this->error('ai_error', 'Insightistic Cloud AI is temporarily unavailable. Please try again shortly.', 502);
+        }
 
         if ($result === null) {
+            $this->allowance->release($reservation);
             return $this->error('ai_error', 'Insightistic Cloud AI returned an error. Please try again.', 502);
         }
 
@@ -129,6 +161,7 @@ class PluginAiController extends Controller
         // configured external providers fail. The plugin endpoint has a
         // different response schema, so do not return a mismatched insight.
         if (str_starts_with($provider->model(), 'rule-based')) {
+            $this->allowance->release($reservation);
             return $this->error(
                 'ai_provider_unavailable',
                 'Insightistic Cloud AI is temporarily unavailable. Please try again shortly.',
@@ -138,7 +171,7 @@ class PluginAiController extends Controller
 
         if ($usesStandardRequest) {
             try {
-                $this->credits->charge($org, $action, $this->operationReference($request, $data), true);
+                $this->credits->charge($org, $action, $operationReference, true);
             } catch (InsufficientCreditsException) {
                 // Standard slots ran out after the preflight; the answer is
                 // already delivered, so log the shortfall rather than fail
@@ -150,10 +183,95 @@ class PluginAiController extends Controller
         } elseif (! $creditModel) {
             $this->usage->recordInsight($org);
         }
-        // Credit-priced answers were settled by AiAllowanceGuard::commit()
-        // around the provider call.
+        if ($reservation !== null) {
+            $this->allowance->commit($reservation);
+        }
 
-        return response()->json(['content' => json_encode($result)]);
+        $creditPayload = $creditModel ? $this->credits->walletSummary($org) : null;
+
+        return response()->json([
+            'content'     => json_encode($result),
+            'credits'     => $creditPayload,
+            'credit_cost' => $usesStandardRequest ? 0 : $this->credits->cost($action),
+        ]);
+    }
+
+    /** Charge one downloadable report generated locally by the plugin. */
+    public function chargeReport(Request $request)
+    {
+        $data = $request->validate([
+            'operation_id' => ['sometimes', 'nullable', 'string', 'max:120'],
+        ]);
+
+        [$license] = $this->licenses->resolveFromConnector($request);
+        if (! $license) {
+            return $this->error('no_license', 'No active license for this site. Re-activate with your key.', 403);
+        }
+
+        $org = Organization::find($license->organization_id);
+        $license->status = $this->licenses->computeStatus($org, $license);
+        if (! $license->isEntitled()) {
+            return $this->error('no_license', 'Your Insightistic account is not active. Please check your billing.', 403);
+        }
+
+        $resolved = $this->entitlements->resolve($org);
+        $planSlug = (string) ($resolved['plan']['slug'] ?? $org->plan?->slug ?? 'free');
+        $used = (int) $this->usage->counter($org)->reports_generated;
+        $freeLimit = (int) config('commercial.plugin_free_reports_monthly', 3);
+
+        if ($planSlug === 'free' && $used >= $freeLimit) {
+            return response()->json([
+                'code'      => 'report_limit_reached',
+                'message'   => "Free Connected accounts can download {$freeLimit} AI reports per month. Buy extra credits for more reports.",
+                'reports'   => ['used' => $used, 'limit' => $freeLimit, 'remaining' => 0],
+                'credits'   => $this->credits->walletSummary($org),
+            ], 402);
+        }
+
+        $operationId = $data['operation_id']
+            ?? $request->header('Idempotency-Key')
+            ?? $request->header('X-Insightistic-Operation-Id');
+        $siteId = $request->attributes->get('connector_site')?->id;
+        $reference = $operationId
+            ? 'plugin_report:' . $siteId . ':' . $operationId
+            : 'plugin_report:' . $siteId . ':' . now()->format('Y-m') . ':' . ($used + 1);
+
+        $decision = $this->allowance->reserve($org->id, 'plugin_ai_report', $reference);
+        if (! $decision['allowed']) {
+            return response()->json([
+                'code'             => 'insufficient_credits',
+                'message'          => 'Your Insightistic AI credits are finished for this period. Buy extra credits or wait for the monthly reset.',
+                'required_credits' => $decision['cost'],
+                'credits'          => $this->credits->walletSummary($org),
+            ], 402);
+        }
+
+        $reservation = $decision['reservation'];
+        $alreadyCommitted = $reservation?->status === AiAllowanceReservation::STATUS_COMMITTED;
+        if (! $alreadyCommitted) {
+            $settled = $this->allowance->commit($reservation);
+            if (! $settled || $settled->status !== AiAllowanceReservation::STATUS_COMMITTED) {
+                return response()->json([
+                    'code'    => 'insufficient_credits',
+                    'message' => 'Your Insightistic AI credits are not available for this report.',
+                    'credits' => $this->credits->walletSummary($org),
+                ], 402);
+            }
+
+            $this->usage->recordReport($org);
+            $used++;
+        }
+
+        return response()->json([
+            'ok'      => true,
+            'charged' => $decision['cost'],
+            'credits' => $this->credits->walletSummary($org),
+            'reports' => [
+                'used'      => $used,
+                'limit'     => $planSlug === 'free' ? $freeLimit : null,
+                'remaining' => $planSlug === 'free' ? max(0, $freeLimit - $used) : null,
+            ],
+        ]);
     }
 
     /** Stable per plugin operation: the caller's operation id when it sends one, else the request fingerprint. */

@@ -17,6 +17,12 @@ import { num } from "@/lib/format";
  */
 
 type UsageEntry = { used?: number | null; limit?: number | null };
+type CreditSummary = {
+  monthly_included?: { granted?: number; remaining?: number };
+  purchased?: { remaining?: number };
+  total_usable?: number;
+  next_reset_at?: string;
+};
 
 /** Friendly names for the dimensions the API currently meters. */
 const USAGE_LABELS: Record<string, string> = {
@@ -90,10 +96,36 @@ export default function UsagePage() {
     data?.usage && typeof data.usage === "object" && !Array.isArray(data.usage) ? data.usage : {};
   const usageKeys = Object.keys(usage);
   const grant = lifetimeGrantOf(data);
+  const credits: CreditSummary | null = data?.credits && typeof data.credits === "object" ? data.credits : null;
 
   return (
     <div>
       <PageHeader title="Usage" subtitle="Your usage this billing month against your plan's limits." />
+
+      {credits && (
+        <Card title="AI credits" subtitle="Your live Insightistic Cloud AI balance across connected sites and dashboard features." className="mb-5">
+          <div className="grid gap-4 sm:grid-cols-3">
+            <div className="rounded-xl border border-line bg-card2 p-4">
+              <p className="text-xs uppercase tracking-wide text-muted">Available</p>
+              <p className="mt-1 text-2xl font-bold text-fg">{num(credits.total_usable ?? 0)}</p>
+              <p className="mt-1 text-xs text-muted">credits remaining</p>
+            </div>
+            <div className="rounded-xl border border-line bg-card2 p-4">
+              <p className="text-xs uppercase tracking-wide text-muted">Monthly</p>
+              <p className="mt-1 text-lg font-bold text-fg">{num(credits.monthly_included?.remaining ?? 0)}</p>
+              <p className="mt-1 text-xs text-muted">of {num(credits.monthly_included?.granted ?? 0)} included</p>
+            </div>
+            <div className="rounded-xl border border-line bg-card2 p-4">
+              <p className="text-xs uppercase tracking-wide text-muted">Purchased</p>
+              <p className="mt-1 text-lg font-bold text-fg">{num(credits.purchased?.remaining ?? 0)}</p>
+              <p className="mt-1 text-xs text-muted">non-expiring credits</p>
+            </div>
+          </div>
+          {credits.next_reset_at && (
+            <p className="mt-3 text-xs text-muted">Monthly credits reset {new Date(credits.next_reset_at).toLocaleDateString()}.</p>
+          )}
+        </Card>
+      )}
 
       {usageKeys.length === 0 ? (
         <EmptyState

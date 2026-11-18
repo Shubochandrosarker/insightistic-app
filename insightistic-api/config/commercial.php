@@ -39,6 +39,11 @@ return [
         'sold_out_message' => 'The AppSumo 2026 licenses have been claimed. The deal is sold out.',
     ],
     'ai_action_costs' => [
+        // WordPress plugin actions use the public 50-credit tariff for both
+        // Free Connected and paid accounts. SaaS dashboard actions retain
+        // their existing plan-aware tariffs below.
+        'plugin_dashboard_insight' => 50,
+        'plugin_ai_report' => 50,
         'basic_wordpress_dashboard_insight' => 100,
         'seo_opportunity_analysis' => 200,
         'woocommerce_business_analysis' => 300,
@@ -62,6 +67,9 @@ return [
         ['slug' => 'credits_20000', 'credits' => 20000, 'price_minor' => 4900],
         ['slug' => 'credits_50000', 'credits' => 50000, 'price_minor' => 9900],
     ],
+    // Free Connected plugin accounts may download three AI reports per
+    // month. Paid accounts are credit-metered without a report-count cap.
+    'plugin_free_reports_monthly' => 3,
     // The public/admin catalog is deliberately allow-listed. Historical
     // plan rows remain in the database so old webhooks and entitlements can
     // still be resolved, but they are not new offers.

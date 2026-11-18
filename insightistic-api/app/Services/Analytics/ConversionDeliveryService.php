@@ -82,7 +82,7 @@ class ConversionDeliveryService
             'data' => [[
                 'event_name' => 'Purchase',
                 'event_time' => ($transaction->completed_at ?: now())->timestamp,
-                'event_id' => 'paddle:' . $transaction->provider_transaction_id,
+                'event_id' => 'billing:' . $transaction->provider_transaction_id,
                 'action_source' => 'website',
                 'event_source_url' => is_string($landingUrl) && preg_match('#^https?://#i', $landingUrl) ? $landingUrl : null,
                 'user_data' => ['fbc' => 'fb.1.' . now()->timestamp . '.' . $fbclid],

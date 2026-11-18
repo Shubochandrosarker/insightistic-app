@@ -11,8 +11,9 @@ use Illuminate\Support\Carbon;
 /**
  * Daily SSL expiry inspection (Phase 12, doc 16 "additional checks"),
  * piggybacking on the probe job: at most one certificate handshake per
- * monitor per 24h (ssl_checked_at is stamped even on failure, so an
- * unreachable 443 is retried tomorrow, not on every 5-minute probe).
+ * monitor per 24h (ssl_checked_at is stamped after a valid target has been
+ * attempted, so an unreachable 443 is retried tomorrow, not on every
+ * 5-minute probe).
  *
  * Opens a raw TLS stream to host:443 with capture_session_meta and parses
  * the peer certificate with openssl_x509_parse — no HTTP round-trip, no
@@ -47,15 +48,17 @@ class SslInspector
         $host = $this->hostOf($monitor);
 
         if ($host === null) {
-            $this->stampChecked($monitor);
-
+            // Keep the state pending when the target cannot be parsed. A
+            // malformed/legacy monitor must not look like a completed SSL
+            // check, and the next probe can retry after the monitor is fixed.
             return null;
         }
 
         $expiresAt = $this->certificateExpiry($host);
 
-        // Stamp even on failure: unreachable 443 must not be re-probed
-        // every monitor interval for the next 24 hours.
+        // Stamp after a valid target was attempted, even on a TLS failure:
+        // unreachable 443 must not be re-probed every monitor interval for
+        // the next 24 hours.
         $monitor->ssl_checked_at = Carbon::now();
         $monitor->ssl_expires_at = $expiresAt?->toDateString();
         $monitor->save();
@@ -189,17 +192,34 @@ class SslInspector
             ->update(['is_resolved' => true]);
     }
 
-    private function stampChecked(UptimeMonitor $monitor): void
-    {
-        $monitor->ssl_checked_at = Carbon::now();
-        $monitor->save();
-    }
-
-    /** Hostname of the resolved probe URL; null when it cannot be parsed. */
+    /**
+     * Hostname of the resolved probe URL, with a site fallback for older
+     * monitors whose explicit URL was stored in a malformed form.
+     */
     private function hostOf(UptimeMonitor $monitor): ?string
     {
-        $host = parse_url($monitor->probeUrl(), PHP_URL_HOST);
+        $candidates = [
+            $monitor->probeUrl(),
+            $monitor->site?->canonical_url,
+            $monitor->site?->domain,
+        ];
 
-        return is_string($host) && $host !== '' ? $host : null;
+        foreach ($candidates as $candidate) {
+            $candidate = trim((string) $candidate);
+            if ($candidate === '') {
+                continue;
+            }
+
+            if (! preg_match('#^https?://#i', $candidate)) {
+                $candidate = 'https://'.$candidate;
+            }
+
+            $host = parse_url($candidate, PHP_URL_HOST);
+            if (is_string($host) && $host !== '') {
+                return strtolower(rtrim($host, '.'));
+            }
+        }
+
+        return null;
     }
 }

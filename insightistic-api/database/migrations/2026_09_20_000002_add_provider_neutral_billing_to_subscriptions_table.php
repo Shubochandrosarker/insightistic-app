@@ -5,9 +5,9 @@ use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
 /**
- * Provider-neutral subscription columns (Paddle guide §4.2). Added beside the
- * existing Stripe columns so legacy Stripe subscriptions keep working while
- * Paddle projects into the same table — nothing is dropped.
+ * Provider-neutral subscription columns. Added beside the existing Stripe
+ * columns so historical subscriptions keep working without coupling the
+ * schema to one payment provider.
  */
 return new class extends Migration {
     public function up(): void

@@ -76,6 +76,14 @@ class UptimeController extends Controller
             'active'           => ['nullable', 'boolean'],
         ]);
 
+        if (! empty($data['url'])) {
+            try {
+                \App\Support\PublicHttpGuard::assertFetchable($data['url']);
+            } catch (\RuntimeException $e) {
+                return response()->json(['message' => $e->getMessage(), 'code' => 'unsafe_url'], 422);
+            }
+        }
+
         if (array_key_exists('interval_minutes', $data)) {
             // Plan floor: clamp up, never down (doc 16 — intervals are the plan throttle).
             $floor = max(1, app(\App\Services\UsageService::class)->limit(
@@ -214,21 +222,42 @@ class UptimeController extends Controller
             ->all();
     }
 
-    private function sslPayload(UptimeMonitor $monitor): ?array
+    private function sslPayload(UptimeMonitor $monitor): array
     {
+        if ($monitor->ssl_checked_at === null) {
+            return [
+                'status' => 'pending',
+                'expires_at' => null,
+                'days_left' => null,
+                'tone' => 'pending',
+                'checked_at' => null,
+                'message' => 'SSL check is scheduled and has not run yet.',
+            ];
+        }
+
         if ($monitor->ssl_expires_at === null) {
-            return null;
+            return [
+                'status' => 'error',
+                'expires_at' => null,
+                'days_left' => null,
+                'tone' => 'error',
+                'checked_at' => $monitor->ssl_checked_at->toIso8601String(),
+                'message' => 'SSL check failed; the next scheduled check will retry it.',
+            ];
         }
 
         $expiresAt = Carbon::parse($monitor->ssl_expires_at)->startOfDay();
         $daysLeft = (int) floor(Carbon::now()->startOfDay()->diffInDays($expiresAt, false));
 
         return [
+            'status' => 'ok',
             'expires_at' => $monitor->ssl_expires_at->toDateString(),
             'days_left'  => $daysLeft,
             'tone'       => $daysLeft < 0 ? 'expired'
                 : ($daysLeft < SslInspector::CRITICAL_DAYS ? 'critical'
                 : ($daysLeft < SslInspector::WARN_DAYS ? 'warning' : 'ok')),
+            'checked_at' => $monitor->ssl_checked_at->toIso8601String(),
+            'message' => null,
         ];
     }
 

@@ -25,7 +25,7 @@ const payload = {
     ai_insights: { used: 2, limit: 75 },
     reports: { used: 1, limit: null },
   },
-  subscription: { billing_provider: "paddle" },
+  subscription: { billing_provider: "stripe" },
 };
 
 function mockSubscription(data: any) {
@@ -77,13 +77,13 @@ describe("Usage page", () => {
   it("shows the lifetime grant card when the subscription payload carries one", async () => {
     mockSubscription({
       ...payload,
-      subscription: { billing_provider: "paddle", lifetime_grant: { active: true, plan_slug: "founder_tier_2" } },
+      subscription: { billing_provider: "stripe", lifetime_grant: { active: true, plan_slug: "appsumo_tier_2" } },
     });
 
     render(<UsagePage />);
 
     expect(await screen.findByText("Lifetime access")).toBeInTheDocument();
-    expect(screen.getByText("Founder Tier 2 lifetime")).toBeInTheDocument();
+    expect(screen.getByText("AppSumo Tier 2 lifetime")).toBeInTheDocument();
   });
 
   it("renders an error state with retry when the subscription fetch fails", async () => {

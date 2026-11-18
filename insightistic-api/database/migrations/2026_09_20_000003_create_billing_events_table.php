@@ -5,8 +5,8 @@ use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
 /**
- * Webhook idempotency ledger for all billing providers (Paddle guide §4.3),
- * generalizing stripe_webhook_events. The unique (provider, provider_event_id)
+ * Webhook idempotency ledger for billing providers, generalizing the original
+ * Stripe webhook ledger. The unique (provider, provider_event_id)
  * pair makes concurrent deliveries of the same event race to insert, and
  * exactly one wins — no SELECT-then-INSERT gap.
  */

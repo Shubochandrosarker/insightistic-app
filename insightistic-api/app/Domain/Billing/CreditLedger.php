@@ -10,7 +10,7 @@ use Illuminate\Support\Facades\DB;
 /**
  * Append-only credit ledger per organization (roadmap doc 24). Every
  * mutation is idempotent on (source_type, source_reference): a replayed
- * Paddle webhook or a retried job credits/deducts exactly once and gets the
+ * Stripe webhook or a retried job credits/deducts exactly once and gets the
  * original entry back — the acceptance criterion that a one-time transaction
  * can never be replayed into a second credit.
  *

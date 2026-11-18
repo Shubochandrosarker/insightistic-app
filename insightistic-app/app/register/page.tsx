@@ -7,17 +7,15 @@ import { AuthShell } from "@/components/auth/AuthShell";
 import { OAuthButtons } from "@/components/auth/OAuthButtons";
 
 const PLAN_LABELS: Record<string, string> = {
-  free: "Free Connected",
   starter: "Starter",
   growth: "Growth",
   agency: "Agency",
   agency_pro: "Agency Pro",
-  angel_solo: "Angel Solo lifetime",
-  angel_studio: "Angel Studio lifetime",
-  angel_agency: "Angel Agency lifetime",
-  founder_tier_1: "Angel Solo lifetime",
-  founder_tier_2: "Angel Studio lifetime",
-  founder_tier_3: "Angel Agency lifetime",
+  appsumo_tier_1: "AppSumo Tier 1",
+  appsumo_tier_2: "AppSumo Tier 2",
+  appsumo_tier_3: "AppSumo Tier 3",
+  appsumo_tier_4: "AppSumo Tier 4",
+  appsumo_tier_5: "AppSumo Tier 5",
 };
 
 export default function Register() {
@@ -61,7 +59,7 @@ export default function Register() {
     try {
       await register({ ...f, name: f.name.trim(), email: f.email.trim() });
       // Land on Licenses first: the one-time key card is the first onboarding step.
-      if (!plan || plan === "free") {
+      if (!plan) {
         router.push("/dashboard/licenses");
       } else {
         router.push(`/dashboard/billing?plan=${plan}&interval=${interval}`);

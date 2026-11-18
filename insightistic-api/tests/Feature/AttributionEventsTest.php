@@ -1,18 +1,13 @@
 <?php
 
-use App\Domain\Billing\PaddleTransactionProjector;
-use App\Models\BillingTransaction;
-use App\Models\EntitlementGrant;
 use App\Models\Organization;
-use App\Models\PlanPrice;
 use App\Models\ProductEvent;
 use App\Services\Analytics\AttributionService;
-use Illuminate\Support\Facades\Http;
 
 /**
  * Marketing attribution + funnel events (spec §32/§33): UTM/gclid captured
- * at signup, first/last touch preserved, fixed event taxonomy, purchase
- * recorded server-side from verified Paddle webhook state exactly once.
+ * at signup, first/last touch preserved, and fixed event taxonomy. Payment
+ * provider webhook projection is covered by the Stripe billing tests.
  */
 it('stores sanitized first/last touch and fires signup_completed on register', function () {
     $response = $this->postJson('/api/auth/register', [
@@ -51,7 +46,6 @@ it('stores sanitized first/last touch and fires signup_completed on register', f
         ->and($event->props_json)->not->toHaveKey('evil_key')
         ->and($event->props_json)->not->toHaveKey('gclid'); // not in prop whitelist
 });
-
 it('drops non-http landing urls and junk values from attribution', function () {
     $analytics = app(AttributionService::class);
     $clean = $analytics->sanitize([
@@ -66,7 +60,6 @@ it('drops non-http landing urls and junk values from attribution', function () {
         ->and($clean['utm_source'])->toBe('meta')
         ->and(strlen($clean['gclid']))->toBe(300);
 });
-
 it('rejects unknown events and unknown props at the API', function () {
     [$user, $org] = makeOrgUser('ev-api@example.com');
 
@@ -83,131 +76,4 @@ it('rejects unknown events and unknown props at the API', function () {
     $event = ProductEvent::where('event', 'first_insight_viewed')->first();
     expect($event->props_json)->not->toHaveKey('password')
         ->and($event->props_json)->not->toHaveKey('page'); // not whitelisted either
-});
-
-it('records purchase_completed server-side exactly once per Paddle transaction', function () {
-    [$user, $org] = makeOrgUser('ev-paddle@example.com');
-
-    $payload = [
-        'id' => 'txn_dedupe_1',
-        'status' => 'completed',
-        'items' => [['price' => ['id' => 'pri_test_ltd']]],
-        'custom_data' => ['organization_id' => $org->id],
-        'details' => ['totals' => ['subtotal' => 9900, 'tax' => 0, 'total' => 9900, 'currency_code' => 'USD']],
-        'billed_at' => now()->toIso8601String(),
-    ];
-
-    // seed a lifetime plan price so the txn maps to a kind
-    PlanPrice::create([
-        'provider' => 'paddle', 'provider_price_id' => 'pri_test_ltd',
-        'plan_id' => $org->plan_id, 'kind' => 'lifetime',
-        'currency' => 'USD', 'amount_minor' => 9900, 'interval' => null,
-    ]);
-
-    config()->set('billing.provider', 'paddle');
-
-    // project TWICE (webhook replay / reconciler)
-    app(PaddleTransactionProjector::class)->project($payload);
-    app(PaddleTransactionProjector::class)->project($payload);
-
-    expect(ProductEvent::where('event', 'purchase_completed')->count())->toBe(1)
-        ->and(ProductEvent::where('event', 'ltd_purchased')->count())->toBe(1);
-
-    $purchase = ProductEvent::where('event', 'purchase_completed')->first();
-    expect($purchase->organization_id)->toBe($org->id)
-        ->and($purchase->props_json['transaction_id'])->toBe('txn_dedupe_1')
-        ->and($purchase->props_json['amount'])->toBe(9900);
-});
-
-it('resolves an external Paddle purchase through a unique known customer and inactive price mapping', function () {
-    [, $org] = makeOrgUser('ev-paddle-external-customer@example.com');
-    config()->set('billing.provider', 'paddle');
-
-    BillingTransaction::withoutGlobalScope('organization')->create([
-        'organization_id' => $org->id,
-        'provider' => 'paddle',
-        'provider_transaction_id' => 'txn_prior_customer',
-        'kind' => 'subscription',
-        'status' => 'completed',
-        'currency' => 'USD',
-        'summary_json' => ['customer_id' => 'ctm_known_customer'],
-    ]);
-
-    PlanPrice::create([
-        'provider' => 'paddle',
-        'provider_price_id' => 'pri_retired_ltd',
-        'plan_id' => $org->plan_id,
-        'kind' => 'lifetime',
-        'currency' => 'USD',
-        'amount_minor' => 9900,
-        'is_active' => false,
-    ]);
-
-    $transaction = app(PaddleTransactionProjector::class)->project([
-        'id' => 'txn_external_ltd',
-        'status' => 'completed',
-        'customer_id' => 'ctm_known_customer',
-        'items' => [['price' => ['id' => 'pri_retired_ltd']]],
-        'details' => ['totals' => ['total' => 9900, 'currency_code' => 'USD']],
-        'billed_at' => now()->toIso8601String(),
-    ]);
-
-    expect($transaction->organization_id)->toBe($org->id)
-        ->and($transaction->kind)->toBe('lifetime')
-        ->and(EntitlementGrant::withoutGlobalScope('organization')
-            ->where('organization_id', $org->id)
-            ->where('source_reference', 'txn_external_ltd')
-            ->exists())->toBeTrue();
-});
-
-it('delivers a consented Meta purchase only when a matching ad click exists', function () {
-    [$user, $org] = makeOrgUser('ev-meta@example.com');
-    $org->forceFill([
-        'marketing_consent' => true,
-        'marketing_consent_at' => now(),
-        'last_touch_json' => [
-            'fbclid' => 'fb-click-123',
-            'landing_url' => 'https://app.insightistic.com/register?fbclid=fb-click-123',
-        ],
-    ])->save();
-
-    PlanPrice::create([
-        'provider' => 'paddle', 'provider_price_id' => 'pri_test_meta',
-        'plan_id' => $org->plan_id, 'kind' => 'lifetime',
-        'currency' => 'USD', 'amount_minor' => 9900, 'interval' => null,
-    ]);
-    config()->set('insightistic.marketing.meta.enabled', true);
-    config()->set('insightistic.marketing.meta.pixel_id', 'pixel-test');
-    config()->set('insightistic.marketing.meta.access_token', 'token-test');
-    Http::fake(['*pixel-test/events' => Http::response(['events_received' => 1], 200)]);
-
-    app(PaddleTransactionProjector::class)->project([
-        'id' => 'txn_meta_1', 'status' => 'completed',
-        'items' => [['price' => ['id' => 'pri_test_meta']]],
-        'custom_data' => ['organization_id' => $org->id],
-        'details' => ['totals' => ['total' => 9900, 'currency_code' => 'USD']],
-        'billed_at' => now()->toIso8601String(),
-    ]);
-
-    Http::assertSent(fn ($request) => str_contains($request->url(), 'pixel-test/events')
-        && $request['data'][0]['event_name'] === 'Purchase'
-        && $request['data'][0]['event_id'] === 'paddle:txn_meta_1');
-});
-
-it('fires checkout_started when a paddle checkout config is requested', function () {
-    [$user, $org] = makeOrgUser('ev-checkout@example.com');
-    config()->set('feature-flags.paddle', true);
-    config()->set('billing.paddle.api_key', 'test');
-
-    Http::fake(['*paddle*' => Http::response([], 200)]);
-
-    try {
-        $this->actingAs($user)->postJson('/api/billing/checkout-config', [
-            'plan' => $org->plan->slug, 'kind' => 'lifetime',
-        ]);
-    } catch (Throwable) {
-        // config errors are fine — the event fires before provider calls
-    }
-
-    expect(ProductEvent::where('event', 'checkout_started')->count())->toBe(1);
 });

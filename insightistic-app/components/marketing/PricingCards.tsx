@@ -9,7 +9,6 @@ import { apiGet } from "@/lib/api";
  * CTA carries ?plan= through /register into the billing page's preselect.
  */
 const FALLBACK_PLANS = [
-  { slug: "free", name: "Free Connected", price: "$0", yearly: "$0", sites: "1 site", isFree: true, feats: ["Basic website analytics", "10 basic AI insights/mo", "1,000 monthly credits", "No credit card required"] },
   { slug: "starter", name: "Starter", price: "$29", yearly: "$290", sites: "1 site", feats: ["20k crawl pages/mo", "30 browser minutes/mo", "150 tracked keywords", "5,000 monthly credits"] },
   { slug: "growth", name: "Growth", price: "$69", yearly: "$690", sites: "3 sites", highlight: true, feats: ["WooCommerce intelligence", "80k crawl pages/mo", "120 browser minutes/mo", "15,000 monthly credits"] },
   { slug: "agency", name: "Agency", price: "$149", yearly: "$1,490", sites: "10 sites", feats: ["White-label reports and dashboard", "250k crawl pages/mo", "1,500 tracked keywords", "40,000 monthly credits"] },
@@ -58,7 +57,7 @@ function apiPlanToCard(plan: ApiPlan) {
     yearly: `$${Math.round((plan.price_yearly ?? plan.price_monthly * 10) / 100)}`,
     sites: `${plan.site_limit} sites`,
     highlight: Boolean(plan.is_featured),
-    isFree: plan.slug === "free",
+    isFree: false,
     feats: [...limitFeatures, ...features].filter((value, index, values) => values.indexOf(value) === index).slice(0, 6),
   };
 }
@@ -72,7 +71,7 @@ export function PricingCards() {
     apiGet("/public/plans")
       .then((data) => {
         if (!active || !Array.isArray(data?.plans) || data.plans.length === 0) return;
-        setPlans(data.plans.map(apiPlanToCard));
+        setPlans(data.plans.filter((p: ApiPlan) => ["starter", "growth", "agency", "agency_pro"].includes(p.slug)).map(apiPlanToCard));
       })
       .catch(() => undefined);
     return () => { active = false; };
@@ -95,7 +94,7 @@ export function PricingCards() {
               {p.feats.map((f) => <li key={f}>• {f}</li>)}
             </ul>
             <Link href={`/register?plan=${p.slug}&interval=${annual ? "yearly" : "monthly"}`} className={`mt-6 block rounded-lg py-2 text-center text-sm font-medium ${p.highlight ? "bg-brand text-white hover:bg-brand2" : "border border-slate-300 text-slate-700 hover:border-slate-400"}`}>
-              {p.isFree ? "Create free account" : "Start free trial"}
+              Start free trial
             </Link>
           </div>
         ))}

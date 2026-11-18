@@ -71,13 +71,13 @@ it('resolves an active subscription to its plan features and limits including th
         ->and($resolved['limits']['knowledge_bases'])->toBe(1);
 });
 
-it('lets an active lifetime grant carry the plan when no subscription exists', function () {
-    $plan = resolverPlan(['name' => 'Founder Tier 2', 'slug' => 'founder-2-'.Str::random(8)]);
-    $org = resolverOrg('resolver-ltd@example.com');
+it('lets an active AppSumo lifetime grant carry the plan when no subscription exists', function () {
+    $plan = resolverPlan(['name' => 'AppSumo Tier 2', 'slug' => 'appsumo_tier_2_'.Str::random(8)]);
+    $org = resolverOrg('resolver-appsumo@example.com');
     EntitlementGrant::create([
         'organization_id'  => $org->id,
         'plan_id'          => $plan->id,
-        'source'           => 'paddle_lifetime',
+        'source'           => 'appsumo_lifetime',
         'source_reference' => 'txn_'.Str::random(12),
     ]);
 
@@ -85,7 +85,7 @@ it('lets an active lifetime grant carry the plan when no subscription exists', f
 
     expect($resolved['source'])->toBe('lifetime')
         ->and($resolved['plan']['id'])->toBe($plan->id)
-        ->and($resolved['plan']['name'])->toBe('Founder Tier 2')
+        ->and($resolved['plan']['name'])->toBe('AppSumo Tier 2')
         ->and($resolved['features'])->toBe(['technical_crawler', 'ai_visibility']);
 });
 

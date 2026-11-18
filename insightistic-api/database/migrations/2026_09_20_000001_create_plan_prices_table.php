@@ -5,9 +5,9 @@ use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
 /**
- * Provider-neutral price mapping (Paddle guide §4.1): Paddle price_id ->
- * internal plan_id + kind. Plans are never resolved by amount or product
- * name — webhooks look up the price here and take the mapped plan.
+ * Provider-neutral price mapping: provider price id -> internal plan_id +
+ * kind. Plans are never resolved by amount or product name — webhooks look
+ * up the price here and take the mapped plan.
  */
 return new class extends Migration {
     public function up(): void
@@ -15,7 +15,7 @@ return new class extends Migration {
         Schema::create('plan_prices', function (Blueprint $table) {
             $table->id();
             $table->foreignId('plan_id')->constrained()->cascadeOnDelete();
-            $table->string('provider', 32)->default('paddle');
+            $table->string('provider', 32)->default('stripe');
             $table->string('kind', 32);                    // monthly|yearly|lifetime|credit_pack
             $table->string('provider_product_id')->nullable();
             $table->string('provider_price_id')->unique();

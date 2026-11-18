@@ -74,6 +74,7 @@ export default function AuditOverviewPage() {
   // Heaviest categories first — that's the reading order of "what counts most".
   breakdown.sort((a, b) => b.weight - a.weight);
   const score = health.data?.score;
+  const crawlPending = health.data?.pending === true || runs.latestRun?.status === "pending" || runs.latestRun?.status === "running";
 
   const runColumns: Column<CrawlRun>[] = [
     { key: "status", label: "Status", render: (r) => <StatusChip status={r.status} /> },
@@ -112,14 +113,21 @@ export default function AuditOverviewPage() {
                 <ErrorState message={health.error} onRetry={health.reload} />
               ) : (
                 <>
-                  <div className="flex items-baseline gap-2">
-                    <span className={`text-5xl font-bold tracking-tight ${score != null ? scoreToneCls(Number(score)) : "text-muted"}`}>
-                      {score != null ? Math.round(Number(score)) : "—"}
-                    </span>
-                    <span className="text-sm text-muted">/ 100</span>
-                  </div>
+                  {crawlPending ? (
+                    <div className="rounded-xl border border-line bg-card2 px-4 py-4 text-sm text-warn">
+                      Crawl in progress — the health score will be calculated after the run completes.
+                    </div>
+                  ) : (
+                    <div className="flex items-baseline gap-2">
+                      <span className={`text-5xl font-bold tracking-tight ${score != null ? scoreToneCls(Number(score)) : "text-muted"}`}>
+                        {score != null ? Math.round(Number(score)) : "—"}
+                      </span>
+                      <span className="text-sm text-muted">/ 100</span>
+                    </div>
+                  )}
                   <div className="mt-4 space-y-3">
-                    {breakdown.length === 0 && <p className="text-sm text-muted">No breakdown returned yet.</p>}
+                    {crawlPending && <p className="text-sm text-muted">Discovered pages and issue counts are still being updated.</p>}
+                    {!crawlPending && breakdown.length === 0 && <p className="text-sm text-muted">No breakdown returned yet.</p>}
                     {breakdown.map((b) => {
                       const healthPct = b.weight > 0 ? Math.max(0, Math.min(100, 100 - (b.penalty / b.weight) * 100)) : 100;
                       const barTone = healthPct >= 75 ? "bg-good" : healthPct >= 50 ? "bg-warn" : "bg-bad";
@@ -155,6 +163,8 @@ export default function AuditOverviewPage() {
                 <Spinner />
               ) : health.error ? (
                 <ErrorState message={health.error} onRetry={health.reload} />
+              ) : crawlPending ? (
+                <p className="py-6 text-center text-sm text-warn">The crawler is still processing pages. Issues will appear when this run finishes.</p>
               ) : (health.data?.top_issues || []).length === 0 ? (
                 <p className="py-6 text-center text-sm text-muted">No open issues — the last crawl came back clean.</p>
               ) : (

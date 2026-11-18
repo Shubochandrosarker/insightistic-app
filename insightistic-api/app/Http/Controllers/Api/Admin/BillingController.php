@@ -4,7 +4,6 @@ namespace App\Http\Controllers\Api\Admin;
 
 use App\Domain\Billing\CreditLedger;
 use App\Domain\Billing\CreditWallet;
-use App\Domain\Billing\LtdCampaignService;
 use App\Models\Organization;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
@@ -12,11 +11,6 @@ use Illuminate\Support\Str;
 /** Super-admin read/write surface for commercial operations and audit review. */
 class BillingController extends AdminController
 {
-    public function campaign(LtdCampaignService $campaign)
-    {
-        return response()->json(['campaign' => $campaign->status()]);
-    }
-
     public function organizationCredits(int $organizationId, CreditWallet $wallet)
     {
         $org = Organization::findOrFail($organizationId);

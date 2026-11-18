@@ -55,7 +55,14 @@ type Incident = {
   duration_seconds?: number | null;
 };
 
-type SslInfo = { expires_at?: string | null; days_left?: number | null; tone?: string | null } | null;
+type SslInfo = {
+  status?: "ok" | "error" | "pending" | string | null;
+  expires_at?: string | null;
+  days_left?: number | null;
+  tone?: string | null;
+  checked_at?: string | null;
+  message?: string | null;
+} | null;
 
 type Msg = { tone: "info" | "warn" | "bad"; text: string };
 
@@ -86,17 +93,19 @@ function incidentDuration(i: Incident): string | null {
   return null;
 }
 
-/** SSL line: expiry date + days left, or "Not checked yet" when no scan ran. */
+/** SSL line: distinguish pending, failed, and completed checks honestly. */
 function sslLabel(ssl: SslInfo): string {
-  if (!ssl) return "Not checked yet";
+  if (!ssl || ssl.status === "pending") return "Not checked yet";
+  if (ssl.status === "error") return "Check failed — retry scheduled";
   const d = ssl.days_left;
   if (ssl.tone === "expired" || (d != null && d < 0)) return `Expired${ssl.expires_at ? ` — ${ssl.expires_at}` : ""}`;
-  if (d == null) return ssl.expires_at ? `Expires ${ssl.expires_at}` : "Not checked yet";
+  if (d == null) return ssl.expires_at ? `Expires ${ssl.expires_at}` : "Check failed — retry scheduled";
   return `${d} day${d === 1 ? "" : "s"} left${ssl.expires_at ? ` — ${ssl.expires_at}` : ""}`;
 }
 
 function sslToneCls(ssl: SslInfo): string {
-  if (!ssl) return "text-muted";
+  if (!ssl || ssl.status === "pending") return "text-muted";
+  if (ssl.status === "error") return "text-bad";
   const tone = ssl.tone ?? (ssl.days_left != null ? (ssl.days_left < 7 ? "critical" : ssl.days_left < 21 ? "warning" : "ok") : null);
   return tone === "ok" ? "text-good" : tone === "warning" ? "text-warn" : tone ? "text-bad" : "text-muted";
 }
@@ -197,7 +206,7 @@ export default function UptimePage() {
   // SSL arrives as its own payload ({expires_at, days_left, tone}); fall back
   // to the monitor's raw expiry so an older payload still renders something.
   const ssl: SslInfo =
-    data.ssl ?? (monitor?.ssl_expires_at ? { expires_at: String(monitor.ssl_expires_at).slice(0, 10) } : null);
+    data.ssl ?? (monitor?.ssl_expires_at ? { status: "ok", expires_at: String(monitor.ssl_expires_at).slice(0, 10) } : null);
   const availability = data.availability_pct;
 
   const incidentColumns: Column<Incident>[] = [
@@ -296,7 +305,9 @@ export default function UptimePage() {
               </div>
               <div>
                 <p className="text-xs font-medium text-muted">SSL certificate</p>
-                <p className={`mt-1 text-sm font-semibold ${sslToneCls(ssl)}`}>{sslLabel(ssl)}</p>
+                <p className={`mt-1 text-sm font-semibold ${sslToneCls(ssl)}`} title={ssl?.message || undefined}>
+                  {sslLabel(ssl)}
+                </p>
               </div>
               <div className="ml-auto">
                 <Button variant="ghost" onClick={checkNow} disabled={busy} title="Probe the site right now">

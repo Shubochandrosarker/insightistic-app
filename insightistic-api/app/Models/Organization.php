@@ -28,6 +28,8 @@ class Organization extends Model
             'last_touch_json'        => 'array',
             'marketing_consent'      => 'boolean',
             'marketing_consent_at'   => 'datetime',
+            'allow_external_ai'      => 'boolean',
+            'ai_settings_json'       => 'array',
         ];
     }
 

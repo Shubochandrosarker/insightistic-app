@@ -52,6 +52,50 @@ class ClientReport extends Model
 
     private function signedLink(string $routeName): string
     {
+        $base = $this->canonicalOrigin(
+            (string) config('insightistic.reports.public_url', config('app.url')),
+        );
+        $scheme = parse_url($base, PHP_URL_SCHEME);
+
+        if ($base !== '' && is_string($scheme) && in_array(strtolower($scheme), ['http', 'https'], true)) {
+            // Generate and sign the URL against the configured canonical
+            // origin, never against X-Forwarded-Port from an edge proxy.
+            // The signature is calculated after this override, so removing a
+            // stray :80 cannot turn a valid link into a 403.
+            URL::forceRootUrl($base);
+            URL::forceScheme(strtolower($scheme));
+        }
+
         return URL::temporarySignedRoute($routeName, now()->addHour(), ['report' => $this->id]);
+    }
+
+    /**
+     * Normalize the configured public origin before signing. In particular,
+     * HTTPS with an accidentally forwarded :80 must become the canonical
+     * HTTPS origin so the browser URL and the signature use the same route.
+     */
+    private function canonicalOrigin(string $configured): string
+    {
+        $configured = trim($configured);
+        if ($configured === '' || ! preg_match('#^https?://#i', $configured)) {
+            return rtrim($configured, '/');
+        }
+
+        $parts = parse_url($configured);
+        if (! is_array($parts) || empty($parts['scheme']) || empty($parts['host'])) {
+            return rtrim($configured, '/');
+        }
+
+        $scheme = strtolower((string) $parts['scheme']);
+        $host = strtolower(rtrim((string) $parts['host'], '.'));
+        $port = isset($parts['port']) ? (int) $parts['port'] : null;
+
+        // 80/443 are default ports, regardless of whether a stale proxy
+        // header or an old environment variable put the wrong one there.
+        $portSuffix = $port !== null && ! in_array($port, [80, 443], true)
+            ? ':'.$port
+            : '';
+
+        return $scheme.'://'.$host.$portSuffix;
     }
 }

@@ -137,6 +137,11 @@ class PageSpeedClient
                 'accessibility_score'  => $this->score($categories, 'accessibility'),
                 'best_practices_score' => $this->score($categories, 'best-practices'),
                 'seo_score'            => $this->score($categories, 'seo'),
+                // Lighthouse has no native AI-readiness category. Store the
+                // product metric as a transparent derived score so the UI
+                // never presents a supported SEO audit as an unavailable
+                // value. The dashboard labels this as derived.
+                'ai_readiness_score'   => $this->aiReadinessScore($categories, $audits),
 
                 // Core Web Vitals: real-user data when Google has it.
                 'lcp_ms'      => $hasField
@@ -224,6 +229,37 @@ class PageSpeedClient
 
         // Lighthouse reports 0..1; the columns store whole percentages.
         return $score === null ? null : (int) round((float) $score * 100);
+    }
+
+    /**
+     * Derive AI-readiness from the Lighthouse SEO score plus the common
+     * crawl/metadata signals that make a page machine-readable. This is not a
+     * claim that Lighthouse measures an AI model's ranking; it is a stable
+     * product score with its inputs recorded in the source run.
+     */
+    private function aiReadinessScore(array $categories, array $audits): ?int
+    {
+        $seo = $this->score($categories, 'seo');
+        $signalKeys = [
+            'is-crawlable', 'document-title', 'meta-description', 'robots-txt',
+            'structured-data', 'link-text', 'hreflang',
+        ];
+        $signals = [];
+
+        foreach ($signalKeys as $key) {
+            $score = $audits[$key]['score'] ?? null;
+            if ($score !== null && is_numeric($score)) {
+                $signals[] = max(0, min(100, (float) $score * 100));
+            }
+        }
+
+        if ($seo === null && $signals === []) {
+            return null;
+        }
+
+        $signalScore = $signals === [] ? $seo : (int) round(array_sum($signals) / count($signals));
+
+        return (int) max(0, min(100, round((($seo ?? $signalScore) * 0.7) + ($signalScore * 0.3))));
     }
 
     private function fieldValue(array $field, string $key): float

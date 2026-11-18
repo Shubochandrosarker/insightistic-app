@@ -11,6 +11,7 @@ use App\Models\AiThread;
 use App\Models\Site;
 use App\Services\Copilot\CopilotChat;
 use App\Services\Copilot\CopilotContextBuilder;
+use App\Services\Ai\AiAvailability;
 use App\Services\UsageService;
 use App\Support\DateRange;
 use App\Support\Tenancy;
@@ -30,6 +31,7 @@ class CopilotController extends Controller
         private CopilotChat $chat,
         private UsageService $usage,
         private Tenancy $tenancy,
+        private AiAvailability $availability,
     ) {}
 
     public function threads(Request $request)
@@ -141,22 +143,16 @@ class CopilotController extends Controller
             'from'               => ['nullable', 'date'],
             'to'                 => ['nullable', 'date'],
             'sources'            => ['nullable', 'array'],
-            'sources.*'          => [Rule::in(\App\Services\ContextAssembler::TYPES)],
+            'sources.*'          => [Rule::in(\App\Services\Copilot\CopilotContextBuilder::SOURCE_TYPES)],
             'knowledge_base_ids' => ['nullable', 'array'],
             'knowledge_base_ids.*' => ['integer'],
             'ai_category'        => ['nullable', 'string', 'max:80'],
             'agent_slug'         => ['nullable', 'string', 'max:120'],
         ]);
 
-        // Server-side quota — structured 402 before any provider call.
-        if (! $this->usage->canSendAiMessage($org)) {
-            return response()->json(
-                $this->usage->limitError($org, 'monthly_ai_messages', (int) $this->usage->counter($org)->ai_messages_used),
-                402,
-            );
-        }
-
-        // Resolve the authorized context selections.
+        // Resolve the optional site before any quota/provider work so a
+        // paused Brother Tours site gets the same clear notice as a paused
+        // organization-level AI workspace.
         $site = null;
         if (! empty($data['site_id'])) {
             $site = Site::find($data['site_id']); // tenant-scoped; foreign id = 404
@@ -165,6 +161,18 @@ class CopilotController extends Controller
             }
         } elseif ($thread->site_id) {
             $site = Site::find($thread->site_id);
+        }
+
+        if ($this->availability->isPaused($org, $site)) {
+            return $this->availability->response();
+        }
+
+        // Server-side quota — structured 402 before any provider call.
+        if (! $this->usage->canSendAiMessage($org)) {
+            return response()->json(
+                $this->usage->limitError($org, 'monthly_ai_messages', (int) $this->usage->counter($org)->ai_messages_used),
+                402,
+            );
         }
 
         $range = null;
@@ -215,7 +223,10 @@ class CopilotController extends Controller
         $context = $this->contextBuilder->build($org, [
             'site'               => $site,
             'date_range'         => $range,
-            'sources'            => $data['sources'] ?? ['executive'],
+            // Missing sources means Auto mode. Keep null distinct from an
+            // explicit source list so the builder can include live audit,
+            // Site Audit, PageSpeed and executive context automatically.
+            'sources'            => array_key_exists('sources', $data) ? $data['sources'] : null,
             'knowledge_base_ids' => $kbIds,
             'ai_category'       => $data['ai_category'] ?? null,
             'agent_slug'        => $data['agent_slug'] ?? null,
@@ -274,6 +285,7 @@ class CopilotController extends Controller
                             'source_type'   => (string) ($ev['source'] ?? $type),
                             'title'         => (string) ($ev['label'] ?? $type),
                             'snippet'       => (string) ($ev['value'] ?? ''),
+                            'url'           => $ev['url'] ?? null,
                             'data_date'     => null,
                             'last_indexed_at' => null,
                         ]);

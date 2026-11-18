@@ -5,6 +5,7 @@ namespace App\Console\Commands;
 use App\Jobs\RunAiVisibilityJob;
 use App\Models\AiVisibilityPrompt;
 use App\Models\Site;
+use App\Services\Ai\AiAvailability;
 use Illuminate\Console\Command;
 
 /**
@@ -25,7 +26,7 @@ class AiVisibilityScheduledCommand extends Command
 
     protected $description = 'Queue daily AI-visibility prompt runs for sites with active prompts';
 
-    public function handle(): int
+    public function handle(AiAvailability $availability): int
     {
         $dispatched = 0;
         $skipped = 0;
@@ -47,6 +48,11 @@ class AiVisibilityScheduledCommand extends Command
                     $org = $site->organization;
 
                     if (! $org || $org->deletion_scheduled_for !== null) {
+                        $skipped++;
+                        continue;
+                    }
+
+                    if ($availability->isPaused($org, $site)) {
                         $skipped++;
                         continue;
                     }

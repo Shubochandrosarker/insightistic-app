@@ -85,7 +85,7 @@ final class CreditWallet
 
     public function grantPurchased(Organization $organization, int $amount, string $reference, string $reason = 'credit_pack_purchase'): void
     {
-        $this->ledger->grant($organization, $amount, $reason, 'paddle_credit_pack', $reference, 'purchased', null, null, ['catalog_version' => config('commercial.version')]);
+        $this->ledger->grant($organization, $amount, $reason, 'stripe_credit_pack', $reference, 'purchased', null, null, ['catalog_version' => config('commercial.version')]);
     }
 
     /** Consume included credits first, then purchased credits, atomically/idempotently. */

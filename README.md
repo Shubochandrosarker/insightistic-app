@@ -4,6 +4,10 @@ Insightistic is a multi-tenant WooCommerce analytics SaaS. This repo holds the t
 deployable parts of the **app** (dashboard + API) — WordPress-side code lives in
 sibling repos, kept fully separate so each ships and versions independently:
 
+> **Agent and maintainer entry point:** read [`claude.md`](./claude.md), then
+> [`Memory/README.md`](./Memory/README.md) and the current status before making
+> code, deployment, or live-site changes.
+
 - `insightistic-app/` - Next.js frontend for auth and the customer dashboard
   (incl. the AI Copilot and Knowledge pages).
 - `insightistic-api/` - complete Laravel 12 application (committed

@@ -321,7 +321,7 @@ class OrganizationController extends AdminController
         // subscription normally has precedence in EntitlementResolver. Keep
         // an explicit, auditable admin override so a support plan assignment
         // immediately reaches the owner's dashboard and plugin entitlements
-        // without pretending that Paddle/Stripe was charged or changed.
+        // without pretending that Stripe was charged or changed.
         if (! empty($data['plan'])) {
             EntitlementGrant::withoutGlobalScope('organization')->updateOrCreate(
                 [

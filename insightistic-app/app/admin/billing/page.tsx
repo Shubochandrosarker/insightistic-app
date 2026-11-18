@@ -4,7 +4,6 @@ import { useState } from "react";
 import { useApi } from "@/lib/useApi";
 import { apiGet, apiPost } from "@/lib/api";
 import { Card } from "@/components/ui/Card";
-import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Field } from "@/components/ui/Field";
 import { PageHeader } from "@/components/dashboard/PageHeader";
@@ -12,7 +11,7 @@ import { Spinner } from "@/components/ui/Spinner";
 import { num } from "@/lib/format";
 
 export default function AdminBilling() {
-  const { data: campaignData, loading: campaignLoading, reload: reloadCampaign } = useApi<any>("/admin/billing/ltd-campaign");
+  const { data: catalogData, loading: catalogLoading } = useApi<any>("/public/plans");
   const [organizationId, setOrganizationId] = useState("");
   const [wallet, setWallet] = useState<any>(null);
   const [form, setForm] = useState({ action: "grant", amount: "1000", reason: "" });
@@ -49,23 +48,27 @@ export default function AdminBilling() {
     }
   }
 
-  if (campaignLoading) return <Spinner />;
+  if (catalogLoading) return <Spinner />;
 
-  const campaign = campaignData?.campaign;
+  const recurring = (catalogData?.plans || []).filter((p: any) => ["starter", "growth", "agency", "agency_pro"].includes(p.slug));
+  const appsumo = catalogData?.appsumo?.plans || [];
   const loadedWallet = wallet?.wallet;
 
   return (
     <div>
-      <PageHeader title="Billing operations" subtitle="Review Founding Angel inventory and perform audited wallet adjustments." />
+      <PageHeader title="Billing operations" subtitle="Review the active Stripe/AppSumo catalog and perform audited wallet adjustments." />
 
-      <Card title="Founding Angel campaign" subtitle="The backend owns the 100-license cap; this view is read-only.">
-        <div className="flex flex-wrap items-center gap-3">
-          <Badge tone={campaign?.sold_out ? "slate" : "green"} dot>{campaign?.sold_out ? "Sold out" : "Active"}</Badge>
-          <span className="text-sm text-muted">
-            {num(campaign?.successful_sales ?? 0)} successful · {num(campaign?.reserved_sales ?? 0)} reserved · {num(campaign?.remaining_sales ?? 0)} remaining of {num(campaign?.maximum_sales ?? 100)}
-          </span>
+      <Card title="Current catalog" subtitle="Only these offers may appear in public pricing or checkout.">
+        <div className="grid gap-4 md:grid-cols-2">
+          <div>
+            <h3 className="text-sm font-semibold text-fg">Stripe subscriptions</h3>
+            <p className="mt-2 text-sm text-muted">{recurring.map((p: any) => p.name).join(" · ") || "Not seeded"}</p>
+          </div>
+          <div>
+            <h3 className="text-sm font-semibold text-fg">AppSumo lifetime entitlements</h3>
+            <p className="mt-2 text-sm text-muted">{appsumo.map((p: any) => p.name).join(" · ") || "Not seeded"}</p>
+          </div>
         </div>
-        <Button variant="ghost" className="mt-4" onClick={reloadCampaign}>Refresh campaign</Button>
       </Card>
 
       <Card className="mt-5" title="Organization credit wallet" subtitle="Reauth is required by the API before any adjustment is written.">

@@ -136,18 +136,6 @@ Schedule::command('insightistic:outcome-verifications-run')
     ->withoutOverlapping();
 
 /*
- * Billing reconciliation (roadmap 23-STRIPE-TO-PADDLE-MIGRATION §4.3).
- * Daily at 04:30 — after the nightly writes (snapshots 02:00, privacy
- * 03:30, telemetry 03:50) and before business hours, so any drift webhooks
- * missed is repaired before the day's first billing surface renders.
- * Runbook: docs/roadmap-2026/23-STRIPE-TO-PADDLE-MIGRATION.md. No-ops
- * gracefully while PADDLE_API_KEY is unset.
- */
-Schedule::command('insightistic:billing-reconcile')
-    ->dailyAt('04:30')
-    ->withoutOverlapping();
-
-/*
  * Rank tracking (Phase 10, doc 13). Daily at 06:00, last in the nightly
  * chain: SERP positions are point-in-time observations, so they are taken
  * after the traffic/data syncs finish and before the first dashboard reads

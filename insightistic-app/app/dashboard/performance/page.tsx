@@ -12,12 +12,40 @@ import { ErrorState } from "@/components/dashboard/states";
 import { Spinner } from "@/components/ui/Spinner";
 import { Gauge } from "lucide-react";
 import { Button } from "@/components/ui/Button";
+import { isSafeHref } from "@/lib/format";
 
 const CWV_TONE: Record<string, "green" | "amber" | "red" | "slate"> = {
   good: "green",
   needs_improvement: "amber",
   poor: "red",
 };
+
+function OpportunityDescription({ text }: { text: string }) {
+  const parts = text.split(/(\[[^\]]+\]\(https?:\/\/[^)\s]+\))/g);
+
+  return (
+    <>
+      {parts.map((part, index) => {
+        const match = part.match(/^\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)$/);
+        if (!match || !isSafeHref(match[2])) {
+          return <span key={index}>{part}</span>;
+        }
+
+        return (
+          <a
+            key={index}
+            href={match[2]}
+            target="_blank"
+            rel="noreferrer"
+            className="text-brand underline underline-offset-2 hover:text-brand/80"
+          >
+            {match[1]}
+          </a>
+        );
+      })}
+    </>
+  );
+}
 
 function ScoreRing({ label, value }: { label: string; value: number | null }) {
   const tone = value == null ? "text-muted" : value >= 90 ? "text-good" : value >= 50 ? "text-warn" : "text-bad";
@@ -207,7 +235,11 @@ export default function PerformancePage() {
                   <div key={iss.id} className="flex items-center justify-between gap-3 border-b border-line py-2 last:border-0">
                     <div className="min-w-0">
                       <p className="truncate text-sm font-medium text-fg">{iss.title}</p>
-                      {iss.description && <p className="truncate text-xs text-muted">{iss.description}</p>}
+                      {iss.description && (
+                        <p className="truncate text-xs text-muted">
+                          <OpportunityDescription text={iss.description} />
+                        </p>
+                      )}
                     </div>
                     {iss.savings_ms != null && <span className="shrink-0 text-xs font-semibold text-muted">-{iss.savings_ms}ms</span>}
                   </div>

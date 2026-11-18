@@ -5,8 +5,8 @@ use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
 /**
- * Access grants outside a recurring subscription: lifetime (LTD) purchases,
- * manual comps and promotions (Paddle guide §4.5). The unique
+ * Access grants outside a recurring subscription: AppSumo lifetime purchases,
+ * manual comps and promotions. The unique
  * (source, source_reference) pair prevents the same completed transaction
  * from granting twice.
  */
@@ -17,7 +17,7 @@ return new class extends Migration {
             $table->id();
             $table->foreignId('organization_id')->constrained()->cascadeOnDelete();
             $table->foreignId('plan_id')->nullable()->constrained()->nullOnDelete();
-            $table->string('source', 32);                  // paddle_lifetime|manual|promotion
+            $table->string('source', 32);                  // appsumo_lifetime|manual|promotion
             $table->string('source_reference');
             $table->json('features_json')->nullable();
             $table->json('limits_json')->nullable();

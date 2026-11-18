@@ -5,9 +5,12 @@ import AttributionCapture from "@/components/AttributionCapture";
 import ConsentBanner from "@/components/marketing/ConsentBanner";
 
 export const metadata: Metadata = {
+  metadataBase: new URL("https://app.insightistic.com"),
   title: "Insightistic — Search, AI Visibility & Website Intelligence",
   description:
     "Connect any website — WordPress, Shopify, Laravel or custom — and get search intelligence, AI visibility, site audits, uptime and traffic insights in one clean dashboard.",
+  alternates: { canonical: "/" },
+  robots: { index: false, follow: false },
   icons: { icon: "/logos/insightistic-icon.png", apple: "/logos/insightistic-icon.png" },
 };
 

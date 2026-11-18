@@ -1,7 +1,7 @@
 import { Nav } from "@/components/marketing/Nav";
 import { Footer } from "@/components/marketing/Footer";
 import { PricingCards } from "@/components/marketing/PricingCards";
-import { AngelPricing } from "@/components/marketing/AngelPricing";
+import { AppSumoPricing } from "@/components/marketing/AppSumoPricing";
 
 // Sibling products in the WordPressistic ecosystem. Verifyistic has no
 // logo asset yet — add it to public/logos + this list when one lands.
@@ -33,14 +33,14 @@ export default function Pricing() {
       <section className="mx-auto max-w-6xl px-6 py-16">
         <div className="mb-10 text-center">
           <h1 className="text-3xl font-bold text-slate-900">Simple plans that scale with you</h1>
-          <p className="mt-3 text-slate-600">Start free and upgrade as your business grows. Get WordPress and WooCommerce analytics, SEO intelligence, AI insights and automated reporting in one workspace.</p>
+          <p className="mt-3 text-slate-600">Start with a 14-day trial and upgrade as your business grows. Get WordPress and WooCommerce analytics, SEO intelligence, AI insights and automated reporting in one workspace.</p>
         </div>
         <PricingCards />
 
-        <AngelPricing />
+        <AppSumoPricing />
 
         <p className="mt-10 text-center text-sm text-slate-500">
-          Lifetime deals available at launch · Insight Credit packs are one-time top-ups that don&rsquo;t expire.
+          Stripe subscriptions are billed monthly or annually. AppSumo lifetime tiers are redeemed through AppSumo.
         </p>
 
         <div className="mt-16 border-t border-slate-200 pt-12">

@@ -1,5 +1,6 @@
 "use client";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { ReactNode } from "react";
 import Link from "next/link";
 import { useDashboard, PERIODS } from "@/lib/dashboard";
 import { useApi } from "@/lib/useApi";
@@ -61,7 +62,7 @@ interface ChatMsg {
 
 const ANALYTICS_SOURCES = [
   "executive", "traffic", "seo", "performance", "commerce",
-  "products", "customers", "content", "alerts",
+  "products", "customers", "content", "alerts", "site_audit", "pagespeed", "live_web",
 ] as const;
 
 const CONFIDENCE_TONE: Record<string, "green" | "amber" | "red"> = {
@@ -78,17 +79,88 @@ function parseAnswerJson(raw: any): AnswerJson | null {
   return typeof raw === "object" ? raw : null;
 }
 
-/** Minimal rich text: paragraphs preserved via pre-wrap, **bold** spans handled. */
+function renderInline(text: string, keyPrefix: string): ReactNode[] {
+  const tokens = text.split(/(\[[^\]]+\]\((?:https?:\/\/|\/)[^)]+\)|\*\*[^*]+\*\*|`[^`]+`|\*[^*]+\*)/g);
+
+  return tokens.map((token, index) => {
+    const key = `${keyPrefix}-${index}`;
+    const link = token.match(/^\[([^\]]+)\]\(([^)]+)\)$/);
+    if (link) {
+      const [, label, href] = link;
+      return isSafeHref(href) ? (
+        <a key={key} href={href} target="_blank" rel="noreferrer" className="text-violet underline decoration-violet/40 underline-offset-2 hover:decoration-violet">
+          {label} <ExternalLink size={11} className="inline-block align-[-1px]" />
+        </a>
+      ) : <Fragment key={key}>{label}</Fragment>;
+    }
+    if (token.startsWith("**") && token.endsWith("**") && token.length > 4) {
+      return <strong key={key} className="font-semibold">{token.slice(2, -2)}</strong>;
+    }
+    if (token.startsWith("`") && token.endsWith("`") && token.length > 2) {
+      return <code key={key} className="rounded bg-card2 px-1 py-0.5 font-mono text-[0.9em]">{token.slice(1, -1)}</code>;
+    }
+    if (token.startsWith("*") && token.endsWith("*") && token.length > 2) {
+      return <em key={key}>{token.slice(1, -1)}</em>;
+    }
+    return <Fragment key={key}>{token}</Fragment>;
+  });
+}
+
+/** Safe markdown subset: headings, lists, links, emphasis and fenced code. */
 function RichText({ text }: { text: string }) {
-  const parts = text.split(/(\*\*[^*]+\*\*)/g);
+  const lines = text.replace(/\r/g, "").split("\n");
+  const nodes: ReactNode[] = [];
+  let code: string[] | null = null;
+
+  lines.forEach((line, index) => {
+    const trimmed = line.trim();
+    if (trimmed.startsWith("```") && code === null) {
+      code = [];
+      return;
+    }
+    if (trimmed === "```" && code !== null) {
+      nodes.push(<pre key={`code-${index}`} className="overflow-x-auto rounded-xl border border-line bg-card2 p-3 text-xs leading-relaxed"><code>{code.join("\n")}</code></pre>);
+      code = null;
+      return;
+    }
+    if (code !== null) {
+      code.push(line);
+      return;
+    }
+    if (trimmed === "") {
+      nodes.push(<div key={`space-${index}`} className="h-1" />);
+      return;
+    }
+    const heading = trimmed.match(/^(#{1,3})\s+(.+)$/);
+    if (heading) {
+      const Heading: "h2" | "h3" | "h4" = heading[1].length === 1 ? "h2" : heading[1].length === 2 ? "h3" : "h4";
+      nodes.push(<Heading key={`heading-${index}`} className="mt-2 text-sm font-bold text-fg first:mt-0">{renderInline(heading[2], `heading-${index}`)}</Heading>);
+      return;
+    }
+    const bullet = trimmed.match(/^[-*]\s+(.+)$/);
+    if (bullet) {
+      nodes.push(<div key={`bullet-${index}`} className="flex gap-2 pl-1"><span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-violet" /><span>{renderInline(bullet[1], `bullet-${index}`)}</span></div>);
+      return;
+    }
+    const ordered = trimmed.match(/^\d+[.)]\s+(.+)$/);
+    if (ordered) {
+      nodes.push(<div key={`ordered-${index}`} className="flex gap-2 pl-1"><span className="font-semibold text-violet">{trimmed.match(/^\d+/)?.[0]}.</span><span>{renderInline(ordered[1], `ordered-${index}`)}</span></div>);
+      return;
+    }
+    if (trimmed.startsWith(">")) {
+      nodes.push(<blockquote key={`quote-${index}`} className="border-l-2 border-violet/40 pl-3 text-muted">{renderInline(trimmed.replace(/^>\s?/, ""), `quote-${index}`)}</blockquote>);
+      return;
+    }
+    nodes.push(<p key={`paragraph-${index}`} className="break-words">{renderInline(line, `paragraph-${index}`)}</p>);
+  });
+
+  const openCode = code as string[] | null;
+  if (openCode !== null && openCode.length) {
+    nodes.push(<pre key="code-open" className="overflow-x-auto rounded-xl border border-line bg-card2 p-3 text-xs leading-relaxed"><code>{openCode.join("\n")}</code></pre>);
+  }
+
   return (
-    <div className="whitespace-pre-wrap break-words text-sm leading-relaxed">
-      {parts.map((p, i) =>
-        p.startsWith("**") && p.endsWith("**") && p.length > 4
-          ? <strong key={i} className="font-semibold">{p.slice(2, -2)}</strong>
-          : <Fragment key={i}>{p}</Fragment>
-      )}
-    </div>
+    <div className="space-y-1 break-words text-sm leading-relaxed">{nodes}</div>
   );
 }
 
@@ -582,7 +654,7 @@ export default function CopilotPage() {
     <div>
       <PageHeader
         title="AI Copilot"
-        subtitle="Ask questions about your analytics and your own knowledge bases — answers cite their sources."
+        subtitle="Ask about your analytics, Site Audit, PageSpeed and the live public site — answers cite their sources."
         right={remaining != null ? (
           <span className="text-xs text-muted">{remaining} AI message{remaining === 1 ? "" : "s"} left this month</span>
         ) : undefined}
@@ -661,7 +733,7 @@ export default function CopilotPage() {
             </select>
             <MultiSelect
               label="Data"
-              allLabel="Analytics sources (auto when none picked)"
+              allLabel="Analytics, audit and live-web sources (Auto when none picked)"
               options={ANALYTICS_SOURCES.map((s) => ({ value: s, label: s }))}
               selected={sourcesSel}
               onToggle={(v) => setSourcesSel((sel) => sel.includes(v) ? sel.filter((x) => x !== v) : [...sel, v])}
@@ -690,7 +762,7 @@ export default function CopilotPage() {
                     </span>
                     <h3 className="text-sm font-semibold text-fg">Ask the Copilot anything about {site?.name || "your data"}</h3>
                     <p className="mx-auto mt-1 max-w-sm text-sm text-muted">
-                      It reads your analytics for the selected period plus any knowledge bases you've built, and cites where each answer came from.
+                      Auto mode reads the selected period, Site Audit, PageSpeed and a bounded live-site sample, plus any knowledge bases you've built.
                     </p>
                   </div>
                 )}
@@ -816,7 +888,7 @@ export default function CopilotPage() {
                   }
                 }}
                 rows={2}
-                placeholder="Ask about your traffic, sales, SEO, or anything in your knowledge bases…"
+                placeholder="Ask about traffic, sales, SEO, Site Audit, PageSpeed or the live site…"
                 className="ins-scroll max-h-40 min-h-[44px] w-full resize-y rounded-xl border border-line bg-card2 px-3 py-2.5 text-sm text-fg outline-none transition placeholder:text-muted focus:border-violet focus:bg-card focus:ring-2 focus:ring-violet/15"
               />
               {streaming ? (

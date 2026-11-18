@@ -52,7 +52,7 @@ it('serves system-health as a JSON object (no TypeError 500)', function () {
         ->getJson('/api/admin/system-health')
         ->assertOk()
         ->assertJsonPath('database.status', 'ok')
-        ->assertJsonPath('paddle.environment', fn ($v) => in_array($v, ['sandbox', 'production'], true));
+        ->assertJsonPath('stripe.mode', fn ($v) => in_array($v, ['test', 'live'], true));
 });
 
 it('hides system-health from non-super-admins', function () {
@@ -72,7 +72,7 @@ it('serves platform settings without exposing secrets', function () {
     $body = $res->json();
 
     expect($body['counts'])->toHaveKeys(['organizations', 'users', 'sites', 'plans', 'super_admins']);
-    expect($body['paddle'])->toHaveKeys(['configured', 'environment']);
+    expect($body['stripe'])->toHaveKeys(['configured', 'mode']);
     expect($body['app'])->toHaveKeys(['env', 'url', 'debug']);
     expect($body['release'])->toHaveKey('sha');
 

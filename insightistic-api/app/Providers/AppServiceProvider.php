@@ -203,9 +203,9 @@ class AppServiceProvider extends ServiceProvider
             return Limit::perMinute(30)
                 ->by('query-engine:'.($request->user()?->id ?: $request->ip()));
         });
-        // webhooks: Stripe/Paddle delivery endpoints. Signature verification
-        // fails closed, but each attempt still costs an HMAC (+ a critical
-        // log for Paddle) — bound the flood surface. Generous enough that
+        // webhooks: Stripe delivery endpoints. Signature verification fails
+        // closed, but each attempt still costs an HMAC — bound the flood
+        // surface. Generous enough that
         // legitimate provider retry bursts never trip it.
         RateLimiter::for('webhooks', function (Request $request) {
             return Limit::perMinute(300)->by('webhook:'.$request->ip());

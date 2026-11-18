@@ -48,7 +48,6 @@ use App\Http\Controllers\Api\OAuthController;
 use App\Http\Controllers\Api\OnboardingController;
 use App\Http\Controllers\Api\MetricRegistryController;
 use App\Http\Controllers\Api\OrganizationController;
-use App\Http\Controllers\Api\PaddleWebhookController;
 use App\Http\Controllers\Api\PerformanceController;
 use App\Http\Controllers\Api\PluginAiController;
 use App\Http\Controllers\Api\PluginCloudflareController;
@@ -204,13 +203,6 @@ Route::middleware(['auth:sanctum', 'tenant', 'restrict.impersonation'])->group(f
     Route::post('billing/cancel', [BillingController::class, 'cancel'])->middleware(['role:owner', 'reauth']);
     Route::post('billing/reactivate', [BillingController::class, 'reactivate'])->middleware('role:owner');
 
-    // Paddle (roadmap 23-STRIPE-TO-PADDLE-MIGRATION) — checkout config feeds
-    // Paddle.js; change-plan is a real billing mutation, so reauth like the
-    // Stripe cancel above. Both no-op with 501 while the feature flag is off
-    // (checked inside the controllers so the routes stay discoverable).
-    Route::post('billing/checkout-config', [BillingController::class, 'paddleCheckoutConfig'])->middleware('role:owner');
-    Route::post('billing/change-plan', [BillingController::class, 'paddleChangePlan'])->middleware(['role:owner', 'reauth']);
-
     // Licenses tab (spec §2). Raw keys only ever appear in regenerate/register responses.
     Route::get('licenses', [LicenseController::class, 'index']);
     Route::post('licenses/{license}/regenerate', [LicenseController::class, 'regenerate'])->middleware(['role:owner', 'reauth']);
@@ -298,7 +290,7 @@ Route::middleware(['auth:sanctum', 'tenant', 'restrict.impersonation'])->group(f
         // Query Engine + Evidence Ledger pipeline as analytics/query, so it
         // shares that route's throttle.
         Route::post('sites/{site}/ask', [AskInsightisticController::class, 'ask'])
-            ->middleware('throttle:query-engine');
+            ->middleware(['throttle:query-engine', 'ai.available']);
 
         // Saved Insights (spec Phase 2 / P5) — a named, reusable plan a
         // user can re-run on demand. "run" shares analytics/query's
@@ -327,10 +319,10 @@ Route::middleware(['auth:sanctum', 'tenant', 'restrict.impersonation'])->group(f
         // emails) — a client_viewer (read-only stakeholder access) must not
         // be able to create/edit/fire one, only see that it exists.
         Route::middleware('role:owner,admin,analyst')->group(function () {
-            Route::post('sites/{site}/automation-rules', [AutomationRuleController::class, 'store']);
-            Route::patch('sites/{site}/automation-rules/{automationRule}', [AutomationRuleController::class, 'update']);
-            Route::delete('sites/{site}/automation-rules/{automationRule}', [AutomationRuleController::class, 'destroy']);
-            Route::post('sites/{site}/automation-rules/{automationRule}/run', [AutomationRuleController::class, 'run']);
+            Route::post('sites/{site}/automation-rules', [AutomationRuleController::class, 'store'])->middleware('ai.available');
+            Route::patch('sites/{site}/automation-rules/{automationRule}', [AutomationRuleController::class, 'update'])->middleware('ai.available');
+            Route::delete('sites/{site}/automation-rules/{automationRule}', [AutomationRuleController::class, 'destroy'])->middleware('ai.available');
+            Route::post('sites/{site}/automation-rules/{automationRule}/run', [AutomationRuleController::class, 'run'])->middleware('ai.available');
         });
 
         // Anomaly Engine (spec Phase 2 / P7) — median/MAD detection across
@@ -347,7 +339,7 @@ Route::middleware(['auth:sanctum', 'tenant', 'restrict.impersonation'])->group(f
         // requested metric.
         Route::get('sites/{site}/investigations', [InvestigationController::class, 'index']);
         Route::post('sites/{site}/investigations', [InvestigationController::class, 'store'])
-            ->middleware('throttle:query-engine');
+            ->middleware(['throttle:query-engine', 'ai.available']);
         Route::get('sites/{site}/investigations/{investigation}', [InvestigationController::class, 'show']);
 
         // Bridgistic Approved Actions (spec Phase 2 / P9) — a proposed
@@ -503,7 +495,7 @@ Route::middleware(['auth:sanctum', 'tenant', 'restrict.impersonation'])->group(f
 
         // AI insights (Week 4)
         Route::get('sites/{site}/insights', [InsightController::class, 'index']);
-        Route::post('sites/{site}/insights/generate', [InsightController::class, 'generate']);
+        Route::post('sites/{site}/insights/generate', [InsightController::class, 'generate'])->middleware('ai.available');
         Route::get('sites/{site}/insights/{insight}', [InsightController::class, 'show']);
         Route::post('sites/{site}/insights/{insight}/mark-read', [InsightController::class, 'markRead']);
         // Lifecycle (spec Phase 6). Saving and dismissing are orthogonal to
@@ -542,7 +534,7 @@ Route::middleware(['auth:sanctum', 'tenant', 'restrict.impersonation'])->group(f
 
         // Reports (Week 4)
         Route::get('sites/{site}/reports', [ReportController::class, 'index']);
-        Route::post('sites/{site}/reports/generate', [ReportController::class, 'generate']);
+        Route::post('sites/{site}/reports/generate', [ReportController::class, 'generate'])->middleware('ai.available');
 
         // Scheduled report delivery (Milestone 5, spec §12). A schedule sends
         // data to an email address on a recurring basis, so configuring one
@@ -577,11 +569,11 @@ Route::middleware(['auth:sanctum', 'tenant', 'restrict.impersonation'])->group(f
         Route::get('sites/{site}/ai-visibility/mentions', [\App\Http\Controllers\Api\AiVisibilityController::class, 'mentions']);
         Route::get('sites/{site}/ai-visibility/competitors', [\App\Http\Controllers\Api\AiVisibilityController::class, 'competitors']);
         Route::middleware('role:owner,admin')->group(function () {
-            Route::post('sites/{site}/ai-visibility/prompts', [\App\Http\Controllers\Api\AiVisibilityController::class, 'storePrompt']);
-            Route::delete('sites/{site}/ai-visibility/prompts/{prompt}', [\App\Http\Controllers\Api\AiVisibilityController::class, 'destroyPrompt']);
-            Route::match(['get', 'post'], 'sites/{site}/ai-visibility/prompts/{prompt}/check', [\App\Http\Controllers\Api\AiVisibilityController::class, 'checkPrompt']);
-            Route::post('sites/{site}/ai-visibility/competitors', [\App\Http\Controllers\Api\AiVisibilityController::class, 'storeCompetitor']);
-            Route::delete('sites/{site}/ai-visibility/competitors/{competitor}', [\App\Http\Controllers\Api\AiVisibilityController::class, 'destroyCompetitor']);
+            Route::post('sites/{site}/ai-visibility/prompts', [\App\Http\Controllers\Api\AiVisibilityController::class, 'storePrompt'])->middleware('ai.available');
+            Route::delete('sites/{site}/ai-visibility/prompts/{prompt}', [\App\Http\Controllers\Api\AiVisibilityController::class, 'destroyPrompt'])->middleware('ai.available');
+            Route::match(['get', 'post'], 'sites/{site}/ai-visibility/prompts/{prompt}/check', [\App\Http\Controllers\Api\AiVisibilityController::class, 'checkPrompt'])->middleware('ai.available');
+            Route::post('sites/{site}/ai-visibility/competitors', [\App\Http\Controllers\Api\AiVisibilityController::class, 'storeCompetitor'])->middleware('ai.available');
+            Route::delete('sites/{site}/ai-visibility/competitors/{competitor}', [\App\Http\Controllers\Api\AiVisibilityController::class, 'destroyCompetitor'])->middleware('ai.available');
         });
     });
 
@@ -706,7 +698,6 @@ Route::prefix('admin')->middleware(['auth:sanctum', 'super_admin'])->group(funct
     Route::get('sync-logs', [AdminSyncLogController::class, 'index']);
     Route::get('reports', [AdminReportController::class, 'index']);
     Route::get('usage', [AdminUsageController::class, 'index']);
-    Route::get('billing/ltd-campaign', [AdminBillingController::class, 'campaign']);
     Route::get('billing/organizations/{organizationId}/credits', [AdminBillingController::class, 'organizationCredits']);
     Route::post('billing/organizations/{organizationId}/credits/adjust', [AdminBillingController::class, 'adjustCredits'])->middleware('reauth');
     Route::get('audit-logs', [AdminAuditLogController::class, 'index']);
@@ -820,11 +811,6 @@ Route::prefix('connector/v1')->middleware(['connector.auth', 'throttle:connector
 // throttle:webhooks bounds signature-check flooding (the check itself fails
 // closed; this just keeps the HMAC + log cost finite).
 Route::post('billing/webhook/stripe', [BillingController::class, 'webhook'])->middleware('throttle:webhooks');
-
-// ---- Paddle webhook (same shape: no tenant, HMAC-verified, queued) --------
-// Deliberately outside every middleware group — Paddle retries with its own
-// schedule and its servers carry no bearer token.
-Route::post('billing/webhook/paddle', [PaddleWebhookController::class, '__invoke'])->middleware('throttle:webhooks');
 
 // ---- Uptime monitoring (Phase 12, docs/roadmap-2026/16-PERFORMANCE-UPTIME.md)
 // Appended as its own group rather than spliced into the site.access group

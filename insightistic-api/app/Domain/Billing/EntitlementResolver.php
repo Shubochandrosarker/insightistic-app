@@ -23,7 +23,7 @@ final class EntitlementResolver
     private const ACTIVE_SUBSCRIPTION_STATUSES = ['active', 'trialing', 'past_due', 'paused'];
 
     /** Grants apply in this order; later sources win a conflicting limit key. */
-    private const GRANT_SOURCE_ORDER = ['paddle_lifetime' => 0, 'manual' => 1, 'promotion' => 2];
+    private const GRANT_SOURCE_ORDER = ['appsumo_lifetime' => 0, 'manual' => 1, 'promotion' => 2];
 
     /** Roadmap limit keys backed by the legacy numeric plan columns. */
     private const LEGACY_LIMIT_COLUMNS = [
@@ -91,21 +91,36 @@ final class EntitlementResolver
             }
         }
 
+        $activeGrants = $this->activeGrants($organization);
+
+        // Account provisioning stores Free on the organization row. A
+        // lifetime/AppSumo grant must replace that placeholder plan when no
+        // active provider subscription is present; otherwise usage resolves
+        // to Free even though the grant is valid.
+        $lifetimeGrant = $activeGrants->first(fn (EntitlementGrant $grant) => $this->isLifetimeSource($grant->source) && $grant->plan_id);
+        if (! $subscription && ! $override && ! $adminOverride && $lifetimeGrant?->plan_id) {
+            $grantPlan = Plan::find($lifetimeGrant->plan_id);
+            if ($grantPlan) {
+                $plan = $grantPlan;
+                $source = 'lifetime';
+            }
+        }
+
         $features = $plan ? $this->strings($plan->features_json) : [];
         $limits = $plan ? $this->planLimits($plan) : [];
 
-        foreach ($this->activeGrants($organization) as $grant) {
+        foreach ($activeGrants as $grant) {
             if ($source === 'none' && $grant->plan_id) {
                 // Nothing else decided the plan; a grant carrying one can.
                 $grantPlan = Plan::find($grant->plan_id);
 
                 if ($grantPlan) {
                     $plan = $grantPlan;
-                    $source = $grant->source === 'paddle_lifetime' ? 'lifetime' : 'grant';
+                    $source = $this->isLifetimeSource($grant->source) ? 'lifetime' : 'grant';
                     $features = $this->strings($plan->features_json);
                     $limits = $this->planLimits($plan);
                 }
-            } elseif ($source === 'none' && $grant->source === 'paddle_lifetime') {
+            } elseif ($source === 'none' && $this->isLifetimeSource($grant->source)) {
                 // A plan-less lifetime grant still owns the base payload.
                 $source = 'lifetime';
             }
@@ -285,5 +300,10 @@ final class EntitlementResolver
         }
 
         return $map;
+    }
+
+    private function isLifetimeSource(string $source): bool
+    {
+        return $source === 'appsumo_lifetime';
     }
 }

@@ -4,7 +4,6 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Plan;
-use App\Domain\Billing\LtdCampaignService;
 use Illuminate\Http\Request;
 
 /**
@@ -17,10 +16,10 @@ use Illuminate\Http\Request;
  */
 class PublicPlanController extends Controller
 {
-    public function index(Request $request, LtdCampaignService $campaign)
+    public function index(Request $request)
     {
-        $plans = Plan::whereIn('slug', array_merge(['free'], config('commercial.recurring_plan_slugs', [])))
-            ->where(fn ($query) => $query->where('is_active', true)->orWhere('slug', 'free'))
+        $plans = Plan::whereIn('slug', config('commercial.recurring_plan_slugs', []))
+            ->where('is_active', true)
             ->orderBy('sort_order')
             ->orderBy('price_monthly')
             ->get()
@@ -53,18 +52,34 @@ class PublicPlanController extends Controller
                 'is_purchasable'   => (bool) $p->is_active,
             ]);
 
-        $ltd = collect(config('commercial.angel_plans'))->map(fn (array $p, string $slug) => [
-            'slug' => $slug, 'name' => $p['name'], 'price' => $p['price'],
-            'sites' => $p['sites'], 'team_seats' => $p['seats'],
-            'monthly_ai_credits' => $p['monthly_credits'], 'features' => $p['features'],
+        $appsumo = collect(config('commercial.appsumo_plans', []))->map(fn (array $p, string $slug) => [
+            'slug' => $slug,
+            'name' => $p['name'],
+            'price' => $p['price'],
+            'sites' => $p['sites'],
+            'team_seats' => $p['seats'],
+            'team_member_limit' => $p['team_member_limit'] ?? $p['seats'],
+            'team_member_add_credits' => $p['team_member_add_credits'] ?? 0,
+            'rank_cadence' => $p['rank_cadence'] ?? null,
+            'monthly_ai_credits' => $p['monthly_credits'],
+            'standard_ai_requests' => $p['standard_ai_requests'],
+            'features' => $p['features'],
             'limits' => [
                 'billing_model' => 'lifetime',
                 'crawl_pages_monthly' => $p['crawl_pages'],
                 'browser_rendering_minutes_monthly' => $p['browser_minutes'],
                 'tracked_keywords' => $p['keywords'],
+                'rank_depth' => $p['rank_depth'] ?? 0,
+                'rank_check_frequency' => $p['rank_cadence'] ?? null,
                 'standard_ai_requests_monthly' => $p['standard_ai_requests'],
+                'monthly_ai_credits' => $p['monthly_credits'],
                 'client_ready_reports_monthly' => $p['reports'],
+                'scheduled_report_limit' => $p['scheduled_report_limit'] ?? 0,
             ],
+            // AppSumo owns purchase/redemption. There is intentionally no
+            // Stripe checkout action for these public rows.
+            'is_purchasable' => false,
+            'available_via' => 'appsumo',
         ])->values();
 
         return response()
@@ -72,7 +87,10 @@ class PublicPlanController extends Controller
                 'catalog_version' => config('commercial.version'),
                 'trial_days' => config('commercial.trial_days'),
                 'plans' => $plans,
-                'ltd' => ['campaign' => $campaign->status(), 'plans' => $ltd],
+                'appsumo' => [
+                    'campaign' => config('commercial.appsumo_campaign'),
+                    'plans' => $appsumo,
+                ],
                 'credit_packs' => config('commercial.credit_packs'),
                 'ai_action_costs' => config('commercial.ai_action_costs'),
             ])

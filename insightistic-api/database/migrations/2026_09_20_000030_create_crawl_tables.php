@@ -60,6 +60,7 @@ return new class extends Migration {
             $table->char('url_hash', 40);
             $table->string('url', 1000);
             $table->unsignedSmallInteger('status_code')->nullable();
+            $table->string('content_type', 160)->nullable()->comment('HTTP Content-Type; HTML-only checks apply only to text/html and XHTML');
             $table->string('redirect_to', 1000)->nullable();
             $table->boolean('indexable')->default(false);
             $table->boolean('robots_noindex')->default(false);

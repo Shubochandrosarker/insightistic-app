@@ -232,7 +232,7 @@ class CrawlController extends Controller
             ->orderBy('id');
 
         [$page, $meta] = $this->paginate($query, $request, [
-            'id', 'run_id', 'url', 'status_code', 'indexable', 'title',
+            'id', 'run_id', 'url', 'status_code', 'content_type', 'indexable', 'title',
             'meta_description', 'word_count', 'h1_count', 'canonical_url', 'response_ms',
         ]);
 
@@ -341,6 +341,23 @@ class CrawlController extends Controller
     {
         $site = $this->site($request);
 
+        $pendingRun = CrawlRun::where('site_id', $site->id)
+            ->whereIn('status', ['pending', 'running'])
+            ->orderByDesc('id')
+            ->first(['id', 'status', 'started_at', 'max_pages', 'pages_discovered', 'pages_crawled', 'issues_found']);
+
+        if ($pendingRun) {
+            return response()->json([
+                'status' => 'pending',
+                'pending' => true,
+                'score' => null,
+                'breakdown' => [],
+                'top_issues' => [],
+                'run' => $pendingRun,
+                ...($weighted ? ['mode' => 'pending'] : []),
+            ]);
+        }
+
         // ?weighted=1 opts into the GSC-impact mode (Phase 8): penalties
         // scaled by each page's 28-day impressions. Default response is
         // untouched — the mode flag only surfaces for weighted requests.
@@ -394,17 +411,25 @@ class CrawlController extends Controller
     }
 
     /**
-     * Org-wide crawl budget consumed this calendar month: every run's
-     * max_pages, regardless of outcome — a run that failed on page 3 still
-     * reserved (and mostly burned) its allowance.
+     * Org-wide crawl budget consumed this calendar month. Completed/failed
+     * runs charge the pages actually crawled; pending/running runs reserve
+     * their requested budget so concurrent starts cannot oversubscribe.
      */
     private function monthlyUsed(Site $site): int
     {
         $siteIds = $site->organization->sites()->pluck('id');
+        $window = fn ($query) => $query->whereIn('site_id', $siteIds)
+            ->whereBetween('created_at', [now()->startOfMonth(), now()]);
 
-        return (int) CrawlRun::whereIn('site_id', $siteIds)
-            ->whereBetween('created_at', [now()->startOfMonth(), now()])
+        $completed = (int) $window(CrawlRun::query())
+            ->whereNotIn('status', ['pending', 'running'])
+            ->sum('pages_crawled');
+
+        $reserved = (int) $window(CrawlRun::query())
+            ->whereIn('status', ['pending', 'running'])
             ->sum('max_pages');
+
+        return $completed + $reserved;
     }
 
     /** ?run_id= or, by default, the site's most recent run. */

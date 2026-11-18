@@ -84,9 +84,6 @@ class OverviewController extends AdminController
             'storage'   => $health['storage'],
             'scheduler' => $health['scheduler'],
             'mail'      => $health['mail'],
-            // Paddle billing: configured flag + sandbox/production ONLY.
-            // Never key material, webhook secrets, or client-side tokens.
-            'paddle'    => $health['paddle'],
             'stripe'    => $health['stripe'],
             'ai'        => app(AiRuntimeSettings::class)->public(),
             'counts'    => [
@@ -155,7 +152,6 @@ class OverviewController extends AdminController
             'mail'     => ['mailer' => config('mail.default'), 'configured' => ! empty(config('mail.mailers.smtp.host')) || config('mail.default') !== 'smtp'],
             'stripe'   => ['configured' => $stripeSecret !== '', 'mode' => Str::startsWith($stripeSecret, 'sk_live') ? 'live' : 'test'],
             'cache'    => ['driver' => config('cache.default'), 'ok' => $this->cacheOk()],
-            'paddle'   => ['configured' => ! empty(config('billing.paddle.api_key')) && ! empty(config('billing.paddle.webhook_secret')), 'environment' => config('billing.paddle.sandbox') ? 'sandbox' : 'production'],
             'ai'       => $this->aiHealth(),
             'recent_failed_jobs' => Schema::hasTable('failed_jobs')
                 ? DB::table('failed_jobs')->latest('id')->limit(5)->get(['id', 'queue', 'exception', 'failed_at'])

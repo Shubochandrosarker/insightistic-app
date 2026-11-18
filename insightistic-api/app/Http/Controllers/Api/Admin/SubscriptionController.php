@@ -80,6 +80,11 @@ class SubscriptionController extends AdminController
 
         $org = Organization::findOrFail($data['organization_id']);
         $plan = Plan::findOrFail($data['plan_id']);
+        abort_unless(
+            in_array($plan->slug, config('commercial.admin_plan_slugs', []), true),
+            422,
+            'That plan is no longer part of the current commercial catalog.'
+        );
 
         $sub = Subscription::withoutGlobalScope('organization')->create([
             'organization_id' => $org->id,
@@ -132,7 +137,10 @@ class SubscriptionController extends AdminController
         $sub = $this->find($id);
         $payload = [
             'subscription' => $sub,
-            'plans'        => Plan::orderBy('sort_order')->orderBy('price_monthly')->get(['id', 'name', 'slug', 'price_monthly', 'price_yearly']),
+            'plans'        => Plan::whereIn('slug', config('commercial.admin_plan_slugs', []))
+                ->orderBy('sort_order')
+                ->orderBy('price_monthly')
+                ->get(['id', 'name', 'slug', 'price_monthly', 'price_yearly']),
         ];
 
         if ($sub->stripe_subscription_id) {
@@ -163,6 +171,12 @@ class SubscriptionController extends AdminController
 
         $sub = $this->find($id);
         $plan = Plan::findOrFail($data['plan_id']);
+        abort_unless(
+            in_array($plan->slug, config('commercial.recurring_plan_slugs', []), true)
+                && $plan->is_active,
+            422,
+            'Only active recurring Stripe plans can be assigned to a live subscription.'
+        );
         $priceId = $data['interval'] === 'yearly' ? $plan->stripe_price_id_yearly : $plan->stripe_price_id_monthly;
 
         if (! $sub->stripe_subscription_id) {

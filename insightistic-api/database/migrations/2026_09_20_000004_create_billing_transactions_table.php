@@ -5,9 +5,9 @@ use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
 /**
- * Financial history projected from provider transactions (Paddle guide §4.4):
- * subscriptions, lifetime purchases, credit packs and adjustments. Access is
- * decided by subscription/entitlement state — this table records what was paid.
+ * Financial history projected from provider transactions: subscriptions,
+ * lifetime purchases, credit packs and adjustments. Access is decided by
+ * subscription/entitlement state — this table records what was paid.
  */
 return new class extends Migration {
     public function up(): void

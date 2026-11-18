@@ -14,6 +14,19 @@ const STATUS_TONE: Record<string, "green" | "amber" | "red" | "slate"> = {
   active: "green", trialing: "amber", past_due: "amber", suspended: "red", canceled: "slate",
 };
 
+const PLAN_FILTERS = [
+  ["free", "Internal trial"],
+  ["starter", "Starter"],
+  ["growth", "Growth"],
+  ["agency", "Agency"],
+  ["agency_pro", "Agency Pro"],
+  ["appsumo_tier_1", "AppSumo Tier 1"],
+  ["appsumo_tier_2", "AppSumo Tier 2"],
+  ["appsumo_tier_3", "AppSumo Tier 3"],
+  ["appsumo_tier_4", "AppSumo Tier 4"],
+  ["appsumo_tier_5", "AppSumo Tier 5"],
+] as const;
+
 function CreateOrganization({ onCreated }: { onCreated: () => void }) {
   const plansApi = useApi<{ plans: any[] }>("/admin/plans");
   const [open, setOpen] = useState(false);
@@ -99,7 +112,7 @@ export default function AdminOrganizations() {
       empty="No organizations found."
       headerActions={(reload) => <CreateOrganization onCreated={reload} />}
       filters={[
-        { key: "plan", label: "All plans", options: ["free", "starter", "growth", "business", "agency", "agency_pro"].map((p) => ({ value: p, label: p })) },
+        { key: "plan", label: "All plans", options: PLAN_FILTERS.map(([value, label]) => ({ value, label })) },
         { key: "status", label: "All statuses", options: ["trialing", "active", "past_due", "suspended", "canceled"].map((s) => ({ value: s, label: s })) },
       ]}
       columns={[

@@ -5,11 +5,6 @@
 
 return [
 
-    // Phase 1: provider-neutral billing + Paddle foundation.
-    // Remove when the Stripe retirement phase (roadmap phase 9 of
-    // 23-STRIPE-TO-PADDLE-MIGRATION.md) completes.
-    'paddle' => env('FEATURE_PADDLE', false),
-
     // Phase 7/8: technical crawler + change monitoring.
     'crawler' => env('FEATURE_CRAWLER', false),
 

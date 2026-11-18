@@ -57,7 +57,7 @@ const ISSUE_CODE_LABELS: Record<string, string> = {
   schema_parse_error: "Structured data error",
   image_missing_alt: "Images missing alt",
   broken_internal_link: "Broken internal link",
-  redirecting_internal_link: "Redirecting internal link",
+  redirect: "Redirect",
 };
 
 export function issueCodeLabel(code: string): string {

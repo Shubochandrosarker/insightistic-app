@@ -50,6 +50,15 @@ class IssueEngine
             return; // no meaningful status — nothing to evaluate
         }
 
+        // Only HTML documents have titles, meta descriptions, headings,
+        // canonicals, body word counts, JSON-LD and image-alt semantics.
+        // Keep non-HTML resources visible as crawled observations, but do not
+        // manufacture HTML SEO defects for robots.txt, sitemap.xml, llms.txt,
+        // PDFs, images, feeds or arbitrary downloads.
+        if (! $this->isHtmlPage($page)) {
+            return;
+        }
+
         if ($page->robots_noindex) {
             $this->upsert($run, 'robots_noindex', 'low', 'crawlability', $page->url, $page->id, [
                 'informational' => true, // intentional noindex, not a defect
@@ -100,7 +109,7 @@ class IssueEngine
     }
 
     /**
-     * End-of-run pass: broken/redirecting internal links, lifecycle
+     * End-of-run pass: broken internal links, lifecycle
      * resolution, and the run's issues_found counter.
      */
     public function finalize(CrawlRun $run): int
@@ -112,9 +121,10 @@ class IssueEngine
     }
 
     /**
-     * Internal links whose target page (crawled in this same run) is broken
-     * or itself redirects. Grouped per target so one broken URL produces one
-     * issue with all linking sources as evidence.
+     * Internal links whose target page (crawled in this same run) is broken.
+     * Redirecting targets already have one canonical page-level `redirect`
+     * issue, so they are deliberately excluded here to avoid double-counting
+     * the same finding under a second issue code.
      */
     private function evaluateLinkIssues(CrawlRun $run): void
     {
@@ -125,16 +135,13 @@ class IssueEngine
             })
             ->where('l.run_id', $run->id)
             ->where('l.is_internal', true)
-            ->where(function ($query) {
-                $query->where('tp.status_code', '>=', 400)
-                    ->orWhereIn('tp.status_code', [301, 302, 307, 308]);
-            })
+            ->where('tp.status_code', '>=', 400)
             ->get(['l.target_url_hash', 'l.target_url', 'l.source_page_id', 'tp.status_code']);
 
         $grouped = [];
 
         foreach ($rows as $row) {
-            $kind = (int) $row->status_code >= 400 ? 'broken_internal_link' : 'redirecting_internal_link';
+            $kind = 'broken_internal_link';
             $grouped[$row->target_url_hash.'|'.$kind] = [
                 'kind' => $kind,
                 'target_url' => $row->target_url,
@@ -163,6 +170,17 @@ class IssueEngine
                 ['status_code' => $group['status_code'], 'sources' => $sources->all()]
             );
         }
+    }
+
+    private function isHtmlPage(CrawlPage $page): bool
+    {
+        $contentType = trim(strtolower((string) $page->content_type));
+
+        // Null is the legacy value for rows created before content_type was
+        // introduced. Treat those as HTML for backward-compatible issue
+        // lifecycle behavior; every newly crawled response is classified.
+        return $contentType === ''
+            || preg_match('/(?:^|;)\s*(?:text\/html|application\/xhtml\+xml)\b/i', $contentType) === 1;
     }
 
     /** Open issues of this site not seen in this run become resolved. Ignored rows stay ignored. */

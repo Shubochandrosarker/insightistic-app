@@ -5,7 +5,7 @@ use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
 /**
- * Append-only credit ledger (Paddle guide §18). The unique
+ * Append-only credit ledger. The unique
  * (source_type, source_reference) pair ensures a provider transaction id
  * (e.g. txn_...) cannot credit a balance twice.
  */

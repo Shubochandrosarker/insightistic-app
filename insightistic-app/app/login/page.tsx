@@ -169,7 +169,7 @@ export default function Login() {
         </div>
 
         <button type="submit" disabled={busy} className="ins-btn mt-6">
-          {busy ? "Signing in…" : "Sign in →"}
+          {busy ? "Signing in..." : "Sign in"}
         </button>
       </form>
     </AuthShell>

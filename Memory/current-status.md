@@ -27,7 +27,10 @@
 
 ## VPS deployment state
 
-- **Verified live:** App, API, queue and scheduler run release `94e990ff9fd737b7f7c9910ab7d080fd5ca93743` from `codex/appsumo-production-review-fixes`, under `/docker/insightistic-app`. This supersedes `75a547f`. Both public version endpoints report the release.
+- **Verified live:** Release 0a4c85959688081c1bb34f3de18e0d3045019c76 updates all five AppSumo tiers, applies the report and team allowances, and enables Executive insights on Tiers 4 and 5. Public catalogs returned revised values on both production hosts. The earlier Tier 3 licenses retain their existing features. The AppSumo offer edits are saved in the reviewer draft, and the revised public WordPress template is pending deployment. [Pricing and listing work log](work-log/2026-11-19/appsumo-pricing-and-listing.md).
+- **Prepared:** [AppSumo recording script](../docs/APPSUMO-REVIEW-RECORDING-SCRIPT.md) for review items 1–8 and the written answers to items 9–11. The reviewer recordings and submission remain pending.
+
+- **Prior verified release:** App, API, queue and scheduler previously ran `94e990ff9fd737b7f7c9910ab7d080fd5ca93743` from `codex/appsumo-production-review-fixes`, under `/docker/insightistic-app`. It superseded `75a547f`.
 - **Verified live:** Tier 5 JOLLY Auto answered with the completed Insightistic crawl (486 pages, 412 findings and open issues) and PageSpeed (98 mobile, 99 desktop). The source drawer showed the dated desktop result. JOLLY used one message with no change to standard requests or Insight Credits. Fresh Performance and Executive insights used stored evidence, and Tier 5 lifetime and 11 of 50 websites agreed across Usage, Billing and Licenses. [JOLLY audit and remaining recording requirement](work-log/2026-11-19/jolly-appsumo-final-audit.md).
 - **Cloudflare:** Four projects returned crawler matches after switching to Cloudflare's `userAgent` field. The signed-in `www.insightistic.com` project kept its historical edge charts and hid the AI crawlers card after Cloudflare rejected its saved credential.
 - **Performance Tracking:** Signed-in Mobile and Desktop views for `www.brothertours.com` omit the unmeasured INP tile. Regression tests cover the measured case.

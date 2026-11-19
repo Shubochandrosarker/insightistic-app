@@ -5,8 +5,8 @@ import { render, screen } from "@testing-library/react";
  * Phase 9 Cloudflare Edge Intelligence UI (roadmap doc 15). Mocking mirrors
  * tests/traffic-page.test.tsx — the API layer is stubbed per path, the real
  * page renders. Pins: the overview KPI row with the cache hit ratio math,
- * the bot analytics table when the plan exposes it vs the honest plan-gated
- * card when it doesn't, the traffic-gap explanation strings rendered as the
+ * the AI crawler table when matched requests exist,
+ * the traffic-gap explanation strings rendered as the
  * feature they are, and the calm connect/awaiting-sync states.
  */
 
@@ -111,24 +111,28 @@ describe("Cloudflare edge page", () => {
     expect(calls.some((p) => p.includes("/cloudflare?days=30"))).toBe(true);
   });
 
-  it("renders the bot table with classifications when the plan exposes bot analytics", async () => {
+  it("renders Cloudflare user-agent matches for AI crawlers", async () => {
     mockApi(payload);
     render(<CloudflarePage />);
 
     expect((await screen.findAllByText("GPTBot")).length).toBeGreaterThan(0);
-    expect(screen.getAllByText("Googlebot").length).toBeGreaterThan(0);
-    // AI crawler badge vs Search bot badge — the classification is the point.
-    expect(screen.getAllByText("AI crawler").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("Search bot").length).toBeGreaterThan(0);
+    expect(screen.getByText(/Crawler identity is unverified/)).toBeInTheDocument();
+    expect(screen.queryByText("Googlebot")).not.toBeInTheDocument();
+    expect(screen.queryByText("Blocked")).not.toBeInTheDocument();
   });
 
-  it("shows the honest plan-gated card — never an error — when the plan lacks bot analytics", async () => {
-    mockApi({ ...payload, bots: { available: false, rows: [], reason: "plan_does_not_expose_bot_analytics" } });
+  it.each([
+    { available: false, rows: payload.bots.rows, reason: "plan_does_not_expose_bot_analytics" },
+    { available: true, rows: [payload.bots.rows[0]] },
+    { available: true, rows: [] },
+    undefined,
+  ])("omits the crawler card when there are no usable AI crawler rows (%j)", async (bots) => {
+    mockApi({ ...payload, bots });
     render(<CloudflarePage />);
 
-    expect(await screen.findByText("Bot analytics isn't available on this Cloudflare plan")).toBeInTheDocument();
-    expect(screen.getByText("plan_does_not_expose_bot_analytics")).toBeInTheDocument();
-    expect(screen.queryByText("GPTBot")).not.toBeInTheDocument();
+    expect(await screen.findByText("Traffic gap")).toBeInTheDocument();
+    expect(screen.queryByText("AI crawlers")).not.toBeInTheDocument();
+    expect(screen.queryByText("plan_does_not_expose_bot_analytics")).not.toBeInTheDocument();
   });
 
   it("renders the traffic gap side by side with its explanation strings as the feature", async () => {

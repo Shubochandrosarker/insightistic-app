@@ -26,32 +26,23 @@ use Illuminate\Support\Facades\Log;
  *  - The httpRequests1dGroups dataset is the primary source; a failure here
  *    is a hard sync failure (IntegrationFailure, retryable) — same semantics
  *    as CloudflareClient::sync.
- *  - firewallEventsAdaptiveGroups and httpRequestsAdaptiveGroups (bot
- *    analytics) are plan-gated datasets. Each is fetched as its OWN GraphQL
- *    request, so a plan-level validation error there cannot take the main
- *    document down with it; such errors are recognized and turned into flags
- *    (`firewall_unavailable`, empty bots with available=false) instead of
- *    exceptions. The UI renders these as "not available on this Cloudflare
- *    plan", never as errors (roadmap acceptance criteria).
- *
- * Field names follow the same publicly documented Analytics schema the
- * existing CloudflareTrafficService queries (same schema-confidence caveat:
- * not yet exercised against a live zone from this codebase; a mismatch
- * surfaces as a degraded/empty section, not a fatal).
+ *  - Firewall and crawler analytics each use a separate GraphQL request
+ *    so missing datasets or permissions cannot interrupt the primary sync.
+ *    Crawler counts use matches against Cloudflare's userAgent dimension.
  */
 class CloudflareAnalytics
 {
     /** Roadmap 15's AI crawler list — matched case-insensitively as UA substrings. */
     private const AI_CRAWLERS = [
-        'gptbot', 'oai-searchbot', 'chatgpt-user', 'claudebot', 'claude-web',
-        'anthropic-ai', 'perplexitybot', 'google-extended', 'bytespider', 'ccbot',
+        'GPTBot', 'OAI-SearchBot', 'ChatGPT-User', 'ClaudeBot', 'Claude-Web',
+        'anthropic-ai', 'PerplexityBot', 'Google-Extended', 'Bytespider', 'CCBot',
     ];
 
     /** Search engine crawlers (roadmap 15) — classified search_bot. */
-    private const SEARCH_BOTS = ['googlebot', 'bingbot'];
+    private const SEARCH_BOTS = ['Googlebot', 'bingbot'];
 
     /** Known SEO crawlers (roadmap 15 crawler list) — classified other. */
-    private const KNOWN_OTHER_CRAWLERS = ['ahrefsbot', 'semrushbot'];
+    private const KNOWN_OTHER_CRAWLERS = ['AhrefsBot', 'SemrushBot'];
 
     /** GraphQL error markers that mean "dataset/field not on this plan" → degrade. */
     private const PLAN_ERROR_PATTERNS = [
@@ -88,8 +79,7 @@ class CloudflareAnalytics
 
         $flags = [];
 
-        // Plan-gated datasets, each in its own request so one plan error
-        // degrades only its own section.
+        // Separate optional queries keep failures isolated to each dataset.
         $firewall = $this->graphql($site, self::firewallQuery(), $times);
         $firewallByDate = [];
         if ($firewall['errors'] !== []) {
@@ -111,13 +101,9 @@ class CloudflareAnalytics
     }
 
     /**
-     * Bot analytics from httpRequestsAdaptiveGroups — a higher-tier dataset
-     * that does not exist on every Cloudflare plan. Any error (plan-gated or
-     * otherwise) degrades to available=false; this method never throws.
-     *
-     * Rows are per (date, user agent), filtered to the crawlers roadmap 15
-     * names. Unrecognized/empty user agents are dropped: storing every raw UA
-     * string would flood the table and none of it is "bot intelligence".
+     * Bot analytics from Cloudflare's adaptive HTTP request dataset. Rows
+     * are grouped by date and user agent, filtered to known crawler names.
+     * A user-agent match indicates reported traffic, not a verified identity.
      *
      * @return array{available:bool, rows:array, reason?:string}
      */
@@ -141,35 +127,38 @@ class CloudflareAnalytics
         $rows  = [];
 
         foreach ((array) ($zones[0]['httpRequestsAdaptiveGroups'] ?? []) as $group) {
-            $ua = trim((string) ($group['dimensions']['clientRequestUserAgent'] ?? ''));
+            $date = (string) ($group['dimensions']['date'] ?? '');
+            $ua = trim((string) ($group['dimensions']['userAgent'] ?? ''));
             $classification = $this->classify($ua);
+            $requests = (int) ($group['count'] ?? 0);
 
-            if ($classification === null) {
-                continue; // empty or unrecognized UA
+            if ($date === '' || $classification === null || $requests <= 0) {
+                continue;
             }
 
-            $rows[] = [
-                'date'           => (string) ($group['dimensions']['date'] ?? ''),
-                'bot_name'       => mb_substr($ua, 0, 64),
+            $name = mb_substr($ua, 0, 64);
+            $key = $date . ':' . $name;
+            $rows[$key] ??= [
+                'date'           => $date,
+                'bot_name'       => $name,
                 'classification' => $classification,
-                'requests'       => (int) ($group['count'] ?? 0),
+                'requests'       => 0,
                 // Per-bot blocked counts need plan-level bot management
                 // (botScore/botFightMode fields); the MVP stores request
                 // volume only. Firewall action totals live on
                 // cloudflare_daily.firewall_json for the Security section.
                 'blocked'        => 0,
             ];
+            $rows[$key]['requests'] += $requests;
         }
 
-        return ['available' => true, 'rows' => $rows];
+        return ['available' => true, 'rows' => array_values($rows)];
     }
 
     /**
      * Idempotent persistence for the nightly sync: upsert on (site, date)
      * and (site, date, bot_name), so a replayed run updates rows in place
-     * and never duplicates. Bot rows are written only when the dataset was
-     * actually available — an unavailable plan never leaves stale rows
-     * behind, and a plan upgrade starts filling them naturally.
+     * and never duplicates. A failed bot query preserves historical rows.
      *
      * @return array{days:int, latest_date:?string, bots_available:bool}
      */
@@ -334,19 +323,19 @@ class CloudflareAnalytics
         }
 
         foreach (self::AI_CRAWLERS as $needle) {
-            if (str_contains($ua, $needle)) {
+            if (str_contains($ua, strtolower($needle))) {
                 return 'ai_crawler';
             }
         }
 
         foreach (self::SEARCH_BOTS as $needle) {
-            if (str_contains($ua, $needle)) {
+            if (str_contains($ua, strtolower($needle))) {
                 return 'search_bot';
             }
         }
 
         foreach (self::KNOWN_OTHER_CRAWLERS as $needle) {
-            if (str_contains($ua, $needle)) {
+            if (str_contains($ua, strtolower($needle))) {
                 return 'other';
             }
         }
@@ -465,17 +454,30 @@ class CloudflareAnalytics
 
     private static function botsQuery(): string
     {
-        return <<<'GRAPHQL'
+        // Filter before grouping so browser user agents cannot crowd out crawler rows.
+        $names = array_merge(self::AI_CRAWLERS, self::SEARCH_BOTS, self::KNOWN_OTHER_CRAWLERS);
+        $filters = implode(', ', array_map(fn (string $name) => '{userAgent_like: "%' . $name . '%"}', $names));
+
+        return str_replace('CRAWLER_FILTERS', $filters, <<<'GRAPHQL'
         query EdgeBots($zoneTag: String!, $datetimeFrom: Time!, $datetimeTo: Time!) {
             viewer {
                 zones(filter: { zoneTag: $zoneTag }) {
-                    httpRequestsAdaptiveGroups(limit: 1000, filter: { datetime_geq: $datetimeFrom, datetime_leq: $datetimeTo }, orderBy: [date_ASC]) {
-                        dimensions { date clientRequestUserAgent }
+                    httpRequestsAdaptiveGroups(
+                        limit: 1000,
+                        filter: {
+                            datetime_geq: $datetimeFrom,
+                            datetime_leq: $datetimeTo,
+                            requestSource: "eyeball",
+                            OR: [CRAWLER_FILTERS]
+                        },
+                        orderBy: [date_DESC]
+                    ) {
+                        dimensions { date userAgent }
                         count
                     }
                 }
             }
         }
-        GRAPHQL;
+        GRAPHQL);
     }
 }

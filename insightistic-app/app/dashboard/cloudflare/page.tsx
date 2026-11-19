@@ -17,13 +17,8 @@ import { num } from "@/lib/format";
 import { Globe } from "lucide-react";
 
 /**
- * Cloudflare Edge Intelligence (roadmap doc 15): edge traffic, cache,
- * security and AI crawler visibility in one nightly-synced payload. The page
- * degrades the way the backend does — a site with no synced rows is a calm
- * connect/awaiting-sync state, plan-gated datasets say "not available on
- * this Cloudflare plan" instead of erroring, and the traffic gap never
- * equates edge requests with GA4 sessions; the explanation strings ARE the
- * feature.
+ * Edge traffic, cache, security and available crawler matches from the
+ * nightly Cloudflare sync.
  */
 
 const DAY_OPTIONS: { days: number; label: string }[] = [
@@ -53,26 +48,11 @@ function DaysToggle({ value, onChange }: { value: number; onChange: (d: number) 
   );
 }
 
-type BotRow = { bot_name: string; classification: string; requests: number; blocked: number };
-
-const CLASS_LABEL: Record<string, { label: string; tone: "violet" | "green" | "slate" }> = {
-  ai_crawler: { label: "AI crawler", tone: "violet" },
-  search_bot: { label: "Search bot", tone: "green" },
-  other: { label: "Other", tone: "slate" },
-};
+type BotRow = { bot_name: string; classification: string; requests: number };
 
 const BOT_COLUMNS: Column<BotRow>[] = [
-  { key: "bot_name", label: "Bot", primary: true, render: (r) => <span className="text-sm font-medium">{r.bot_name}</span> },
-  {
-    key: "classification",
-    label: "Classification",
-    render: (r) => {
-      const cls = CLASS_LABEL[r.classification] ?? CLASS_LABEL.other;
-      return <Badge tone={cls.tone}>{cls.label}</Badge>;
-    },
-  },
-  { key: "requests", label: "Requests", align: "right", render: (r) => num(r.requests ?? undefined) },
-  { key: "blocked", label: "Blocked", align: "right", render: (r) => num(r.blocked ?? undefined) },
+  { key: "bot_name", label: "User agent", primary: true, render: (r) => <span className="text-sm font-medium">{r.bot_name}</span> },
+  { key: "requests", label: "Matched requests", align: "right", render: (r) => num(r.requests) },
 ];
 
 function firewallTone(action: string): "red" | "amber" | "slate" {
@@ -109,7 +89,7 @@ export default function CloudflarePage() {
   if (cf.error)
     return (
       <div>
-        <PageHeader title="Cloudflare Edge" subtitle="Edge traffic, cache, security, and AI crawler intelligence." right={<DaysToggle value={days} onChange={setDays} />} />
+        <PageHeader title="Cloudflare Edge" subtitle="Edge traffic, cache, and security." right={<DaysToggle value={days} onChange={setDays} />} />
         <ErrorState message={cf.error} onRetry={cf.reload} />
       </div>
     );
@@ -121,7 +101,7 @@ export default function CloudflarePage() {
     if (d.hint === "connected_awaiting_sync") {
       return (
         <div>
-          <PageHeader title="Cloudflare Edge" subtitle="Edge traffic, cache, security, and AI crawler intelligence." right={<DaysToggle value={days} onChange={setDays} />} />
+          <PageHeader title="Cloudflare Edge" subtitle="Edge traffic, cache, and security." right={<DaysToggle value={days} onChange={setDays} />} />
           <EmptyState
             icon={<Globe size={20} />}
             title="Connected — first edge sync will fill this within a day."
@@ -132,7 +112,7 @@ export default function CloudflarePage() {
     }
     return (
       <div>
-        <PageHeader title="Cloudflare Edge" subtitle="Edge traffic, cache, security, and AI crawler intelligence." right={<DaysToggle value={days} onChange={setDays} />} />
+        <PageHeader title="Cloudflare Edge" subtitle="Edge traffic, cache, and security." right={<DaysToggle value={days} onChange={setDays} />} />
         <EmptyState
           icon={<Globe size={20} />}
           title="Connect Cloudflare in Integrations"
@@ -152,7 +132,10 @@ export default function CloudflarePage() {
   const sec = d.security || {};
   const secTrend: any[] = sec.trend || [];
   const actions: Record<string, number> = sec.actions || {};
-  const bots: { available?: boolean; reason?: string; rows?: BotRow[] } | null = d.bots ?? null;
+  const bots: { available?: boolean; rows?: BotRow[] } | undefined = d.bots;
+  const aiCrawlerRows = bots?.available === true
+    ? (bots.rows ?? []).filter((row) => row.classification === "ai_crawler" && row.requests > 0)
+    : [];
   const gap: {
     edge_requests?: number;
     ga4_sessions?: number;
@@ -180,7 +163,7 @@ export default function CloudflarePage() {
     <div>
       <PageHeader
         title="Cloudflare Edge"
-        subtitle="Edge traffic, cache, security, and AI crawler intelligence."
+        subtitle="Edge traffic, cache, and security."
         right={
           <div className="flex flex-wrap items-center gap-3">
             <SourceFreshness label="Last edge data" asOf={freshness?.last_data_date ?? null} />
@@ -275,28 +258,19 @@ export default function CloudflarePage() {
         </Card>
       </div>
 
-      {/* Crawler & bot intelligence — plan availability varies, degrade honestly (doc 15) */}
-      <Card
-        className="mt-5"
-        title="AI crawlers"
-        subtitle="Bot traffic seen at the edge, by classification"
-      >
-        {bots == null ? (
-          <p className="py-6 text-center text-sm text-muted">Bot analytics data wasn&apos;t included in this sync.</p>
-        ) : bots.available === false ? (
-          <div className="py-6 text-center">
-            <p className="text-sm text-muted">Bot analytics isn&apos;t available on this Cloudflare plan</p>
-            {bots.reason && <p className="mt-1 font-mono text-xs text-muted">{bots.reason}</p>}
-          </div>
-        ) : (
+      {aiCrawlerRows.length > 0 && (
+        <Card
+          className="mt-5"
+          title="AI crawlers"
+          subtitle="Cloudflare requests matching known AI crawler user agents. Crawler identity is unverified."
+        >
           <ResponsiveTable
             columns={BOT_COLUMNS}
-            rows={bots.rows || []}
+            rows={aiCrawlerRows}
             rowKey={(r) => r.bot_name}
-            emptyMessage="No AI crawler activity in range."
           />
-        )}
-      </Card>
+        </Card>
+      )}
 
       {/* Traffic gap (doc 15): edge vs GA4, deliberately never equated */}
       {gap && (

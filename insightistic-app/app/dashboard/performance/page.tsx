@@ -189,6 +189,8 @@ export default function PerformancePage() {
     );
 
   const run = latest.data?.run;
+  const inp = run?.inp_ms;
+  const hasInp = latest.data?.strategy === strategy && typeof inp === "number" && Number.isFinite(inp);
   const issues = latest.data?.issues || [];
   const series = (history.data?.runs || [])
     .slice()
@@ -250,10 +252,10 @@ export default function PerformancePage() {
           </div>
 
           <Card className="mt-5" title="Core Web Vitals">
-            <div className="grid gap-3 sm:grid-cols-3">
+            <div className={`grid gap-3 ${hasInp ? "sm:grid-cols-3" : "sm:grid-cols-2"}`}>
               {[
                 { key: "lcp", label: "LCP", value: run.lcp_ms != null ? `${(run.lcp_ms / 1000).toFixed(2)}s` : "—", status: run.lcp_status },
-                { key: "inp", label: "INP", value: run.inp_ms != null ? `${run.inp_ms}ms` : "—", status: run.inp_status },
+                ...(hasInp ? [{ key: "inp", label: "INP", value: `${inp}ms`, status: run.inp_status }] : []),
                 { key: "cls", label: "CLS", value: run.cls != null ? Number(run.cls).toFixed(3) : "—", status: run.cls_status },
               ].map((v) => (
                 <div key={v.key} className="flex items-center justify-between rounded-xl border border-line bg-card2 px-4 py-3">

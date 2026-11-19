@@ -199,17 +199,23 @@ it('syncs cloudflare edge daily aggregates from graphql and classifies bots', fu
     $bots = [
         'httpRequestsAdaptiveGroups' => [
             // UA strings stay under the bot_name column's 64 chars.
-            ['dimensions' => ['date' => $dayA, 'clientRequestUserAgent' => 'Mozilla/5.0 (compatible; GPTBot/1.1)'], 'count' => 40],
-            ['dimensions' => ['date' => $dayA, 'clientRequestUserAgent' => 'Mozilla/5.0 (compatible; Googlebot/2.1)'], 'count' => 120],
-            ['dimensions' => ['date' => $dayB, 'clientRequestUserAgent' => 'Mozilla/5.0 (compatible; AhrefsBot/7.0)'], 'count' => 15],
+            ['dimensions' => ['date' => $dayA, 'userAgent' => 'Mozilla/5.0 (compatible; GPTBot/1.1)'], 'count' => 40],
+            ['dimensions' => ['date' => $dayA, 'userAgent' => 'Mozilla/5.0 (compatible; Googlebot/2.1)'], 'count' => 120],
+            ['dimensions' => ['date' => $dayB, 'userAgent' => 'Mozilla/5.0 (compatible; AhrefsBot/7.0)'], 'count' => 15],
             // Unrecognized UA: not bot intelligence we claim to know, dropped.
-            ['dimensions' => ['date' => $dayB, 'clientRequestUserAgent' => 'SomeRandomFetcher/1.0'], 'count' => 999],
+            ['dimensions' => ['date' => $dayB, 'userAgent' => 'SomeRandomFetcher/1.0'], 'count' => 999],
         ],
     ];
 
     fakeCfEdgeSync($legacy, cfEdgeDailyDoc($dayA, $dayB), $firewall, $bots);
 
     $result = app(IntegrationManager::class)->sync($site, 'cloudflare');
+
+    Http::assertSent(fn ($request) =>
+        str_contains($request['query'], 'dimensions { date userAgent }')
+        && str_contains($request['query'], 'userAgent_like: "%GPTBot%"')
+        && str_contains($request['query'], 'requestSource: "eyeball"')
+    );
 
     // Pre-existing behavior preserved: traffic_daily under source cloudflare.
     expect(TrafficDaily::where('site_id', $site->id)->where('source', 'cloudflare')->count())->toBe(1)

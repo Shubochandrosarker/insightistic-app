@@ -15,7 +15,7 @@ use Illuminate\Support\Carbon;
  * attempted, so an unreachable 443 is retried tomorrow, not on every
  * 5-minute probe).
  *
- * Opens a raw TLS stream to host:443 with capture_session_meta and parses
+ * Opens a raw TLS stream to host:443 with capture_peer_cert and parses
  * the peer certificate with openssl_x509_parse — no HTTP round-trip, no
  * Guzzle involvement, 10s cap like the probe itself.
  *
@@ -80,7 +80,7 @@ class SslInspector
     {
         $context = stream_context_create([
             'ssl' => [
-                'capture_session_meta' => true,
+                'capture_peer_cert'    => true,
                 'peer_name'            => $host,
                 'verify_peer'          => false,
                 'verify_peer_name'     => false,
@@ -105,8 +105,8 @@ class SslInspector
         }
 
         try {
-            $params = stream_context_get_params($context);
-            $certificate = $params['options']['ssl']['peer_certificate'] ?? null;
+            $options = stream_context_get_options($socket);
+            $certificate = $options['ssl']['peer_certificate'] ?? null;
 
             if ($certificate === null) {
                 return null;

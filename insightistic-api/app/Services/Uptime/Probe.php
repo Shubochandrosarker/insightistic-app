@@ -9,12 +9,13 @@ use Throwable;
 
 /**
  * The HTTP probe (Phase 12, doc 16): one monitor URL, one attempt, 10s cap,
- * redirects NOT followed (a 301 to elsewhere is itself data — and a redirect
- * loop should read as down, not as a success after 5 hops).
+ * redirects ARE followed (max 5 hops): a 301/302 that lands on a healthy 2xx
+ * response is UP — the AppSumo reviewer flagged redirecting sites reporting
+ * down as a bug. A redirect loop or missing Location still reads as down.
  *
- * "Up" is deliberately strict: status === expected_status (default 200).
- * Any other status — 3xx, 4xx, 5xx — is down; the expected_status column
- * lets a monitor pin a non-200 healthy response when it must.
+ * "Up" means: the FINAL response status (after redirects) === expected_status
+ * (default 200). The expected_status column lets a monitor pin a non-200
+ * healthy response when it must.
  *
  * Returns a plain array rather than a value object: this crosses into
  * uptime_checks columns 1:1 and the IncidentManager is its only consumer.
@@ -31,7 +32,7 @@ class Probe
         $startedAt = microtime(true);
 
         try {
-            $response = Http::withOptions(['allow_redirects' => false])
+            $response = Http::withOptions(['allow_redirects' => ['max' => 5, 'strict' => false, 'track' => true]])
                 ->timeout(self::TIMEOUT_SECONDS)
                 ->connectTimeout(self::TIMEOUT_SECONDS)
                 ->{strtolower($monitor->method)}($monitor->probeUrl());

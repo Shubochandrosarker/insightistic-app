@@ -94,7 +94,6 @@ class PageSpeedClient
             'url'      => $url,
             'strategy' => $strategy,
             // Ask for every category so one run populates all four scores.
-            'category' => self::OPPORTUNITY_CATEGORIES,
         ];
 
         if ($key) {
@@ -102,7 +101,7 @@ class PageSpeedClient
         }
 
         $response = Http::timeout(config('insightistic.pagespeed.timeout'))
-            ->get(self::ENDPOINT, $query);
+            ->get(self::ENDPOINT.'?'.http_build_query($query).'&'.implode('&', array_map(static fn (string $c): string => 'category='.urlencode($c), self::OPPORTUNITY_CATEGORIES)));
 
         if (! $response->successful()) {
             $message = (string) ($response->json()['error']['message'] ?? 'PageSpeed Insights request failed.');

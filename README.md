@@ -13,13 +13,13 @@ sibling repos, kept fully separate so each ships and versions independently:
 - `insightistic-api/` - complete Laravel 12 application (committed
   composer.json/composer.lock, tests). `composer install && php artisan test`
   works from a plain checkout — see `docs/TESTING.md`.
-- `insightistic/` - the WordPress/WooCommerce connector & licensing plugin.
+- `insightistic/` - the WordPress/WooCommerce connector & licensing plugin (a synced copy of the deployed plugin source — currently v4.7.3, matching the live release; releases are published from the org repo).
 - `docs/` - architecture, AI knowledge base/security, environment variables,
   testing, privacy, install/launch/deployment runbooks.
 
 WordPress-side code (not in this repo):
 
-- [`insightistic`](https://github.com/Shubochandrosarker/insightistic) - the canonical WordPress plugin: activates with a license key (`/api/plugin/*`) and syncs WooCommerce, GA4, Search Console, PageSpeed, and Cloudflare data. This is the plugin the dashboard's Licenses page (`Dashboard → Licenses`) walks users through installing.
+- [`insightistic`](https://github.com/Wordpressistic/insightistic) - the WordPress/WooCommerce connector & licensing plugin (org repo; plugin **releases are published here**, e.g. tag `insightistic.4.7.3`): activates with a license key (`/api/plugin/*`) and syncs WooCommerce, GA4, Search Console, PageSpeed, and Cloudflare data. This is the plugin the dashboard's Licenses page (`Dashboard → Licenses`) walks users through installing. The plugin source is also kept in sync inside this repo at `insightistic/` so app-side compatibility checks match the deployed release.
 - [`insightistic-website`](https://github.com/Shubochandrosarker/insightistic-website) - the public marketing site (`insightistic-marketing/` theme + `formistic/` lead-capture forms) and the legacy `insightistic-connector/` plugin (manual connector-token flow for sites that don't run the main plugin — see `docs/INSTALL.md` §3).
 
 ## Quick Start
@@ -68,6 +68,6 @@ over the shared Docker network.
 
 - Frontend: `https://app.insightistic.com`
 - API: `https://api.insightistic.com`
-- WordPress plugin: zip and upload the main plugin from the [`insightistic`](https://github.com/Shubochandrosarker/insightistic) repo (license-key activation) or the connector from the [`insightistic-website`](https://github.com/Shubochandrosarker/insightistic-website) repo (manual connector token) depending on the customer's flow.
+- WordPress plugin: download the current release zip from the [`Wordpressistic/insightistic`](https://github.com/Wordpressistic/insightistic/releases) org repo (license-key activation; deployed release v4.7.3), or the connector from the [`insightistic-website`](https://github.com/Shubochandrosarker/insightistic-website) repo (manual connector token) depending on the customer's flow.
 
 Keep API keys, database credentials, Stripe secrets, OpenAI keys, and connector tokens out of Git. Use VPS environment files only.

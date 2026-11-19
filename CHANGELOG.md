@@ -8,6 +8,32 @@ Advisor review fix: a customer could see working analytics inside WordPress
 while the SaaS showed Google as *not connected*. Full audit at
 `docs/AUDIT-2026-09-23.md`.
 
+### Fixed — production monitoring & PageSpeed round (2026-11-19, deployed live)
+- Uptime probes now follow redirects: `Probe.php` uses `allow_redirects`
+  (max 5 hops) and judges the final response status — deployed image
+  `fix9-redirects-up`; live probes verified `up`/200 in the database.
+- PageSpeed: categories are sent as repeated query params
+  (`PageSpeedClient.php`); performance runs now populate all four
+  categories (verified DB: mobile 74/94/100/100, desktop 89/94/100/100 for
+  www.wordpressistic.com).
+- SSL inspector switched to the openssl verification method (verified:
+  insightistic.com expires 2027-01-26, www.wordpressistic.com 2027-01-21).
+
+### Fixed — AppSumo review round (2026-11-19, deployed live)
+- Lifetime-plan detection in `EntitlementResolver` (AppSumo Tier 1–5
+  lifetime entitlements resolve correctly).
+- `ai_messages_used` metering in `UsageService`.
+- robots.txt/sitemap checks skip the HTML-content audit check.
+- Redirect double-count fix (redirected fetches no longer counted twice).
+- These shipped in image `fix-redirects-entitlements-crawl-perf-aimsg` and
+  are included in the superseding `fix8`/`fix9` images.
+
+### Changed — plugin sync (2026-11-19)
+- Synced the deployed plugin **v4.7.3** into `insightistic/` in this repo
+  (API compatibility verified: 6 `/api/plugin/*` + 22
+  `/api/connector/v1/*` endpoints). Plugin releases are published from the
+  org repo `Wordpressistic/insightistic` (tag `insightistic.4.7.3`).
+
 ### Added — platform-neutral foundation (spec §3/§14)
 - `sites`: `normalized_domain`, `canonical_url`, `detected_platform`,
   `platform_override`, `country`, `language`, `status` (+backfill);

@@ -1,7 +1,7 @@
 # Insightistic — Agent Operating Manual
 
 **Canonical project guide for every AI agent and human contributor**  
-**Last updated:** 2026-11-17 (Asia/Dhaka)  
+**Last updated:** 2026-11-19 (Asia/Dhaka)  
 **Project root:** `D:\All Projects\WPISTIC-GALAXY-ECOSYSTEM\INSIGHTISTIC`
 
 ## 1. Read this first

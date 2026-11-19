@@ -37,6 +37,8 @@ type Insight = {
   type: string;
   title: string;
   summary: string | null;
+  ai_model?: string | null;
+  sources?: string[];
   recommendation: string | null;
   severity: string | null;
   priority_score: number | null;
@@ -286,6 +288,13 @@ export default function InsightsPage() {
               </div>
               <h3 className="text-[15px] font-semibold text-fg">{i.title}</h3>
               <p className="mt-1 text-sm text-muted">{i.summary}</p>
+              {i.ai_model?.startsWith("rule-based") && (
+                <div className="mt-2 flex flex-wrap items-center gap-3 text-xs text-muted">
+                  <span>Evidence only</span>
+                  {i.sources?.includes("site_audit") && <Link className="underline" href="/dashboard/audit">Site Audit</Link>}
+                  {i.sources?.includes("pagespeed") && <Link className="underline" href="/dashboard/performance">PageSpeed Insights</Link>}
+                </div>
+              )}
               {i.recommendation && (
                 <div className="mt-3 rounded-xl border border-brand/20 bg-brand/[0.06] p-3">
                   <div className="text-[10px] font-bold uppercase tracking-wide text-brand-700">Recommended action</div>

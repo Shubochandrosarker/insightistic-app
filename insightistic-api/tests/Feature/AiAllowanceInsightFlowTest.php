@@ -165,14 +165,19 @@ it('allows the Tier 5 Executive insight without unlocking other advanced report 
         'run_at' => now(),
         'performance_score' => 98,
     ]);
-    $this->app->instance(AiProvider::class, new AllowanceFlowProvider('test-model', [
-        'headline' => 'Measured performance',
-        'summary' => 'Mobile scored 98.',
-    ]));
+    $external = new AllowanceFlowProvider('test-model', null);
+    $this->app->instance(AiProvider::class, $external);
 
     $this->actingAs($user)->postJson("/api/sites/{$site->id}/insights/generate", ['type' => 'executive'])
         ->assertCreated()
-        ->assertJsonPath('insight.source_data_json.evidence.0.source', 'pagespeed');
+        ->assertJsonPath('insight.ai_model', 'rule-based-v1')
+        ->assertJsonPath('insight.summary', 'Mobile PageSpeed performance scored 98/100.');
+    $performance = $this->postJson("/api/sites/{$site->id}/insights/generate", ['type' => 'performance'])
+        ->assertCreated()
+        ->assertJsonPath('insight.ai_model', 'rule-based-v1')
+        ->json('insight.source_data_json.evidence');
+    expect(collect($performance)->pluck('source')->unique()->all())->toBe(['pagespeed'])
+        ->and($external->calls)->toBe(0);
     $this->postJson("/api/sites/{$site->id}/insights/generate", ['type' => 'report'])
         ->assertForbidden()
         ->assertJsonPath('code', 'feature_not_in_plan');

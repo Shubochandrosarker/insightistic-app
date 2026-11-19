@@ -155,6 +155,8 @@ class InsightController extends Controller
             'type'           => $i->type,
             'title'          => $i->title,
             'summary'        => $i->summary,
+            'ai_model'       => $i->ai_model,
+            'sources'        => collect($i->source_data_json['evidence'] ?? [])->pluck('source')->filter()->unique()->values()->all(),
             'recommendation' => $i->recommendation,
             'severity'       => $i->severity,
             'priority_score' => $i->priority_score,

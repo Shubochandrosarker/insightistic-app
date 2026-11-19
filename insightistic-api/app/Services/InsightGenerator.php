@@ -6,6 +6,7 @@ use App\Models\AiInsight;
 use App\Models\Site;
 use App\Services\Ai\AiProvider;
 use App\Services\Ai\ProviderResolver;
+use App\Services\Ai\RuleProvider;
 use App\Support\DateRange;
 
 class InsightGenerator
@@ -130,7 +131,10 @@ TXT;
      */
     public function generateContextual(Site $site, string $type, array $context): ?AiInsight
     {
-        $provider = $this->resolveProvider($site);
+        // Audit summaries should match the stored measurements exactly.
+        $provider = in_array($type, ['performance', 'executive'], true)
+            ? new RuleProvider()
+            : $this->resolveProvider($site);
         $raw = $provider->generate(self::CONTEXTUAL_SYSTEM, ['type' => $type, 'evidence' => $context['raw']], $site->organization_id);
 
         if (! $raw) {

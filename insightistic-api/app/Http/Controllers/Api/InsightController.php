@@ -205,7 +205,7 @@ class InsightController extends Controller
         $action = $this->credits->actionForInsightType($data['type']);
         $eligibleForStandard = $this->credits->standardEligible($org, $action);
 
-        if ($creditModel && ! $this->credits->entitledForAction($org, $action)) {
+        if ($creditModel && ! $this->credits->entitledForInsight($org, $data['type'])) {
             return response()->json([
                 'message' => 'This AI analysis is not included in your current plan.',
                 'code'    => 'feature_not_in_plan',

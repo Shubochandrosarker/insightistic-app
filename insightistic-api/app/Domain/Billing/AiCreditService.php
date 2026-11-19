@@ -55,6 +55,21 @@ final class AiCreditService
         return in_array($feature, $features, true);
     }
 
+    public function entitledForInsight(Organization $organization, string $type): bool
+    {
+        if ($type === 'executive') {
+            $resolved = $this->entitlements->resolve($organization);
+            // Tier 5 includes the Executive dashboard insight at the published
+            // advanced-analysis tariff. Report exports retain their own gate.
+            if ($resolved['plan']['slug'] === 'appsumo_tier_5'
+                && in_array('ai_insights', $resolved['features'], true)) {
+                return true;
+            }
+        }
+
+        return $this->entitledForAction($organization, $this->actionForInsightType($type));
+    }
+
     public function standardEligible(Organization $organization, string $action): bool
     {
         $planSlug = $this->entitlements->resolve($organization)['plan']['slug']

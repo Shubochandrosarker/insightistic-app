@@ -5,6 +5,7 @@ use App\Models\AiAllowanceReservation;
 use App\Models\AiInsight;
 use App\Models\CreditLedgerEntry;
 use App\Models\Organization;
+use App\Models\PerformanceRun;
 use App\Models\Plan;
 use App\Models\Site;
 use App\Models\Subscription;
@@ -148,4 +149,31 @@ it('charges the tariff once for a paid insight that the paid model answers', fun
         ->and($charges->first()->amount_signed)->toBe(-100)
         ->and(AiAllowanceReservation::withoutGlobalScope('organization')->first()->status)
         ->toBe(AiAllowanceReservation::STATUS_COMMITTED);
+});
+
+it('allows the Tier 5 Executive insight without unlocking other advanced report types', function () {
+    [$user, $org] = makeOrgUser('tier5-executive@example.com');
+    $this->seed(\Database\Seeders\PlanSeeder::class);
+    $plan = Plan::where('slug', 'appsumo_tier_5')->firstOrFail();
+    $org->forceFill(['plan_id' => $plan->id, 'billing_provider' => 'license'])->save();
+    $site = allowanceFlowSite($org);
+    PerformanceRun::create([
+        'site_id' => $site->id,
+        'url' => 'https://' . $site->domain,
+        'strategy' => 'mobile',
+        'status' => 'complete',
+        'run_at' => now(),
+        'performance_score' => 98,
+    ]);
+    $this->app->instance(AiProvider::class, new AllowanceFlowProvider('test-model', [
+        'headline' => 'Measured performance',
+        'summary' => 'Mobile scored 98.',
+    ]));
+
+    $this->actingAs($user)->postJson("/api/sites/{$site->id}/insights/generate", ['type' => 'executive'])
+        ->assertCreated()
+        ->assertJsonPath('insight.source_data_json.evidence.0.source', 'pagespeed');
+    $this->postJson("/api/sites/{$site->id}/insights/generate", ['type' => 'report'])
+        ->assertForbidden()
+        ->assertJsonPath('code', 'feature_not_in_plan');
 });

@@ -27,10 +27,11 @@
 
 ## VPS deployment state
 
-- **Verified live:** App, API, queue and scheduler run release `75a547f9f33b028cee2bc6f4fd9b1f20012a7fe1` from `codex/appsumo-production-review-fixes`, under `/docker/insightistic-app`. This supersedes `24163dd`. Both public version endpoints report the release.
+- **Verified live:** App, API, queue and scheduler run release `94e990ff9fd737b7f7c9910ab7d080fd5ca93743` from `codex/appsumo-production-review-fixes`, under `/docker/insightistic-app`. This supersedes `75a547f`. Both public version endpoints report the release.
+- **Verified live:** Tier 5 JOLLY Auto answered with the completed Insightistic crawl (486 pages, 412 findings and open issues) and PageSpeed (98 mobile, 99 desktop). The source drawer showed the dated desktop result. JOLLY used one message with no change to standard requests or Insight Credits. Fresh Performance and Executive insights used stored evidence, and Tier 5 lifetime and 11 of 50 websites agreed across Usage, Billing and Licenses. [JOLLY audit and remaining recording requirement](work-log/2026-11-19/jolly-appsumo-final-audit.md).
 - **Cloudflare:** Four projects returned crawler matches after switching to Cloudflare's `userAgent` field. The signed-in `www.insightistic.com` project kept its historical edge charts and hid the AI crawlers card after Cloudflare rejected its saved credential.
 - **Performance Tracking:** Signed-in Mobile and Desktop views for `www.brothertours.com` omit the unmeasured INP tile. Regression tests cover the measured case.
-- Details, rollback and verification are in [the dated work log](work-log/2026-11-19/cloudflare-crawlers-and-inp.md).
+- Cloudflare and INP details are in [the dated work log](work-log/2026-11-19/cloudflare-crawlers-and-inp.md).
 
 ## Founder rules (recorded 2026-11-19)
 

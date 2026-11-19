@@ -1,0 +1,752 @@
+<?php
+/**
+ * Settings template.
+ *
+ * @package Insightistic
+ */
+
+if ( ! defined( 'ABSPATH' ) ) {
+	exit;
+}
+
+$insightistic_property_id    = get_option( 'insightistic_property_id', '' );
+$insightistic_api_email      = get_option( 'insightistic_api_email', '' );
+$insightistic_api_key_stored = (bool) get_option( 'insightistic_api_private_key' );
+
+// GSC.
+$insightistic_gsc_property_url = get_option( 'insightistic_gsc_property_url', '' );
+
+// PageSpeed.
+$insightistic_psi_key_stored  = (bool) get_option( 'insightistic_pagespeed_api_key_enc' );
+$insightistic_psi_default_url = get_option( 'insightistic_pagespeed_default_url', home_url( '/' ) );
+
+// Engagement.
+$insightistic_engagement_on  = (bool) get_option( 'insightistic_engagement_enabled', 0 );
+$insightistic_measurement_id = get_option( 'insightistic_measurement_id', '' );
+$insightistic_secret_stored  = (bool) get_option( 'insightistic_measurement_secret' );
+$insightistic_monitor_404_on = (bool) get_option( 'insightistic_404_monitor_enabled', 1 );
+
+// AI.
+$insightistic_ai_enabled       = (int) get_option( 'insightistic_ai_enabled', 0 );
+$insightistic_ai_consent       = (int) get_option( 'insightistic_ai_consent', 0 );
+$insightistic_cloud_connected  = class_exists( 'Insightistic_License_Manager' ) && Insightistic_License_Manager::is_connected();
+
+// Cloudflare Traffic Insights (Phase 0: credentials only).
+$insightistic_cf_zone_id      = get_option( 'insightistic_cloudflare_zone_id', '' );
+$insightistic_cf_account_id   = get_option( 'insightistic_cloudflare_account_id', '' );
+$insightistic_cf_token_stored = (bool) get_option( 'insightistic_cloudflare_api_token_enc' );
+$insightistic_site_host       = (string) wp_parse_url( home_url( '/' ), PHP_URL_HOST );
+
+// Docs.
+$insightistic_video_guide_url = get_option( 'insightistic_video_guide_url', '' );
+$insightistic_docs_url        = get_option( 'insightistic_docs_url', '' );
+
+// Active tab persistence  preserved across Save Settings reload.
+$insightistic_active_tab = '';
+// Read-only UI state (which tab to show); sanitised and allowlisted below,
+// so no nonce is required to read it.
+// phpcs:disable WordPress.Security.NonceVerification.Recommended, WordPress.Security.NonceVerification.Missing
+if ( ! empty( $_GET['active_tab'] ) ) {
+	$insightistic_active_tab = sanitize_key( wp_unslash( $_GET['active_tab'] ) );
+} elseif ( ! empty( $_POST['active_tab'] ) ) {
+	$insightistic_active_tab = sanitize_key( wp_unslash( $_POST['active_tab'] ) );
+}
+// phpcs:enable WordPress.Security.NonceVerification.Recommended, WordPress.Security.NonceVerification.Missing
+if ( ! in_array( $insightistic_active_tab, array( 'ga4', 'gsc', 'pagespeed', 'engagement', 'ai', 'cloudflare', 'guides' ), true ) ) {
+	$insightistic_active_tab = '';
+}
+
+/**
+ * Format a relative "X days ago" label for AI key rotation timestamps.
+ *
+ * @param int $ts UNIX timestamp.
+ * @return string
+ */
+if ( ! function_exists( 'insightistic_format_rotated' ) ) {
+	function insightistic_format_rotated( $ts ) {
+		if ( ! $ts ) {
+			return '';
+		}
+		$diff = max( 0, time() - $ts );
+		if ( $diff < HOUR_IN_SECONDS ) {
+			return __( 'Rotated less than an hour ago', 'insightistic' );
+		}
+		if ( $diff < DAY_IN_SECONDS ) {
+			$hours = max( 1, round( $diff / HOUR_IN_SECONDS ) );
+			/* translators: %d: number of hours */
+			return sprintf( _n( 'Rotated %d hour ago', 'Rotated %d hours ago', $hours, 'insightistic' ), $hours );
+		}
+		$days = max( 1, round( $diff / DAY_IN_SECONDS ) );
+		/* translators: %d: number of days */
+		return sprintf( _n( 'Rotated %d day ago', 'Rotated %d days ago', $days, 'insightistic' ), $days );
+	}
+}
+?>
+<div class="wrap isp-wrap isp-settings-wrap">
+
+	<?php settings_errors( 'insightistic_messages' ); ?>
+
+	<div class="isp-header">
+		<div class="isp-header-brand">
+			<img src="<?php echo esc_url( INSIGHTISTIC_URL . 'assets/images/wordpressistic-logo.png' ); ?>"
+				alt="<?php esc_attr_e( 'WordPressistic', 'insightistic' ); ?>"
+				class="isp-logo">
+			<div>
+				<h1 class="isp-header-title"><?php esc_html_e( 'Insightistic Settings', 'insightistic' ); ?></h1>
+				<p class="isp-header-sub"><?php esc_html_e( 'Configure connections, tracking, and AI insights', 'insightistic' ); ?></p>
+			</div>
+		</div>
+		<a href="<?php echo esc_url( admin_url( 'admin.php?page=insightistic' ) ); ?>" class="isp-btn isp-btn-ghost">
+			<?php esc_html_e( 'Dashboard', 'insightistic' ); ?>
+		</a>
+	</div>
+
+	<!-- SETTINGS TABS -->
+	<div class="isp-settings-nav" id="isp-settings-nav">
+		<button class="isp-tab-btn isp-tab-active" data-tab="ga4">
+			<?php esc_html_e( 'GA4', 'insightistic' ); ?>
+		</button>
+		<button class="isp-tab-btn" data-tab="gsc" id="isp-stab-gsc">
+			<?php esc_html_e( 'Search Console', 'insightistic' ); ?>
+		</button>
+		<button class="isp-tab-btn" data-tab="pagespeed" id="isp-stab-pagespeed">
+			<?php esc_html_e( 'PageSpeed', 'insightistic' ); ?>
+		</button>
+		<button class="isp-tab-btn" data-tab="engagement">
+			<?php esc_html_e( 'Engagement', 'insightistic' ); ?>
+		</button>
+		<button class="isp-tab-btn" data-tab="ai">
+			<?php esc_html_e( 'AI Insights', 'insightistic' ); ?>
+		</button>
+		<button class="isp-tab-btn" data-tab="cloudflare" id="isp-stab-cloudflare">
+			<?php esc_html_e( 'Cloudflare', 'insightistic' ); ?>
+		</button>
+		<button class="isp-tab-btn" data-tab="guides">
+			<?php esc_html_e( 'Docs', 'insightistic' ); ?>
+		</button>
+	</div>
+
+	<form method="post" action="">
+		<?php wp_nonce_field( 'insightistic_save_settings', 'insightistic_settings_nonce' ); ?>
+		<input type="hidden" name="active_tab" id="isp-active-tab" value="<?php echo esc_attr( $insightistic_active_tab ); ?>">
+
+		<!-- ====================================================== TAB: GA4 -->
+		<div class="isp-tab-panel" id="isp-tab-ga4">
+
+			<div class="isp-settings-card">
+				<div class="isp-settings-card-header">
+					<h2><?php esc_html_e( 'Google Analytics 4 Credentials', 'insightistic' ); ?></h2>
+					<p class="isp-header-desc"><?php esc_html_e( 'Connect your GA4 property via a service account. No sampling, no OAuth pop-ups.', 'insightistic' ); ?></p>
+				</div>
+
+				<details class="isp-guide-box" <?php echo $insightistic_property_id ? '' : 'open'; ?>>
+					<summary><?php esc_html_e( '📘 Setup guide — connect GA4 in about 5 minutes', 'insightistic' ); ?></summary>
+					<ol>
+						<li><?php esc_html_e( 'Open Google Cloud Console and create (or pick) a project.', 'insightistic' ); ?></li>
+						<li>
+							<?php
+							printf(
+								/* translators: %s: API name */
+								esc_html__( 'Enable the %s for that project (APIs & Services → Library).', 'insightistic' ),
+								'<strong>Google Analytics Data API</strong>'
+							);
+							?>
+						</li>
+						<li><?php esc_html_e( 'Create a service account (IAM & Admin → Service Accounts) — no roles needed — then open it and add a JSON key (Keys → Add key → JSON). A key file downloads.', 'insightistic' ); ?></li>
+						<li><?php esc_html_e( 'In GA4: Admin → Property → Property Access Management → add the service account email with the Viewer role.', 'insightistic' ); ?></li>
+						<li><?php esc_html_e( 'Back here: paste your numeric Property ID (GA4 → Admin → Property Settings), then click "Import from JSON key file" below and paste the whole key file — the email and private key fill in automatically.', 'insightistic' ); ?></li>
+						<li><?php esc_html_e( 'Save Settings, then click "Test GA4 Connection". Green means done.', 'insightistic' ); ?></li>
+					</ol>
+					<div class="isp-guide-links">
+						<a href="https://console.cloud.google.com/apis/library/analyticsdata.googleapis.com" target="_blank" rel="noopener"><?php esc_html_e( 'Enable Analytics Data API ↗', 'insightistic' ); ?></a>
+						<a href="https://console.cloud.google.com/iam-admin/serviceaccounts" target="_blank" rel="noopener"><?php esc_html_e( 'Service Accounts ↗', 'insightistic' ); ?></a>
+						<a href="https://analytics.google.com/" target="_blank" rel="noopener"><?php esc_html_e( 'Google Analytics ↗', 'insightistic' ); ?></a>
+					</div>
+				</details>
+
+				<div class="isp-field">
+					<label class="isp-label" for="property_id">
+						<?php esc_html_e( 'GA4 Property ID', 'insightistic' ); ?>
+						<span class="isp-required">*</span>
+					</label>
+					<input type="text" id="property_id" name="property_id" class="isp-input"
+						value="<?php echo esc_attr( $insightistic_property_id ); ?>"
+						placeholder="123456789" pattern="\d+" />
+					<p class="isp-hint"><?php esc_html_e( 'Numeric only. Find it in GA4  Admin  Property Settings.', 'insightistic' ); ?></p>
+				</div>
+
+				<div class="isp-field">
+					<label class="isp-label" for="api_email">
+						<?php esc_html_e( 'Service Account Email', 'insightistic' ); ?>
+						<span class="isp-required">*</span>
+					</label>
+					<input type="email" id="api_email" name="api_email" class="isp-input"
+						value="<?php echo esc_attr( $insightistic_api_email ); ?>"
+						placeholder="analytics@your-project.iam.gserviceaccount.com" />
+					<p class="isp-hint"><?php esc_html_e( 'Add this email to your GA4 property with Viewer role.', 'insightistic' ); ?></p>
+				</div>
+
+				<div class="isp-field">
+					<label class="isp-label" for="api_private_key">
+						<?php esc_html_e( 'Private Key', 'insightistic' ); ?>
+						<span class="isp-required">*</span>
+					</label>
+					<?php if ( $insightistic_api_key_stored ) : ?>
+					<div class="isp-key-stored">
+						<span class="isp-key-badge"> <?php esc_html_e( 'Key stored & encrypted', 'insightistic' ); ?></span>
+						<button type="button" id="isp-change-key" class="isp-link-btn"><?php esc_html_e( 'Change key', 'insightistic' ); ?></button>
+					</div>
+					<textarea id="api_private_key" name="api_private_key" class="isp-textarea" rows="4"
+						style="display:none;" placeholder="-----BEGIN PRIVATE KEY-----&#10;..."></textarea>
+					<?php else : ?>
+					<textarea id="api_private_key" name="api_private_key" class="isp-textarea" rows="4"
+						placeholder="-----BEGIN PRIVATE KEY-----&#10;..."></textarea>
+					<?php endif; ?>
+					<p class="isp-hint isp-hint-security"> <?php esc_html_e( 'Encrypted with AES-256 before storage. Never exposed in plain text.', 'insightistic' ); ?></p>
+				</div>
+
+				<div class="isp-json-import">
+					<button type="button" id="isp-toggle-json" class="isp-link-btn"> <?php esc_html_e( 'Import from JSON key file', 'insightistic' ); ?></button>
+					<div id="isp-json-wrap" style="display:none; margin-top:12px;">
+						<textarea id="isp-json-input" class="isp-textarea" rows="6"
+							placeholder="<?php esc_attr_e( 'Paste the entire contents of your service account JSON key file here', 'insightistic' ); ?>"></textarea>
+						<button type="button" id="isp-extract-json" class="isp-btn isp-btn-secondary" style="margin-top:8px;">
+							<?php esc_html_e( 'Extract Credentials', 'insightistic' ); ?>
+						</button>
+					</div>
+					<!-- Inline notice replaces browser alert()  shown/hidden by admin.js -->
+					<div id="isp-json-notice" class="isp-notice" style="display:none; margin-top:10px;" role="status" aria-live="polite"></div>
+				</div>
+			</div>
+
+			<div class="isp-settings-card">
+				<div class="isp-test-card">
+					<h3><?php esc_html_e( 'Test GA4 Connection', 'insightistic' ); ?></h3>
+					<p><?php esc_html_e( 'Save your settings first, then test the connection.', 'insightistic' ); ?></p>
+					<button type="button" id="isp-test-connection" class="isp-btn isp-btn-secondary">
+						<?php esc_html_e( 'Test Connection', 'insightistic' ); ?>
+					</button>
+					<div id="isp-test-result" style="margin-top:12px;"></div>
+				</div>
+			</div>
+
+			<div class="isp-settings-card">
+				<div class="isp-settings-card-header">
+					<h3><?php esc_html_e( 'How to Set Up', 'insightistic' ); ?></h3>
+				</div>
+				<div class="isp-instructions">
+					<ol class="isp-steps">
+						<li><strong><?php esc_html_e( 'Create a Service Account', 'insightistic' ); ?></strong><span><?php esc_html_e( 'Go to Google Cloud Console  IAM & Admin  Service Accounts  Create Service Account.', 'insightistic' ); ?></span></li>
+						<li><strong><?php esc_html_e( 'Download the JSON key', 'insightistic' ); ?></strong><span><?php esc_html_e( 'Click the service account  Keys  Add Key  JSON. Use the "Import from JSON" button above.', 'insightistic' ); ?></span></li>
+						<li><strong><?php esc_html_e( 'Add to GA4 property', 'insightistic' ); ?></strong><span><?php esc_html_e( 'In GA4  Admin  Property Access Management  Add the service account email as Viewer.', 'insightistic' ); ?></span></li>
+						<li><strong><?php esc_html_e( 'Enter your Property ID', 'insightistic' ); ?></strong><span><?php esc_html_e( 'Find it in GA4  Admin  Property Settings (numeric only, e.g. 123456789).', 'insightistic' ); ?></span></li>
+					</ol>
+				</div>
+			</div>
+
+		</div><!-- /#isp-tab-ga4 -->
+
+		<!-- ================================================ TAB: SEARCH CONSOLE -->
+		<div class="isp-tab-panel" id="isp-tab-gsc" style="display:none;">
+
+			<div class="isp-settings-card">
+				<div class="isp-settings-card-header">
+					<h2><?php esc_html_e( 'Google Search Console', 'insightistic' ); ?></h2>
+					<p class="isp-header-desc"><?php esc_html_e( 'Uses the same service account as GA4  just add it to your Search Console property and enter the URL below.', 'insightistic' ); ?></p>
+				</div>
+
+				<div class="isp-field">
+					<label class="isp-label" for="gsc_property_url">
+						<?php esc_html_e( 'Search Console Property URL', 'insightistic' ); ?>
+					</label>
+					<input type="text" id="gsc_property_url" name="gsc_property_url" class="isp-input"
+						value="<?php echo esc_attr( $insightistic_gsc_property_url ); ?>"
+						placeholder="https://yoursite.com/ or sc-domain:yoursite.com" />
+					<p class="isp-hint"><?php esc_html_e( 'Enter the exact property as registered in Search Console. URL-prefix example: https://yoursite.com/ . Domain-property example: sc-domain:yoursite.com . Insightistic will also test the matching domain property when a URL-prefix property is denied.', 'insightistic' ); ?></p>
+					<?php if ( $insightistic_api_email ) : ?>
+					<p class="isp-hint"><strong><?php esc_html_e( 'Service account used for GSC:', 'insightistic' ); ?></strong> <code><?php echo esc_html( $insightistic_api_email ); ?></code></p>
+					<?php endif; ?>
+				</div>
+			</div>
+
+			<div class="isp-settings-card">
+				<div class="isp-test-card">
+					<h3><?php esc_html_e( 'Test Search Console Connection', 'insightistic' ); ?></h3>
+					<p><?php esc_html_e( 'Save settings first, then verify the connection.', 'insightistic' ); ?></p>
+					<button type="button" id="isp-test-gsc" class="isp-btn isp-btn-secondary">
+						<?php esc_html_e( 'Test GSC Connection', 'insightistic' ); ?>
+					</button>
+					<div id="isp-test-gsc-result" style="margin-top:12px;"></div>
+				</div>
+			</div>
+
+			<div class="isp-settings-card">
+				<div class="isp-settings-card-header">
+					<h3><?php esc_html_e( 'How to Set Up', 'insightistic' ); ?></h3>
+				</div>
+				<div class="isp-instructions">
+					<ol class="isp-steps">
+						<li><strong><?php esc_html_e( 'Use the same service account', 'insightistic' ); ?></strong><span><?php esc_html_e( 'No new JSON key needed  same credentials as GA4.', 'insightistic' ); ?></span></li>
+						<li><strong><?php esc_html_e( 'Add to Search Console', 'insightistic' ); ?></strong><span><?php esc_html_e( 'Go to Google Search Console  Settings  Users and permissions  Add user. Paste the service account email and set as Full permission.', 'insightistic' ); ?></span></li>
+						<li><strong><?php esc_html_e( 'Enter the property exactly', 'insightistic' ); ?></strong><span><?php esc_html_e( 'For a URL-prefix property use https://yoursite.com/ . For a domain property shown as example.com, use sc-domain:example.com.', 'insightistic' ); ?></span></li>
+					</ol>
+				</div>
+				<div class="isp-guide-links" style="margin:0 0 14px;">
+					<a href="https://search.google.com/search-console" target="_blank" rel="noopener"><?php esc_html_e( 'Open Search Console ↗', 'insightistic' ); ?></a>
+					<a href="https://support.google.com/webmasters/answer/9128669" target="_blank" rel="noopener"><?php esc_html_e( 'Getting started guide ↗', 'insightistic' ); ?></a>
+					<a href="https://support.google.com/webmasters/answer/7687615" target="_blank" rel="noopener"><?php esc_html_e( 'Users & permissions ↗', 'insightistic' ); ?></a>
+				</div>
+				<div class="isp-field" style="padding-top:0;">
+					<div class="isp-notice isp-notice-info">
+						<?php esc_html_e( 'Search Console data has a 23 day delay and only shows data from the last 16 months.', 'insightistic' ); ?>
+					</div>
+				</div>
+			</div>
+
+		</div><!-- /#isp-tab-gsc -->
+
+		<!-- ============================================== TAB: PAGESPEED -->
+		<div class="isp-tab-panel" id="isp-tab-pagespeed" style="display:none;">
+
+			<div class="isp-settings-card">
+				<div class="isp-settings-card-header">
+					<h2><?php esc_html_e( 'PageSpeed Insights', 'insightistic' ); ?></h2>
+					<p class="isp-header-desc"><?php esc_html_e( 'Enter your Google Cloud API key to enable PageSpeed testing and the Speed Test page. The free tier allows 25,000 queries/day.', 'insightistic' ); ?></p>
+				</div>
+
+				<details class="isp-guide-box" <?php echo $insightistic_psi_key_stored ? '' : 'open'; ?>>
+					<summary><?php esc_html_e( '📘 Setup guide — get a free API key in 2 minutes', 'insightistic' ); ?></summary>
+					<ol>
+						<li><?php esc_html_e( 'Open Google Cloud Console with any Google account (the same project you used for GA4 works fine).', 'insightistic' ); ?></li>
+						<li>
+							<?php
+							printf(
+								/* translators: %s: API name */
+								esc_html__( 'Enable the %s (APIs & Services → Library → search “PageSpeed”).', 'insightistic' ),
+								'<strong>PageSpeed Insights API</strong>'
+							);
+							?>
+						</li>
+						<li><?php esc_html_e( 'Go to APIs & Services → Credentials → Create credentials → API key. Copy the key that starts with “AIza”.', 'insightistic' ); ?></li>
+						<li><?php esc_html_e( 'Recommended: click "Edit API key" and restrict it to the PageSpeed Insights API only.', 'insightistic' ); ?></li>
+						<li><?php esc_html_e( 'Paste the key below and Save Settings — it is stored encrypted. Then open the Speed Test page and run your first full audit.', 'insightistic' ); ?></li>
+					</ol>
+					<div class="isp-guide-links">
+						<a href="https://console.cloud.google.com/apis/library/pagespeedonline.googleapis.com" target="_blank" rel="noopener"><?php esc_html_e( 'Enable PageSpeed Insights API ↗', 'insightistic' ); ?></a>
+						<a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noopener"><?php esc_html_e( 'Create API key ↗', 'insightistic' ); ?></a>
+						<a href="https://developers.google.com/speed/docs/insights/v5/get-started" target="_blank" rel="noopener"><?php esc_html_e( 'Official docs ↗', 'insightistic' ); ?></a>
+					</div>
+				</details>
+
+				<div class="isp-field">
+					<label class="isp-label" for="pagespeed_api_key">
+						<?php esc_html_e( 'Google Cloud API Key', 'insightistic' ); ?>
+					</label>
+					<?php if ( $insightistic_psi_key_stored ) : ?>
+					<div class="isp-key-stored">
+						<span class="isp-key-badge"> <?php esc_html_e( 'API key stored', 'insightistic' ); ?></span>
+						<button type="button" id="isp-change-psi-key" class="isp-link-btn"><?php esc_html_e( 'Change key', 'insightistic' ); ?></button>
+					</div>
+					<input type="text" id="pagespeed_api_key" name="pagespeed_api_key" class="isp-input"
+						style="display:none;" placeholder="AIza..." autocomplete="off" />
+					<?php else : ?>
+					<input type="text" id="pagespeed_api_key" name="pagespeed_api_key" class="isp-input"
+						placeholder="AIza..." autocomplete="off" />
+					<?php endif; ?>
+					<p class="isp-hint"><?php esc_html_e( 'Create an API key in Google Cloud Console  APIs & Services  Credentials. Enable the PageSpeed Insights API on the same project.', 'insightistic' ); ?></p>
+				</div>
+
+				<div class="isp-field">
+					<label class="isp-label" for="pagespeed_default_url">
+						<?php esc_html_e( 'Default URL to Test', 'insightistic' ); ?>
+					</label>
+					<input type="url" id="pagespeed_default_url" name="pagespeed_default_url" class="isp-input"
+						value="<?php echo esc_attr( $insightistic_psi_default_url ); ?>"
+						placeholder="<?php echo esc_attr( home_url( '/' ) ); ?>" />
+					<p class="isp-hint"><?php esc_html_e( 'This URL will be pre-filled in the PageSpeed tab. You can change it any time on the dashboard.', 'insightistic' ); ?></p>
+				</div>
+			</div>
+
+		</div><!-- /#isp-tab-pagespeed -->
+
+		<!-- ============================================= TAB: ENGAGEMENT -->
+		<div class="isp-tab-panel" id="isp-tab-engagement" style="display:none;">
+
+			<div class="isp-settings-card">
+				<div class="isp-settings-card-header">
+					<h2><?php esc_html_e( 'Engagement Tracking', 'insightistic' ); ?></h2>
+					<p class="isp-header-desc"><?php esc_html_e( 'A lightweight script (&lt;3KB) that fires custom GA4 events: outbound links, scroll depth, file downloads, button clicks — plus form submits, site search, video plays and copy events.', 'insightistic' ); ?></p>
+				</div>
+
+				<details class="isp-guide-box" <?php echo $insightistic_measurement_id ? '' : 'open'; ?>>
+					<summary><?php esc_html_e( '📘 Setup guide — Measurement ID & API secret', 'insightistic' ); ?></summary>
+					<ol>
+						<li><?php esc_html_e( 'In GA4 go to Admin → Data Streams and open your web stream.', 'insightistic' ); ?></li>
+						<li>
+							<?php
+							printf(
+								/* translators: %s: example measurement id */
+								esc_html__( 'Copy the Measurement ID at the top right (looks like %s) into the field below.', 'insightistic' ),
+								'<code>G-XXXXXXXXXX</code>'
+							);
+							?>
+						</li>
+						<li><?php esc_html_e( 'On the same stream page scroll to "Measurement Protocol API secrets" → Create. Name it "Insightistic" and copy the secret value.', 'insightistic' ); ?></li>
+						<li><?php esc_html_e( 'Paste the secret below — it stays on your server, encrypted, and is never exposed to visitors. Events are proxied server-side.', 'insightistic' ); ?></li>
+						<li><?php esc_html_e( 'Enable the toggle, Save Settings, then open your site in a new tab and watch events arrive in GA4 → Reports → Realtime.', 'insightistic' ); ?></li>
+					</ol>
+					<div class="isp-guide-links">
+						<a href="https://analytics.google.com/" target="_blank" rel="noopener"><?php esc_html_e( 'Open GA4 Admin ↗', 'insightistic' ); ?></a>
+						<a href="https://support.google.com/analytics/answer/9539598" target="_blank" rel="noopener"><?php esc_html_e( 'Find your Measurement ID ↗', 'insightistic' ); ?></a>
+						<a href="https://developers.google.com/analytics/devguides/collection/protocol/ga4" target="_blank" rel="noopener"><?php esc_html_e( 'Measurement Protocol docs ↗', 'insightistic' ); ?></a>
+					</div>
+				</details>
+
+				<div class="isp-field isp-field-toggle">
+					<label class="isp-label"><?php esc_html_e( 'Enable Tracking Script', 'insightistic' ); ?></label>
+					<label class="isp-toggle">
+						<input type="checkbox" name="engagement_enabled" value="1" <?php checked( $insightistic_engagement_on ); ?>>
+						<span class="isp-toggle-track"><span class="isp-toggle-thumb"></span></span>
+						<span class="isp-toggle-label">
+							<span class="isp-on"><?php esc_html_e( 'Enabled', 'insightistic' ); ?></span>
+							<span class="isp-off"><?php esc_html_e( 'Disabled', 'insightistic' ); ?></span>
+						</span>
+					</label>
+					<p class="isp-hint" style="margin-top:8px;"><?php esc_html_e( 'When enabled, a small script is loaded on the frontend of your site.', 'insightistic' ); ?></p>
+				</div>
+
+				<div class="isp-field">
+					<label class="isp-label" for="measurement_id">
+						<?php esc_html_e( 'GA4 Measurement ID', 'insightistic' ); ?>
+					</label>
+					<input type="text" id="measurement_id" name="measurement_id" class="isp-input"
+						value="<?php echo esc_attr( $insightistic_measurement_id ); ?>"
+						placeholder="G-XXXXXXXXXX" />
+					<p class="isp-hint"><?php esc_html_e( 'Find this in GA4  Admin  Data Streams  your stream  Measurement ID.', 'insightistic' ); ?></p>
+				</div>
+
+				<div class="isp-field">
+					<label class="isp-label" for="measurement_secret">
+						<?php esc_html_e( 'Measurement Protocol API Secret', 'insightistic' ); ?>
+					</label>
+					<?php if ( $insightistic_secret_stored ) : ?>
+					<div class="isp-key-stored">
+						<span class="isp-key-badge"> <?php esc_html_e( 'Secret stored & encrypted', 'insightistic' ); ?></span>
+						<button type="button" id="isp-change-secret" class="isp-link-btn"><?php esc_html_e( 'Change', 'insightistic' ); ?></button>
+					</div>
+					<input type="text" id="measurement_secret" name="measurement_secret" class="isp-input"
+						style="display:none;" placeholder="secret" autocomplete="off" />
+					<?php else : ?>
+					<input type="text" id="measurement_secret" name="measurement_secret" class="isp-input"
+						placeholder="secret" autocomplete="off" />
+					<?php endif; ?>
+					<p class="isp-hint"><?php esc_html_e( 'GA4  Admin  Data Streams  your stream  Measurement Protocol  Create. Stored encrypted.', 'insightistic' ); ?></p>
+				</div>
+			</div>
+
+			<div class="isp-settings-card">
+				<div class="isp-settings-card-header">
+					<h3><?php esc_html_e( 'What Gets Tracked', 'insightistic' ); ?></h3>
+				</div>
+				<div class="isp-field">
+					<div class="isp-tracking-features">
+						<div class="isp-tracking-item">
+							<span class="isp-tracking-icon"></span>
+							<div>
+								<strong><?php esc_html_e( 'Outbound Link Clicks', 'insightistic' ); ?></strong>
+								<p><?php esc_html_e( 'Fires an event when a visitor clicks a link to an external domain.', 'insightistic' ); ?></p>
+							</div>
+						</div>
+						<div class="isp-tracking-item">
+							<span class="isp-tracking-icon"></span>
+							<div>
+								<strong><?php esc_html_e( 'Scroll Depth', 'insightistic' ); ?></strong>
+								<p><?php esc_html_e( 'Fires at 25%, 50%, 75%, and 100% scroll milestones.', 'insightistic' ); ?></p>
+							</div>
+						</div>
+						<div class="isp-tracking-item">
+							<span class="isp-tracking-icon"></span>
+							<div>
+								<strong><?php esc_html_e( 'File Downloads', 'insightistic' ); ?></strong>
+								<p><?php esc_html_e( 'Fires when .pdf, .zip, .doc, .xls, .mp3 and similar files are clicked.', 'insightistic' ); ?></p>
+							</div>
+						</div>
+						<div class="isp-tracking-item">
+							<span class="isp-tracking-icon"></span>
+							<div>
+								<strong><?php esc_html_e( 'Element Clicks', 'insightistic' ); ?></strong>
+								<p><?php esc_html_e( 'Tracks clicks on elements with the CSS class .isp-track.', 'insightistic' ); ?></p>
+							</div>
+						</div>
+					</div>
+				</div>
+			</div>
+
+			<div class="isp-settings-card">
+				<div class="isp-settings-card-header">
+					<h2><?php esc_html_e( '404 & Broken Link Monitor', 'insightistic' ); ?></h2>
+					<p class="isp-header-desc"><?php esc_html_e( 'Purely server-side  no script, no dependency on the tracker above, unaffected by ad-blockers. Records the request path, distinct referring domains, a hit count, and last-seen time for pages that 404. No IP address or user agent stored.', 'insightistic' ); ?></p>
+				</div>
+				<div class="isp-field isp-field-toggle">
+					<label class="isp-label"><?php esc_html_e( 'Enable 404 Monitor', 'insightistic' ); ?></label>
+					<label class="isp-toggle">
+						<input type="checkbox" name="monitor_404_enabled" value="1" <?php checked( $insightistic_monitor_404_on ); ?>>
+						<span class="isp-toggle-track"><span class="isp-toggle-thumb"></span></span>
+						<span class="isp-toggle-label">
+							<span class="isp-on"><?php esc_html_e( 'Enabled', 'insightistic' ); ?></span>
+							<span class="isp-off"><?php esc_html_e( 'Disabled', 'insightistic' ); ?></span>
+						</span>
+					</label>
+					<p class="isp-hint" style="margin-top:8px;"><?php esc_html_e( 'On by default  view the results on the Dashboard Overview tab under "404 & Broken Link Monitor".', 'insightistic' ); ?></p>
+				</div>
+			</div>
+
+			<div class="isp-settings-card">
+				<div class="isp-settings-card-header">
+					<h2><?php esc_html_e( 'IndexNow', 'insightistic' ); ?></h2>
+					<p class="isp-header-desc"><?php esc_html_e( 'Optional and off by default. When on, the URL of each public post or page you publish or update is sent to the IndexNow API (api.indexnow.org), which shares it with participating search engines such as Bing and Yandex. No account is needed. The plugin writes a small key file to your site root so search engines can verify the site.', 'insightistic' ); ?></p>
+				</div>
+				<div class="isp-field isp-field-toggle">
+					<label class="isp-label"><?php esc_html_e( 'Submit new and updated URLs to IndexNow', 'insightistic' ); ?></label>
+					<label class="isp-toggle">
+						<input type="checkbox" name="indexnow_direct" value="1" <?php checked( (int) get_option( 'insightistic_indexnow_direct', 0 ) ); ?>>
+						<span class="isp-toggle-track"><span class="isp-toggle-thumb"></span></span>
+						<span class="isp-toggle-label">
+							<span class="isp-on"><?php esc_html_e( 'Enabled', 'insightistic' ); ?></span>
+							<span class="isp-off"><?php esc_html_e( 'Disabled', 'insightistic' ); ?></span>
+						</span>
+					</label>
+				</div>
+			</div>
+
+		</div><!-- /#isp-tab-engagement -->
+
+		<!-- ================================================= TAB: AI -->
+		<div class="isp-tab-panel" id="isp-tab-ai" style="display:none;">
+
+			<div class="isp-settings-card">
+				<div class="isp-settings-card-header">
+					<h2><?php esc_html_e( 'AI-Powered Insights', 'insightistic' ); ?></h2>
+					<p class="isp-header-desc"><?php esc_html_e( 'Enable manual AI analysis of your analytics data. Click "Get AI Insights" on the dashboard to run an analysis  never auto-triggered.', 'insightistic' ); ?></p>
+				</div>
+
+				<div class="isp-field isp-field-toggle">
+					<label class="isp-label"><?php esc_html_e( 'Enable AI Insights', 'insightistic' ); ?></label>
+					<label class="isp-toggle">
+						<input type="checkbox" name="ai_enabled" value="1" <?php checked( $insightistic_ai_enabled ); ?>>
+						<span class="isp-toggle-track"><span class="isp-toggle-thumb"></span></span>
+						<span class="isp-toggle-label">
+							<span class="isp-on"><?php esc_html_e( 'Enabled', 'insightistic' ); ?></span>
+							<span class="isp-off"><?php esc_html_e( 'Disabled', 'insightistic' ); ?></span>
+						</span>
+					</label>
+				</div>
+
+				<div class="isp-field isp-field-toggle">
+					<label class="isp-label" for="isp-ai-consent"><?php esc_html_e( 'Consent to use Insightistic Cloud AI', 'insightistic' ); ?></label>
+					<label>
+						<input type="checkbox" id="isp-ai-consent" name="ai_consent" value="1" <?php checked( $insightistic_ai_consent ); ?>>
+						<?php esc_html_e( 'I agree that when I click "Get AI Insights", a summary of this site\'s analytics data (for example GA4, Search Console, WooCommerce or Cloudflare metrics shown on the dashboard) is sent to the Insightistic service at api.insightistic.com to generate the analysis.', 'insightistic' ); ?>
+					</label>
+					<p class="isp-hint">
+						<?php
+						printf(
+							wp_kses(
+								/* translators: 1: terms URL, 2: privacy policy URL */
+								__( 'Off by default. Nothing is sent until you tick this box and run an analysis yourself. See the <a href="%1$s" target="_blank" rel="noopener noreferrer">Terms of Service</a> and <a href="%2$s" target="_blank" rel="noopener noreferrer">Privacy Policy</a>.', 'insightistic' ),
+								array(
+									'a' => array(
+										'href'   => array(),
+										'target' => array(),
+										'rel'    => array(),
+									),
+								)
+							),
+							esc_url( INSIGHTISTIC_TERMS_URL ),
+							esc_url( INSIGHTISTIC_PRIVACY_URL )
+						);
+						?>
+					</p>
+				</div>
+
+			</div>
+
+			<!-- Insightistic Cloud AI  no key: uses the free account connection. -->
+			<div class="isp-settings-card isp-provider-settings" id="isp-settings-insightistic_cloud">
+				<div class="isp-settings-card-header">
+					<h3><?php esc_html_e( 'Insightistic Cloud AI Settings', 'insightistic' ); ?></h3>
+					<p class="isp-header-desc"><?php esc_html_e( 'Uses the AI provider route assigned to your Insightistic account. Free accounts use free model routing; no provider key is stored on this site.', 'insightistic' ); ?></p>
+				</div>
+
+				<?php if ( $insightistic_cloud_connected ) : ?>
+				<div class="isp-notice isp-notice-success">
+					<?php esc_html_e( 'Connected. Insightistic Cloud AI is ready to use.', 'insightistic' ); ?>
+				</div>
+				<div class="isp-field">
+					<p class="isp-hint"><?php esc_html_e( 'AI runs are manual and use the credits assigned to your Insightistic account. View the current balance and extra-credit options on Insightistic → Account.', 'insightistic' ); ?></p>
+				</div>
+				<?php else : ?>
+				<div class="isp-notice isp-notice-info">
+					<?php esc_html_e( 'Insightistic Cloud AI is optional. Your analytics, Search Console, PageSpeed, WooCommerce, and add-ons keep working without an account. Connect a free Insightistic account only when you want AI analysis; no provider key is stored on this site.', 'insightistic' ); ?>
+					<a href="<?php echo esc_url( admin_url( 'admin.php?page=insightistic-license' ) ); ?>"><?php esc_html_e( 'Create a free account →', 'insightistic' ); ?></a>
+				</div>
+				<div class="isp-field">
+					<strong><?php esc_html_e( 'How it works', 'insightistic' ); ?></strong>
+					<p class="isp-hint"><?php esc_html_e( '1. Create or connect your free Insightistic account on the Account page. 2. Return here and enable AI plus consent. 3. Load a dashboard and click Get AI Insights. The connection test verifies the account route without spending AI credits.', 'insightistic' ); ?></p>
+				</div>
+				<?php endif; ?>
+
+				<?php if ( $insightistic_cloud_connected && $insightistic_ai_consent ) : ?>
+				<div class="isp-field isp-ai-test-field">
+					<button type="button" class="isp-btn isp-btn-secondary isp-test-ai-provider" data-provider="insightistic_cloud">
+						<?php esc_html_e( 'Test Connection', 'insightistic' ); ?>
+					</button>
+					<p class="isp-hint"><?php esc_html_e( 'Checks the Insightistic account connection without generating an AI response or spending AI credits.', 'insightistic' ); ?></p>
+					<div class="isp-ai-test-result" style="margin-top:10px;"></div>
+				</div>
+				<?php endif; ?>
+			</div>
+
+		</div><!-- /#isp-tab-ai -->
+
+		<!-- ============================================= TAB: CLOUDFLARE -->
+		<div class="isp-tab-panel" id="isp-tab-cloudflare" style="display:none;">
+
+			<div class="isp-settings-card">
+				<div class="isp-settings-card-header">
+					<h2><?php esc_html_e( 'Cloudflare Traffic Insights', 'insightistic' ); ?></h2>
+					<p class="isp-header-desc"><?php esc_html_e( 'Edge-level traffic data — cache ratio, threats blocked, country/status breakdowns — that Google Analytics never sees. Always free; never required for anything else in the plugin.', 'insightistic' ); ?></p>
+				</div>
+
+				<?php if ( $insightistic_cloud_connected ) : ?>
+				<div class="isp-notice isp-notice-success">
+					<?php esc_html_e( 'Your free Insightistic account is connected — Traffic Insights already works with no setup here. The fields below are only for people who\'d rather use their own Cloudflare API token instead of their account.', 'insightistic' ); ?>
+				</div>
+				<?php else : ?>
+				<div class="isp-notice isp-notice-info">
+					<?php esc_html_e( 'Nothing to configure here by default: create a free Insightistic account and Traffic Insights turns on automatically, with no Zone ID or API token to manage.', 'insightistic' ); ?>
+					<a href="<?php echo esc_url( admin_url( 'admin.php?page=insightistic-license' ) ); ?>"><?php esc_html_e( 'Create a free account →', 'insightistic' ); ?></a>
+				</div>
+				<?php endif; ?>
+			</div>
+
+			<div class="isp-settings-card">
+				<div class="isp-settings-card-header">
+					<h2><?php esc_html_e( 'Advanced: bring your own Cloudflare token', 'insightistic' ); ?></h2>
+					<p class="isp-header-desc"><?php esc_html_e( 'Optional. If you\'d rather not connect a free account, paste a Cloudflare API token here instead — Traffic Insights will use it directly, with no account involved.', 'insightistic' ); ?></p>
+				</div>
+
+				<details class="isp-guide-box">
+					<summary><?php esc_html_e( '📘 Setup guide — create a read-only Cloudflare token in 2 minutes', 'insightistic' ); ?></summary>
+					<ol>
+						<li><?php esc_html_e( 'Open the Cloudflare dashboard and select your site (zone).', 'insightistic' ); ?></li>
+						<li><?php esc_html_e( 'Copy the Zone ID from the site\'s Overview page (right-hand sidebar) into the field below.', 'insightistic' ); ?></li>
+						<li><?php esc_html_e( 'Go to My Profile → API Tokens → Create Token → Custom Token. Grant Zone → Zone → Read and Zone → Analytics → Read, scoped to this zone only.', 'insightistic' ); ?></li>
+						<li><?php esc_html_e( 'Paste the generated token below and Save Settings  it is stored encrypted, the same way every other credential in this plugin is. Then click Test Connection.', 'insightistic' ); ?></li>
+					</ol>
+					<div class="isp-guide-links">
+						<span class="isp-guide-link-note"><?php esc_html_e( 'Direct navigation: Cloudflare dashboard → My Profile → API Tokens → Create Token. Full API documentation lives under Developers → API in the Cloudflare dashboard.', 'insightistic' ); ?></span>
+					</div>
+				</details>
+
+				<div class="isp-field">
+					<label class="isp-label" for="cf_zone_id">
+						<?php esc_html_e( 'Zone ID', 'insightistic' ); ?>
+					</label>
+					<input type="text" id="cf_zone_id" name="cf_zone_id" class="isp-input"
+						value="<?php echo esc_attr( $insightistic_cf_zone_id ); ?>"
+						placeholder="a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4" />
+					<p class="isp-hint">
+						<?php esc_html_e( 'Cloudflare dashboard → your site → Overview → Zone ID (right-hand sidebar). This WordPress site is', 'insightistic' ); ?>
+						<code><?php echo esc_html( $insightistic_site_host ); ?></code>
+						<?php esc_html_e( '; the selected zone must match it.', 'insightistic' ); ?>
+					</p>
+				</div>
+
+				<div class="isp-field">
+					<label class="isp-label" for="cf_account_id">
+						<?php esc_html_e( 'Account ID (optional)', 'insightistic' ); ?>
+					</label>
+					<input type="text" id="cf_account_id" name="cf_account_id" class="isp-input"
+						value="<?php echo esc_attr( $insightistic_cf_account_id ); ?>"
+						placeholder="a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4" />
+					<p class="isp-hint"><?php esc_html_e( 'Optional. If entered, it must belong to the selected zone. Leave blank unless your Cloudflare token setup requires it.', 'insightistic' ); ?></p>
+				</div>
+
+				<div class="isp-field">
+					<label class="isp-label" for="cf_api_token">
+						<?php esc_html_e( 'API Token', 'insightistic' ); ?>
+					</label>
+					<?php if ( $insightistic_cf_token_stored ) : ?>
+					<div class="isp-key-stored">
+						<span class="isp-key-badge"> <?php esc_html_e( 'Token stored & encrypted', 'insightistic' ); ?></span>
+						<button type="button" id="isp-change-cf-token" class="isp-link-btn"><?php esc_html_e( 'Change token', 'insightistic' ); ?></button>
+					</div>
+					<input type="text" id="cf_api_token" name="cf_api_token" class="isp-input"
+						style="display:none;" placeholder="<?php esc_attr_e( 'Enter new token to replace', 'insightistic' ); ?>" autocomplete="off" />
+					<?php else : ?>
+					<input type="text" id="cf_api_token" name="cf_api_token" class="isp-input"
+						placeholder="<?php esc_attr_e( 'Paste your Cloudflare API token', 'insightistic' ); ?>" autocomplete="off" />
+					<?php endif; ?>
+					<p class="isp-hint isp-hint-security"> <?php esc_html_e( 'Encrypted with AES-256 before storage, exactly like every other credential in this plugin.', 'insightistic' ); ?></p>
+				</div>
+			</div>
+
+			<?php if ( $insightistic_cf_zone_id && $insightistic_cf_token_stored ) : ?>
+			<div class="isp-settings-card">
+				<div class="isp-test-card">
+					<h3><?php esc_html_e( 'Test Cloudflare Connection', 'insightistic' ); ?></h3>
+					<p><?php esc_html_e( 'Save your settings first, then test the connection.', 'insightistic' ); ?></p>
+					<button type="button" id="isp-test-cloudflare" class="isp-btn isp-btn-secondary">
+						<?php esc_html_e( 'Test Connection', 'insightistic' ); ?>
+					</button>
+					<div id="isp-test-cloudflare-result" style="margin-top:12px;"></div>
+				</div>
+			</div>
+			<?php endif; ?>
+
+		</div><!-- /#isp-tab-cloudflare -->
+
+		<!-- ================================================ TAB: DOCS -->
+		<div class="isp-tab-panel" id="isp-tab-guides" style="display:none;">
+
+			<div class="isp-settings-card">
+				<div class="isp-settings-card-header">
+					<h2>Documentation Links</h2>
+					<p class="isp-header-desc"> Check our guide links. These will help you to setup the plugin with a few steps.</p>
+				</div>
+				<div class="isp-field">
+					<label class="isp-label" > Video Tutorial URL </label>
+					<a href="https://www.youtube.com/@wordpressistic" target="_blank" class="isp-guide-link isp-guide-video">
+						Watch Tutorial
+					</a>
+				</div>
+				<div class="isp-field">
+					<label class="isp-label" > Documentation URL
+</label>
+					<a href="https://wordpressistic.com/insightistic" target="_blank" rel="noopener noreferrer" class="isp-guide-link isp-guide-docs">
+						Documentation
+					</a>
+				</div>
+			</div>
+
+		</div><!-- /#isp-tab-guides -->
+
+		<!-- ================================================ SAVE BUTTON -->
+		<div class="isp-form-actions">
+			<button type="submit" class="isp-btn isp-btn-primary">
+				<?php esc_html_e( 'Save Settings', 'insightistic' ); ?>
+			</button>
+		</div>
+
+	</form>
+
+	<div class="isp-footer">
+		<p>
+			<?php esc_html_e( 'Insightistic', 'insightistic' ); ?> v<?php echo esc_html( INSIGHTISTIC_VERSION ); ?> &bull;
+			<a href="https://wordpressistic.com" target="_blank" rel="noopener noreferrer">WordPressistic</a>
+		</p>
+	</div>
+
+</div><!-- /.isp-wrap -->
+

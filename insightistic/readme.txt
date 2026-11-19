@@ -1,59 +1,591 @@
 === Insightistic ===
-Contributors: wordpressistic
-Tags: woocommerce, analytics, reports, ai, license
-Requires at least: 6.2
-Tested up to: 6.7
+Contributors: developershuvo
+Tags: analytics, search console, pagespeed, ga4, woocommerce
+Requires at least: 5.6
+Tested up to: 7.1
 Requires PHP: 8.0
-Stable tag: 1.1.0
+Stable tag: 4.7.3
 License: GPLv2 or later
+License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
-AI-powered WooCommerce analytics for Insightistic — activate with your license key, no manual tokens.
+View GA4, Search Console, PageSpeed, Cloudflare, WooCommerce, and AI growth insights inside your WordPress dashboard. No account required.
 
 == Description ==
-Insightistic is the main plugin for the Insightistic SaaS. Activate it with the
-license key from your Insightistic dashboard (Dashboard → Licenses) and it
-takes care of the rest: it exchanges the key for per-site HMAC connector
-credentials, then syncs WooCommerce orders, products, customers and site
-health, and checks in daily to keep your plan's entitlements (AI insights,
-advanced reports, white-label, etc.) up to date. It only sends business data —
-never card data or passwords — and every sync request is HMAC-signed.
 
-**Prefer not to install a licensed plugin, or managing a client's site as an
-agency?** Use the lighter [Insightistic Connector](https://insightistic.com)
-plugin instead — it syncs the same WooCommerce data via a manually-issued
-connector token (Dashboard → Settings → Add a site) without any license
-activation.
+Insightistic brings your most important website metrics directly into WordPress. It gives business owners, agencies, marketers, publishers, and WooCommerce stores a clean analytics dashboard without constant tab-switching.
+
+Insightistic is not affiliated with or endorsed by Google or Cloudflare.
+
+Connect your Google Analytics 4 property and Google Search Console via a single service account (no OAuth pop-ups, no re-authentication). Add a PageSpeed API key for real-time Core Web Vitals scoring. AI insights are optional and off by default; they use the hosted Insightistic Cloud AI service, which needs a free Insightistic account.
+
+Everything in this plugin is free and unlocked, with no paid add-ons. Analytics, WooCommerce Intelligence, SEO and content modules, anomaly alerts, Cloudflare (with your own token), IndexNow, engagement tracking, the 404 monitor and email digests all work without an Insightistic account. A free account is only needed for the optional Cloud AI service, or if you choose to sync this site to the Insightistic web dashboard. Email digests are sent by WordPress (`wp_mail`) on your own site.
+
+= GA4 Overview =
+
+* 8 stat cards  Sessions, Users, Pageviews, Bounce Rate, Avg. Session Duration, New vs Returning, Revenue, Transactions  all with period-over-period comparison
+* Timeline chart: sessions and revenue over time
+* Traffic source donut chart
+* Top Countries, Top Pages, Top Channels  with share bars
+* Top Blog Posts  automatically filters GA4 data for /blog/, /post/, /news/ paths
+* Source/Medium attribution table with revenue %, revenue per session, and conversion rate
+
+= Google Search Console =
+
+* Clicks, Impressions, CTR, and Average Position at a glance
+* Top 10 queries and top 10 pages
+* Device breakdown (desktop / mobile / tablet)
+
+= PageSpeed Insights =
+
+* Animated score rings for mobile and desktop
+* Core Web Vitals grid: LCP, INP, CLS, FCP, TBT, Speed Index  each with a pass/fail badge
+* Test any URL on your site, not just the homepage
+
+= Engagement Tracking =
+
+* Optional lightweight frontend script (under 2 KB) that fires custom GA4 events
+* Tracks: outbound link clicks, scroll depth (25 / 50 / 75 / 100 %), file downloads, and element clicks
+* Zero PII collected  no cookies, no fingerprinting
+
+= Cloudflare Traffic Insights =
+
+* Zero configuration by default: connect your free Insightistic account (the same one used for AI Insights) and Traffic Insights turns on automatically — no Zone ID, no API token, nothing to paste
+* Prefer not to connect an account? An Advanced section in Settings → Cloudflare lets you paste your own read-only Cloudflare API token instead
+* Edge-level requests, cache hit rate, encrypted-traffic ratio, and threats blocked — data Google Analytics structurally cannot see (bots, ad-blockers, JS-disabled visitors, blocked scripts)
+* Requests-over-time and status-code charts, Top Countries and TLS version breakdowns
+* "Traffic Gap" callout: Cloudflare's edge pageviews vs GA4's client-side pageviews for the same period, with the likely causes for the delta
+* Security section: firewall actions and top attacking countries from your zone's existing WAF events
+* Optional "Get Traffic AI Insights" narrative (needs a free Insightistic account, same as every other AI Insights flow)
+* Never required for anything else — if neither path is set up, the tab simply doesn't appear
+
+= 404 & Broken Link Monitor =
+
+* Free, on by default, purely server-side  no script, no dependency on the engagement tracker
+* Records request path, distinct referring domains, hit count, and last-seen time for every 404 on your site
+* View the top offenders on the Dashboard Overview tab; clear the log any time
+* No IP address or user agent stored
+
+= AI Insights (on demand) =
+
+* Click "Get AI Insights" on the dashboard to analyse your GA4 and GSC data
+* Powered by Insightistic Cloud AI, a hosted service that needs a free Insightistic account (no card)
+* Off by default: nothing is sent until you tick the consent box in Settings > AI Insights and click "Get AI Insights" yourself
+* Free accounts include a limited monthly allowance of AI credits. Settings > AI Insights shows the credits remaining; when they run out, AI analysis pauses until the monthly reset and every dashboard keeps working
+* AI never runs automatically
+
+The plugin does not connect to third-party AI providers directly. Every feature in this plugin is free and fully unlocked: there are no paid add-ons, no locked features, and no account is needed for anything except the optional Cloud AI service.
+
+= Email Automations =
+
+* Send branded analytics digests to your team on a daily, weekly, or monthly schedule
+* Includes KPI cards, period-over-period changes, top channels, top pages, top content, and recommended next actions
+* Schedule by site timezone, choose weekly day and send time, and send a manual test digest before launch
+* Sent with WordPress mail (`wp_mail`) on this site. No account, no license, no remote mailer
+
+= Addon Intelligence =
+
+* Five free addons, every one unconditionally free to use: Email Automations, SEO Opportunity Finder, Anomaly Alerts, Content Performance Lab, and WooCommerce Intelligence for revenue, order, and product decisions
+* Addon reports use cached GA4/GSC data to avoid unnecessary API usage
+* System Status page checks credentials, cron, mail readiness, minified assets, tracker size, and WooCommerce availability
+* Export/import non-secret plugin settings for faster migration and support
+
+= Security =
+
+* Service account authentication  keys never expire, no OAuth callbacks
+* All API keys and credentials are encrypted with AES-256-CBC before being stored in your database, using your WordPress auth salt as the encryption key
+* Nonce-protected AJAX handlers; all inputs sanitised and escaped
+
+= Performance =
+
+* All analytics data is fetched via admin-only AJAX  zero impact on frontend page load
+* 15-minute transient caching minimises Google API quota usage
+* Minified JS and CSS served in production (source files served when SCRIPT_DEBUG is on)
+* Chart.js 4.6.1 bundled locally under the MIT License  no external CDN requests. Source: https://github.com/chartjs/Chart.js/tree/v4.6.1
 
 == Installation ==
-1. Install and activate the plugin.
-2. Copy your license key from the Insightistic dashboard (Dashboard → Licenses
-   — shown once right after signup, or via "Regenerate key").
-3. Go to WordPress Admin → Insightistic → License, paste the key, click Activate.
-4. Your site appears on the Licenses page automatically and the first sync
-   starts immediately. A daily incremental sync, a weekly full reconciliation
-   and daily license check-ins run via Action Scheduler after that.
+
+1. Upload the plugin folder to `/wp-content/plugins/`
+2. Activate the plugin through the **Plugins** menu in WordPress
+3. Go to **Insightistic  Settings** and open the **GA4** tab
+4. Paste your Google Service Account JSON key (or use the "Import from JSON" button)
+5. Enter your GA4 Property ID (numeric, e.g. 123456789)
+6. Click **Save Settings**, then open the dashboard
+
+**GA4 Service Account setup:**
+
+1. Go to [Google Cloud Console](https://console.cloud.google.com/)  IAM & Admin  Service Accounts
+2. Create a new service account and download its JSON key file
+3. In the plugin Settings  GA4 tab, click **Import from JSON** and paste the key file contents
+4. In your GA4 property, go to Admin  Property Access Management and add the service account email with the **Viewer** role
+5. Enter your GA4 Property ID and click Save
+
+**Search Console (optional):**
+Use the same service account email  add it as a Full User in Google Search Console  Settings  Users and permissions.
+
+**PageSpeed (optional):**
+Create an API key in Google Cloud Console with the PageSpeed Insights API enabled and enter it in Settings  PageSpeed.
+
+== Frequently Asked Questions ==
+
+= Does this slow down my site? =
+
+No. All data is fetched in the WordPress admin via AJAX. The optional engagement tracking script is under 2 KB and is only loaded when you enable it.
+
+= Why use a service account instead of OAuth? =
+
+Service account tokens never expire and require no browser callback. OAuth tokens typically expire every 7 days and need periodic re-authorisation, which can silently break dashboards on shared or managed hosting.
+
+= Are my API keys stored securely? =
+
+Yes. Every credential is encrypted with AES-256-CBC using your site's unique WordPress auth salt before being written to the database. Keys are never stored in plaintext.
+
+= Does this plugin require an Insightistic account? =
+
+No. GA4, Search Console, PageSpeed, Cloudflare (with your own token), WooCommerce Intelligence, SEO, anomaly alerts, content lab, engagement tracking, and email digests all work with no account. An account is optional and is only used for Insightistic Cloud AI and for syncing this site to the Insightistic dashboard.
+
+= Is Insightistic affiliated with Google? =
+
+No. "GA4", "Google Analytics", and "Search Console" are used only to describe the services you connect with your own credentials.
+
+= Does the AI analysis run automatically? =
+
+No. AI analysis is off by default, needs your explicit consent in Settings > AI Insights, and then only runs when you click "Get AI Insights".
+
+= Which AI service does the plugin use? =
+
+Only Insightistic Cloud AI (api.insightistic.com). The plugin does not store any AI provider key and does not call any AI provider directly; the Insightistic service chooses the model on its side. Each analysis uses AI credits from your Insightistic account; free accounts get a limited monthly allowance.
+
+= Do I need an Insightistic account? =
+
+No. GA4, Search Console, PageSpeed, Cloudflare, WooCommerce Intelligence, SEO, anomaly alerts, Content Lab, engagement tracking, IndexNow pings, the 404 monitor and email digests all work without an account. A free account is only needed if you choose to use the optional Insightistic Cloud AI service.
+
+= Is any feature locked or paid? =
+
+No. Everything in this plugin is free and unlocked. There are no paid add-ons inside the plugin.
+
+= What does the engagement tracking script collect? =
+
+When enabled, the script fires custom events to your GA4 property for: outbound link clicks, scroll depth milestones (25 / 50 / 75 / 100 %), file downloads (.pdf, .zip, etc.), and designated element clicks. No personally identifiable information is collected, no cookies are set, and no data is sent anywhere other than your own GA4 property.
+
+= Is GA4 the only analytics platform supported? =
+
+Yes. Insightistic is purpose-built for GA4. Universal Analytics was shut down by Google in July 2023.
+
+= What date range does Search Console cover? =
+
+Search Console data has a 23 day processing delay and covers up to 16 months of history. The plugin requests the last 90 days by default.
+
+= Will this work on multisite? =
+
+The plugin can be network-activated but each site requires its own credentials configured separately via its own Insightistic Settings page.
+
+== Screenshots ==
+
+1. Overview dashboard  8 stat cards, timeline chart, traffic source donut, top countries, pages, and channels
+2. Search Console tab  clicks, impressions, CTR, average position, top queries, top pages, and device breakdown
+3. PageSpeed tab  animated score rings for mobile and desktop, plus Core Web Vitals grid with pass/fail badges
+4. AI Insights panel  overall score, key findings, and prioritised recommendations
+5. Settings page  tabbed interface covering GA4, Search Console, PageSpeed, Engagement, AI, and Docs
+6. Addons page  five free modules: Email, SEO, Anomaly, Content Lab, and WooCommerce Intelligence
+
+== External services ==
+
+This plugin contacts external services only after you save credentials or explicitly activate an optional account. Nothing is sent on activation.
+
+**Google Analytics Data API and OAuth (when you save a service account)**
+
+* Used for: reading GA4 reports you ask the dashboard to load.
+* Data sent: your GA4 property ID and the report request (date range, dimensions, metrics). No visitor list is uploaded by the plugin.
+* When: admin dashboard loads and manual refreshes, and when you send an email digest that includes GA4 numbers.
+* Services: oauth2.googleapis.com (to mint a token from your service-account key) and analyticsdata.googleapis.com.
+* Terms: https://policies.google.com/terms
+* Privacy: https://policies.google.com/privacy
+
+**Google Search Console API (optional, same service account)**
+
+* Used for: clicks, impressions, queries, and pages.
+* Data sent: your Search Console property URL and the report request.
+* When: you open the Search Console tab or refresh it.
+* Service: www.googleapis.com (Search Console API, webmasters/v3; token from oauth2.googleapis.com).
+* Terms: https://policies.google.com/terms
+* Privacy: https://policies.google.com/privacy
+
+**PageSpeed Insights API (optional, your API key)**
+
+* Used for: Lighthouse scores and Core Web Vitals for a URL you choose.
+* Data sent: the URL you test, and your API key.
+* When: you run a speed test.
+* Service: www.googleapis.com (PageSpeed Insights API).
+* Terms: https://policies.google.com/terms
+* Privacy: https://policies.google.com/privacy
+
+**GA4 Measurement Protocol (optional, only if Engagement tracking is enabled)**
+
+* Used for: forwarding the events you opted into (outbound clicks, scroll depth, downloads, and similar) to your own GA4 property.
+* Data sent: event name and non-PII parameters, plus your Measurement ID. The API secret stays on the server.
+* When: a front-end event fires and the site posts it to admin-ajax, which forwards it.
+* Service: www.google-analytics.com
+* Terms: https://policies.google.com/terms
+* Privacy: https://policies.google.com/privacy
+
+**Cloudflare API (optional, only if you paste your own API token)**
+
+* Used for: edge traffic, cache, and firewall summaries for your zone.
+* Data sent: zone id and the read request. The token stays on this site.
+* When: you open Traffic Insights or refresh it.
+* Service: api.cloudflare.com
+* Terms: https://www.cloudflare.com/terms/
+* Privacy: https://www.cloudflare.com/privacypolicy/
+
+**404 & broken-link monitoring (local by default)**
+
+* Used for: identifying broken URLs on this site and showing their hit counts and external referring hosts in the local WordPress dashboard.
+* Data stored locally: the request path, first/last-seen timestamps, hit count, and distinct external referrer host names. No IP address or user agent is stored. The rolling log keeps up to 200 paths and can be cleared by an administrator.
+* Data sent: nothing is sent while the plugin is unconnected. After you activate an Insightistic account, the daily dashboard sync can send the local 404/broken-link summaries to Insightistic.
+* Service: local WordPress storage by default; api.insightistic.com only after account activation and sync.
+
+* Terms: https://www.insightistic.com/terms/
+* Privacy: https://www.insightistic.com/privacy-policy/
+
+**Insightistic Cloud AI (optional, off by default, only after you opt in)**
+
+* Used for: generating the AI Insights analysis shown on the dashboard (GA4/Search Console, WooCommerce, and Cloudflare analysis).
+* Data sent: the analytics summary already shown on the dashboard for the selected date range (for example sessions, top pages and sources, Search Console queries and clicks, WooCommerce revenue, product and refund totals, or Cloudflare traffic totals), the selected analysis focus, and the instructions for the analysis. The request is signed with this site's Insightistic connection key. No GA4/Google/Cloudflare credentials and no payment data are sent.
+* When: only when an administrator has (1) connected a free Insightistic account, (2) enabled AI Insights and ticked the consent box in Settings > AI Insights, and (3) clicks "Get AI Insights" or "Test Connection". The plugin then also asks Insightistic for the updated AI credit balance. Nothing is sent automatically.
+* Service: https://api.insightistic.com (endpoint /api/plugin/ai-insights; credit balance via /api/plugin/validate)
+* Terms: https://www.insightistic.com/terms/
+* Privacy: https://www.insightistic.com/privacy-policy/
+
+**IndexNow (optional, off by default)**
+
+* Used for: notifying search engines that support IndexNow (such as Bing and Yandex) when you publish or update public content.
+* Data sent: the public URLs of published or updated posts, your site's host name, and the IndexNow key. The plugin writes an IndexNow key file ({key}.txt) to the site root so search engines can verify ownership.
+* When: only after you turn on "Submit new and updated URLs to IndexNow" in Settings > Engagement, on publish/update. No account is needed; URLs go straight to https://api.indexnow.org/indexnow. If you connect an optional Insightistic account, submissions go through api.insightistic.com instead so they appear in your Insightistic dashboard.
+* Service: https://api.indexnow.org (and api.insightistic.com when connected)
+* Terms: https://www.indexnow.org/terms (and https://www.insightistic.com/terms/ when connected)
+* Privacy: https://www.bing.com/indexnow and https://www.insightistic.com/privacy-policy/
+
+**WooCommerce (local)**
+
+* WooCommerce Intelligence reads orders and products from this site's own database. Nothing is sent externally unless you connect an Insightistic account (see below).
+
+**Insightistic (optional, only after you connect a free account)**
+
+* Used for: Insightistic Cloud AI, and for syncing this site to your Insightistic dashboard (GA4/GSC summaries, Cloudflare summaries if configured, WooCommerce order and product summaries, 404/broken-link summaries, and IndexNow URL submission).
+* Data sent: site URL, plugin version, and the datasets above. Customer details are included only as part of the WooCommerce summary sync you start by activating the key. No payment card data is ever sent.
+* When: you click Activate, Refresh, or Sync now, once a day after that via WP-Cron, and, for Cloud AI, only when you have given consent and click Get AI Insights.
+* Service: api.insightistic.com and app.insightistic.com
+* Terms: https://www.insightistic.com/terms/
+* Privacy: https://www.insightistic.com/privacy-policy/
+
+Disconnecting on the Insightistic > Account screen stops all calls to Insightistic.
 
 == Changelog ==
+
+= 4.7.3 (2026-11-18) =
+
+* Fixed: the dedicated Speed Test now uses the same PageSpeed summary, score-ring, Core Web Vitals, opportunities, and diagnostics UI as the dashboard PageSpeed tab without duplicated sections.
+* Fixed: Search Console URL-prefix settings now fall back to an accessible matching domain property and preserve the `sc-domain:` format when saved.
+* Improved: Cloud AI requests use a longer, endpoint-scoped timeout so Search Console and PageSpeed analyses are not cut off by the 15-second connector timeout.
+* Changed: AI result actions now offer a print-ready Download Reports view that includes the loaded report data and Insightistic Cloud AI output and can be saved as PDF by the browser.
+* Improved: account credit display no longer treats legacy plan limits as a live balance; it only shows a balance when the connected API returns the structured credit payload.
+
+= 4.7.2 (2026-11-18) =
+
+* Fixed: Top Posts now supports root-level WordPress permalinks through a bounded GA4 fallback instead of showing an empty card.
+* Added: AI results render immediately below each dashboard toolbar, with metric-specific improvement keys under Overview and Search Console cards.
+* Added: on-demand AI analysis controls for Search Console and PageSpeed.
+* Changed: AI result branding now shows only Insightistic Cloud AI; model and skill-profile controls are no longer exposed in Settings.
+* Changed: the AI connection test validates the account connection without spending an AI credit.
+* Added: Account page AI credit summary and configurable extra-credit pack links (5,000 for $15, 20,000 for $49, and 50,000 for $99).
+* Improved: PageSpeed dashboard reports now include category scores, AI readiness, Core Web Vitals, opportunities, and diagnostics in a cleaner layout.
+* Improved: Addon cards use consistent sizing and aligned actions.
+* Fixed: structured Cloud AI, license, GSC, and Cloudflare errors no longer render as `[object Object]`; nested gateway messages are extracted safely.
+* Improved: Cloudflare connection tests reject a valid token for the wrong zone and explain the required site/zone match; GraphQL access-control failures now include an actionable permission message.
+* Fixed: Search Console domain properties using the `sc-domain:` format are encoded correctly, and permission failures now explain how to add the service account to the exact property.
+* Improved: Speed Test opportunity rows use a responsive, bounded layout for long titles/descriptions and savings values.
+
+= 4.7.1 (2026-11-02) =
+
+* Security: new encryption secrets use only per-site random bytes; if secure random generation fails, encryption is disabled instead of reusing WordPress salts.
+* Security: recursively sanitised decoded analytics payloads before they reach AI, Cloudflare, or WooCommerce analysis handlers.
+* Security: settings imports now accept only an explicit non-secret allowlist and apply type-based sanitisation before updating options.
+* Changed: renamed the frontend tracking global and client cookie to the `insightistic` namespace (`insightisticTracking` and `insightistic_cid`).
+* Changed: AI Insights now use only Insightistic Cloud AI. Direct connections to third-party AI providers and their settings were removed from the free plugin; stored provider keys are deleted on upgrade.
+* Added: an explicit consent setting for Insightistic Cloud AI (off by default) and a clear message when the account AI allowance is used up.
+* Changed: the IndexNow key file is written with the WordPress Filesystem API only, with explicit permissions on that file.
+* Updated: bundled Chart.js to 4.6.1.
+* Changed: IndexNow works without an account. Turn it on in Settings > Engagement to submit URLs directly to api.indexnow.org.
+* Changed: the plugin is completely free. Every module is unlocked with no account; the retired add-on grace window and all upgrade/pricing prompts were removed. A free Insightistic account is needed only for the optional Cloud AI service.
+* Docs: expanded the External services section.
+
+= 4.6.5 (2026-10-31) =
+
+* Corrected the plugin header metadata for WordPress.org automated scanning: the tested-up-to value remains in readme.txt only, and the display name now matches the insightistic text domain.
+* Rebuilt the submission package as the latest verified release.
+
+= 4.6.4 (2026-10-31) =
+
+* Added the bundled Chart.js source link and MIT license reference.
+* Documented local 404/broken-link data collection and optional connected-account sync in the External services section.
+* Added a WordPress Privacy Policy guide entry for the plugin's local and connected data handling.
+* Repaired the Settings documentation link and synchronized release metadata for the WordPress.org submission build.
+
+= 4.6.3 =
+
+* Fixed Plugin Check EscapeOutput errors in the email digest Search and PageSpeed cards. Metric values are escaped before output.
+
+= 4.6.2 =
+
+WordPress.org directory submission pass, using the same review lessons as Bookingistic.
+
+* Guidelines: email digests are sent with wp_mail() on this site and no longer require an Insightistic account. Bring-your-own AI keys (OpenAI, Gemini, OpenRouter, Groq, Claude) no longer require an account. An account is optional and is only used for Insightistic Cloud AI and dashboard sync.
+* Guidelines: removed the admin-wide "create an account" notice.
+* Readme: documented every external service, what is sent, and when. Added a non-affiliation note for Google and Cloudflare.
+* Fixed: License screen undefined variables left behind by the 4.6.1 prefix rename (credits and billing link warned under WP_DEBUG).
+* Hardening: numeric admin AJAX inputs use absint() instead of a raw intval() cast, matching the Plugin Check playground ruleset.
+* Readme contributor slug set to the WordPress.org account used for Bookingistic.
+
+= 4.6.1 (2026-10-25) =
+
+WordPress.org Plugin Check compliance pass — zero errors, zero warnings.
+
+* Hardening: every template and uninstall variable is now plugin-prefixed (insightistic_*), removing all 99 Plugin Check naming warnings.
+* Fixed: the Cloudflare setup guide no longer links to cloudflare.com directly (Plugin Check flags remote content offloading); the guide text carries the full navigation instead.
+* Fixed: translations now load automatically through WordPress.org hosting; the manual load_plugin_textdomain() call was removed.
+* Annotated: the bring-your-own-key AI endpoints (OpenAI, Gemini, OpenRouter, Groq, Anthropic) are intentional integrations and are documented inline for Plugin Check.
+
+= 4.6.0 (2026-10-01) =
+
+One license key, one connect — Cloudflare joins the connector sync.
+
+* New: the daily connector sync now includes Cloudflare edge analytics pulled with this site's own Zone ID + API token (Settings → Cloudflare), so the Insightistic app dashboard's edge page fills without any app-side Cloudflare connect. Traffic totals, cache ratios, geo, security/firewall events, and bot intelligence land in the same tables the platform's own nightly sync uses — one converged row per day, never duplicates.
+* Plan-gated Cloudflare datasets degrade gracefully: when the zone's plan does not expose firewall or bot analytics, the push still delivers the daily traffic rows and the app renders its "not available on this plan" states instead of erroring.
+* Security: legacy (< 3.3.0) encrypted credentials are now re-encrypted into the authenticated v1 format automatically the first time the plugin reads them after upgrading, instead of waiting for a settings re-save.
+* GA4, Search Console, PageSpeed, and Cloudflare keys all stay in the plugin settings. The license key remains the only Insightistic credential the site ever exchanges — no second Google or Cloudflare connect in the app.
+
+= 4.5.2 (2026-09-28) =
+
+* Improved the License page error handling so activation, refresh, and sync actions show the actual WordPress/API response instead of a generic server error.
+* Added JSON error extraction for admin AJAX failures, including expired sessions, API validation errors, and unexpected server responses.
+
+= 4.5.1 (2026-09-28) =
+
+* Fixed fresh-install AI settings to use the connected Insightistic Cloud AI provider by default; AI remains opt-in and is never run automatically.
+* Cloud AI requests use the hosted Insightistic AI gateway; model selection stays server-side.
+* Updated AI settings copy so the analysis focus is not presented as a specific Ollama/Hermes model route.
+* Preserved the existing Insightistic and WPistic license activation paths.
+
+= 4.4.3 (2026-09-20) =
+
+**New — IndexNow URL submission**
+
+* Published and updated posts are now submitted to the IndexNow pipeline through your connected Insightistic account (connector API, HMAC-signed like every other call), so new content reaches IndexNow-participating search engines faster — no extra configuration.
+* Strict eligibility gate before anything is sent: only public, indexable URLs are submitted. Drafts, pending/private/future posts, password-protected posts, posts marked noindex by Yoast SEO, Rank Math or All in One SEO, and attachments of non-public posts are always skipped.
+* Zero impact on the save request: submissions are batched in a background queue (deduped, capped) and flushed in chunks via Action Scheduler or a lightweight 15-minute cron — never synchronously while editing.
+* The IndexNow key is provisioned automatically on first use: fetched from the SaaS, served from yoursite.com/{key}.txt, and confirmed back. Transient failures are retried quietly and appear in the sync log on the License page.
+* Developers: disable per-site with the `insightistic_indexnow_enabled` filter.
+
+* Version bump 4.4.2 → 4.4.3.
+
+= 4.4.2 (2026-09-10) =
+
+Release integrity and compatibility hotfix.
+
+* Fixed the plugin header/runtime version mismatch left over from 4.4.1 (header still said 4.4.0 while the runtime constant said 4.4.1). Both now read 4.4.2.
+* Synchronized all release metadata: plugin header, INSIGHTISTIC_VERSION constant, readme.txt stable tag, README, translation template, release ZIP name, and the git tag all agree on 4.4.2.
+* Rebuilt the translation template (POT) from current source — it previously advertised "Insightistic 3.0.0". Removed the byte-order mark (BOM) from the POT and from admin.css.
+* Repaired CI: .github/workflows/php.yml contained Composer JSON instead of a GitHub Actions workflow. Restored a real lint/test/build workflow plus a tag-driven release workflow that builds the ZIP from the tagged commit.
+* Fixed the release ZIP structure: files now sit inside a single insightistic/ directory instead of at the archive root.
+* Cleaned the production package: source maps (admin.min.js.map) and the tracking.src.js debug file are no longer shipped. The tracker source was consolidated to tracking.js (loaded only in SCRIPT_DEBUG mode) and is built to tracking.min.js, matching the admin.js/admin.min.js pattern.
+* Restored the GPL-2.0-or-later LICENSE file to the distribution package.
+* Added automated GA4 regression tests covering both named-dateRange and legacy totals[] response shapes, plus edge cases (zero previous period, empty rows, missing metrics, malformed responses, API errors, division-by-zero, numeric strings, extra dimensions).
+* Added a release validation gate (`composer release-check`) that fails on any version mismatch, stale minified assets, bad ZIP structure, or missing required files.
+* Added fresh-install and upgrade release gates (4.4.0 → 4.4.2, 4.4.1 → 4.4.2) exercised against real WordPress environments.
+* Updated WordPress compatibility metadata after successful testing: tested up to WordPress 7.1 (fresh install, both upgrade paths, WooCommerce active/inactive, and multisite network activation all verified on WordPress 7.1 / PHP 8.2).
+
+= 4.4.1 (2026-09-09) =
+
+**Fixed — Dashboard KPI cards & email digests showed N/A**
+
+The GA4 Data API returns data differently when date ranges carry names (`current`/`previous`): rows come back keyed by a dateRange dimension instead of the `totals` array the parser expected. Result: overview KPIs (Sessions, Users, Pageviews, Revenue, Transactions, Bounce Rate) rendered as N/A everywhere — dashboard cards AND scheduled email digests — while channel/page tables silently mixed current + previous periods into duplicated rows.
+
+* Fixed `get_overview()` to parse both response shapes (rows-by-dateRange and legacy totals), restoring real numbers with true period-over-period changes.
+* Fixed `get_traffic_channels()`, `get_top_pages()`, `get_countries()` to filter rows to the current period and map previous-period values correctly (the old code read a `metricValues[3]` index that never existed, so change % was always wrong).
+* Verified live: Sessions +40.2% period-over-period now renders instead of N/A; duplicated "Organic Search / Direct" rows are gone.
+
+**New — Animated red → green score gauges**
+
+* All score gauges (PageSpeed Performance / SEO / Accessibility / Best Practices, AI Readiness, and dashboard PSI rings) now render an animated SVG ring that fills through a red → amber → green gradient as the score climbs, with counting numbers, pop-in animation and hover glow.
+* Accessibility: animations respect `prefers-reduced-motion`.
+
+**New — Addons page polish**
+
+* Addon cards get a gradient border glow on hover and a green enabled-state tint; toggles use a green→cyan gradient when on.
+
+**Housekeeping**
+
+* Version bump 4.4.0 → 4.4.1 (busts asset caches).
+
+= 4.4.0 =
+* Release: first public WordPressistic release package for Insightistic, keeping the current plugin version at 4.4.0 and preparing the plugin for clean public distribution.
+* Change: Cloudflare Traffic Insights no longer requires configuring anything separately. Connect your free Insightistic account (the same one used for AI Insights and email automation) and it turns on automatically — no Zone ID, no API token. The direct Zone ID/API token setup from 4.2.0-4.3.0 is now an opt-in "Advanced" section in Settings → Cloudflare for anyone who'd rather not connect an account; it still works exactly as before.
+* UI: the Traffic Insights dashboard tab is now fully hidden (not shown with a "Setup" badge) whenever neither path is available, instead of nagging users to configure it — this feature is never required for anything else in the plugin.
+* Dev: documents the new `/api/plugin/cloudflare-traffic` SaaS contract in docs/APP-CONNECT-WORKFLOW.md — both data paths (hosted and Advanced/BYO) normalize to the same payload shape, so the dashboard tab, Traffic Gap callout, security monitor, and AI narrative are unchanged regardless of which one is active.
+
+= 4.3.0 =
+* New: Cloudflare Traffic Insights is now a full dashboard tab, free for everyone, no Insightistic account required. Builds on the 4.2.0 credentials foundation with:
+  * A GraphQL data layer over Cloudflare's free-plan `httpRequests1dGroups` + `firewallEventsAdaptiveGroups` datasets (retry/backoff, 15-minute cache, same reliability pattern as GA4/GSC/Woo).
+  * A "Traffic Insights" tab: edge requests, cache hit rate, threats blocked, and encrypted-traffic stat cards; a requests-over-time + status-code chart pair; Top Countries and TLS Version Mix tables.
+  * A "Traffic Gap" callout comparing Cloudflare's edge-detected pageviews against GA4's client-side pageviews for the same period — the delta is bots/crawlers, ad-blockers, JS-disabled visitors, or a blocked GA4 script, i.e. real traffic Google Analytics alone never shows you.
+  * A Security section: firewall actions (block/challenge/log/etc.) and top attacking countries, built from the same firewall-event data.
+  * A "Get Traffic AI Insights" button, gated by the same free-account requirement as every other AI Insights flow — no new gate introduced.
+* Note: the GraphQL query was written against Cloudflare's publicly documented schema but has not been exercised against a live zone in the environment this was built in — see docs/APP-CONNECT-WORKFLOW.md §9 for the verification checklist. A field-name mismatch degrades gracefully to an error message rather than a fatal.
+
+= 4.2.0 =
+* New: Insightistic Cloud AI  a sixth AI provider alongside OpenAI, Gemini, OpenRouter, Groq and Anthropic Claude. No API key to paste: it runs on our self-hosted infrastructure (Ollama models for general analysis, plus a Hermes SEO skill agent for organic-growth-tuned insights) and is proxied through your already-connected free Insightistic account. Free to use with a fair-use limit per period; select the engine (Balanced / SEO Specialist) in Settings → AI Insights.
+* This is an additional engine inside the existing AI Insights flow, so it uses the same account gate already documented for AI Insights and email automation  no new gate, no change to what's free.
+* New: 404 & Broken Link Monitor  a free, on-by-default, purely server-side check (no script) that records which URLs on your site 404, how often, and which external domains are referring visitors to them. View and clear the log from the Dashboard Overview tab; toggle it off in Settings → Engagement.
+* UI: the AI Insights panel's score now renders as an animated ring gauge (reusing the same component as the Speed Test page) instead of a plain number, and shows which engine produced the result when using Insightistic Cloud AI.
+* New: Cloudflare Traffic Insights  Phase 0. A new Settings → Cloudflare tab stores a Zone ID and a read-only API token (encrypted, same as every other credential) and verifies the connection. Free for everyone, no account required. This lays the foundation for a deep, non-Google traffic dashboard (bot traffic, cache ratio, threats blocked, edge-level country data) landing in a follow-up release  see docs/APP-CONNECT-WORKFLOW.md for the full phased plan.
+
+= 4.1.0 =
+* Change: Insightistic is now fully free. WooCommerce Intelligence, SEO Opportunity Finder, Anomaly Alerts, and Content Lab no longer require a license or account — every module works immediately. A free Insightistic account (no card, free forever) is only needed for two flows: AI Insights and Email Automation delivery.
+* Fix: the Addons page no longer shows "[object Object]" when a locked add-on fails to enable — the account-required card now renders properly, both after a failed toggle and pre-rendered on page load.
+* Fix: the Settings page "How to Set Up" instructions no longer collapse into a single narrow column next to an empty box — each step's grid was receiving one more item than its column definition accounted for.
+* UI: Addons page redesigned — real icon glyphs instead of plain text, dynamic "Ready to use" / "Needs free account" status instead of a hardcoded Available filter, and clearer copy across the plugin.
+* New: connecting your free account now also syncs WooCommerce orders, products, customers, and site health to your Insightistic dashboard directly — no separate connector plugin needed. Daily automatic sync plus a "Sync now" button and last-synced timestamp on the License page. The standalone insightistic-connector plugin is still available for sites that don't run Insightistic itself (e.g. an agency dashboarding a client's store).
+
+= 4.0.0 =
+* New: Insightistic account connection. Paste one license key (Insightistic → License) to link this site to the Insightistic SaaS dashboard — automatic site registration, secure HMAC-signed communication, and cloud analytics. Basic analytics remain free forever.
+* New: SEO Opportunity Finder, Anomaly Alerts, Content Lab and Email Automations modules.
+* New: Speed Test page — full Lighthouse audit for mobile and desktop with all four category scores, Core Web Vitals + lab metrics (including TTFB), top opportunities with estimated savings, diagnostics, and a new AI Agent Readiness score that grades how well your page can be read and cited by AI assistants and answer engines.
+* New: step-by-step setup guides with official links embedded in the GA4, Search Console, PageSpeed and Engagement settings tabs.
+* New: engagement tracker now also records form submits, site searches, video plays and content-copy events (all proxied server-side; still under 3KB).
+* Reliability: license checks run once daily via WP-Cron with a 72-hour offline grace window — if the Insightistic API is unreachable the plugin keeps working from cached entitlements and never blocks wp-admin.
+* UI: animated connection and speed-test screens (respecting prefers-reduced-motion), animated score gauges and opportunity bars.
+
+= 3.3.0 =
+* Security: the GA4 Measurement Protocol api_secret is no longer exposed in front-end page source. Engagement events now post to a server-side collector (admin-ajax) that forwards them to Google with the secret kept on the server. The collector enforces a same-origin check, a per-IP rate limit, and an event allowlist.
+* Security: credentials now use authenticated encryption (AES-256-CBC + HMAC-SHA256 with HKDF-derived keys). Stored secrets are no longer keyed directly on the WordPress salts, so rotating the salts no longer makes them undecryptable. Define INSIGHTISTIC_ENCRYPTION_KEY in wp-config.php for an external key. Existing values are read transparently and re-encrypted once on upgrade.
+* Reliability: GA4 API calls now retry transient rate-limit/server errors with exponential backoff, handle Google quota errors gracefully (logged silently, friendly "temporarily unavailable" message), and a single failed report no longer aborts the whole dashboard.
+* AI: added a cost guardrail - an in-flight lock plus a short result cache prevent a double-click or rapid re-run from triggering duplicate AI calls. Commerce analysis no longer mutates a global option to pass its skill profile.
+* UX: restored the traffic-source icons (now Dashicons, encoding-proof) and made the attribution table revenue currency-aware (uses the WooCommerce store currency when available, filterable otherwise).
+* Housekeeping: admin-only options no longer autoload on the front end; uninstall now removes AI history, key-rotation timestamps, and the encryption secret. Bumped minimum PHP to 8.0 and "Tested up to" to 6.8.
+* Dev: added Composer (PHPCS / WordPress Coding Standards), an npm asset build pipeline, a standalone encryption test harness, and a GitHub Actions CI workflow.
+
+= 3.2.2 =
+* Fix: "every OpenRouter free model fails" - now correctly identified as the OpenRouter privacy gate.
+* OpenRouter requires accounts to explicitly opt in to "free model providers may train on my prompts" at openrouter.ai/settings/privacy. Without that opt-in, every :free model rejects requests with "no allowed providers" / "no endpoints found" / "data policy" errors regardless of which slug is chosen. The new error handler detects this exact pattern and points the user at the privacy URL.
+* Added an upfront info notice on the OpenRouter settings tab so users see the privacy-opt-in requirement BEFORE they hit the error (links to openrouter.ai/settings/privacy and openrouter.ai/models?max_price=0).
+* New wrong-model-type detector: if a user pastes a re-ranker (rerank), embedding (embed), TTS, or STT model slug into the custom model field, the error now says "This is not a chat-completion model" and suggests a working instruct/chat slug instead. Catches mistakes like pasting nvidia/llama-nemotron-rerank-vl-1b-v2:free or a -embed-3-large slug.
+
+= 3.2.1 =
+* Fix: OpenRouter endpoint errors when using free models
+* The old free-tier model dropdown listed slugs that OpenRouter has since deprecated (mistralai/mistral-7b-instruct:free, google/gemma-3-12b-it:free, meta-llama/llama-3.1-8b-instruct:free, qwen/qwen-2.5-7b-instruct:free, microsoft/phi-3-mini-128k-instruct:free, deepseek/deepseek-r1:free, and the default meta-llama/llama-3.3-8b-instruct:free which never existed as a free variant). Calls to these slugs returned 404 / "model not found" / "no endpoints found".
+* Replaced the dropdown with current free models verified on OpenRouter: meta-llama/llama-3.3-70b-instruct:free (new default), deepseek/deepseek-chat-v3-0324:free, deepseek/deepseek-r1-0528:free, google/gemma-2-9b-it:free, mistralai/mistral-small-3.2-24b-instruct:free, mistralai/mistral-small-3.1-24b-instruct:free, qwen/qwen3-14b:free, qwen/qwen3-8b:free, meta-llama/llama-3.2-3b-instruct:free, nvidia/nemotron-nano-9b-v2:free.
+* Migrated the default for fresh installs (insightistic_openrouter_model) to meta-llama/llama-3.3-70b-instruct:free.
+* Added a translate_openrouter_error() layer that converts generic OpenRouter API errors into actionable messages: model-not-found errors now say which slug failed and point at openrouter.ai/models?max_price=0; 401 errors say "verify the key"; 429 errors say "rate-limited"; insufficient-credit errors say "switch to a :free model or top up". The dashboard error UI shows the actionable text instead of the opaque upstream message.
+* Added an inline hint under the OpenRouter model dropdown linking to the current free-model catalogue.
+
+= 3.2.0 =
+* New: WooCommerce Intelligence - advanced commerce module
+* Adds a dedicated "Commerce" tab to the Insightistic dashboard (only shown when the WooCommerce Intelligence module is enabled and WooCommerce is active)
+* 8 KPI cards: Gross Revenue, Net Revenue, Orders, Average Order Value, Refund Rate, New Customers, Repeat Rate, Units Sold - all with period-over-period comparison
+* Revenue & Orders timeline (Chart.js dual-axis line chart)
+* Order Status donut (processing / completed / on-hold / refunded / etc.)
+* Tables: Top Products (revenue + units + SKU links to edit screen), Top Categories, Top Customers (LTV in period), Recent Orders (with status badge + edit links), Top Countries, Payment Methods, Coupons, Refund reasons, Low Stock
+* Currency-aware: all amounts use the store currency symbol from get_woocommerce_currency_symbol()
+* Cached via the same 15-minute transient layer used by GA4 / GSC; "Updated X min ago - Force refresh" badge supported
+* New AJAX endpoint insightistic_get_woo_data with the same nonce + force=1 contract as the other data layers
+* AI Insights for Commerce: dedicated "Get Commerce AI Insights" button that calls Insightistic_AI::analyze_commerce() with a commerce-tuned system prompt and a structured payload (top products, categories, AOV, refund rate, previous period); reuses the existing provider/model selection (OpenAI, Gemini, OpenRouter, Anthropic, Groq)
+* New AJAX endpoint insightistic_woo_ai_analyze
+* Added "commerce_expert" AI skill profile that biases the system prompt toward AOV, repeat-purchase, product-mix risk, and promotion strategy
+* Lazy-loaded: Commerce tab fetches data on first switch (same UX as Search Console and PageSpeed in 3.1.x)
+* Currency, low-stock thresholds, and category names are read from the live WC objects so multi-currency / multi-vendor stores show the right numbers
+
+= 3.1.1 =
+* Hotfix: stripped UTF-8 BOM from every PHP file. On servers without output_buffering, the BOM bytes leaked before the JSON response and corrupted every AJAX call, producing the generic "Something went wrong. Please try again." error on the Overview, Search Console, and PageSpeed panels.
+* Diagnostics: AJAX error messages now include the HTTP status and a snippet of the actual server response, so configuration errors, expired nonces, and PHP fatals are visible instead of being hidden behind a generic fallback.
+* Hardened: nonce expiry (admin-ajax.php "-1" body or HTTP 401/403) now renders an explicit "Your session expired - hard refresh the page" message that points to the real fix.
+* Hardened: dashboard, GSC, and PageSpeed AJAX calls now declare `dataType: 'json'`. jQuery error callback fires on non-JSON responses so the diagnostic kicks in instead of the success branch silently treating a string as `{success:false}`.
+* Hardened: settings template function `insightistic_format_rotated()` wrapped in `function_exists()` to remove a latent redeclare risk if the settings page is rendered twice in the same request.
+* Cleanup: removed the duplicate `i18n.adminEmail` localized key (already available at the top level).
+
+= 3.1.0 =
+* UX: Dashboard now shows skeleton placeholders during initial load instead of an infinite spinner
+* UX: Errors during GA4 / Search Console / PageSpeed loads render a Retry button + a direct link to Settings
+* UX: "Updated X min ago - Force refresh" badge added to every dashboard panel; force refresh bypasses the 15-minute cache
+* UX: Search Console and PageSpeed tabs auto-load on first switch when configured (was: required a manual Load Data click)
+* UX: Stat cards no longer disappear when a metric is missing - they show an em-dash placeholder so the grid no longer reflows
+* UX: Settings save now preserves the active tab through the page reload (was: always reset to GA4)
+* UX: Nonce expiry is now surfaced with a clear error message instead of a silent no-op
+* AI: AI Insights panel shows provider, model, and approximate per-run cost up front
+* AI: Added Copy, Re-run, and Save snapshot actions; the last successful insight is preserved on error
+* AI: Per-provider Change key / Clear key / Test Provider controls on the AI settings tab; "Rotated X days ago" badge per key
+* Email: New Preview Digest button on the Addons page (renders the live digest in a modal before sending)
+* Email: Send Test Digest now warns if the form is dirty so users do not accidentally send to the previously-saved address
+* Addons: Toggles now disable themselves while the AJAX call is in flight; failures show an inline error inside the card
+* System Status: Each failing check now links straight to its fix; added a Recompute button
+* A11y: Bumped low-contrast label colors to AA, added :focus-visible rings on tabs and stat cards, role="status" + screen-reader-text on skeletons
+* Build: admin.min.js + admin.min.css regenerated against the new sources
+
+= 3.0.0 =
+* Final testing release for multiple WordPress site types
+* Added: Branded customer user guide for GA4, Search Console, PageSpeed, AI Analysis, features, and add-ons
+* Improved: Release positioning for the full free addon experience
+* Improved: Version metadata for final launch testing
+
+= 2.2.0 =
+* Added: SEO Opportunity Finder free addon
+* Added: Anomaly Alerts free addon
+* Added: Content Performance Lab free addon
+* Added: WooCommerce Intelligence module with live WooCommerce order/product reporting when WooCommerce is active
+* Added: System Status page with release-readiness checks
+* Added: Non-secret settings export/import
+* Improved: Addons page now ships the launch lineup of 5 free modules
+* Improved: Addon reports use cached dashboard data to protect API quotas
+
+= 2.1.0 =
+* Added: Free Email Automations addon with branded growth digest emails
+* Added: Daily, weekly, and monthly email scheduling with site-timezone send time controls
+* Added: Manual test digest sending from the Addons page
+* Improved: Email digests now use the same full GA4 dashboard payload as the admin dashboard instead of only reading a basic cached snapshot
+* Improved: Addons page now positions Email Automations as a high-value free module
+* Improved: Production asset loading now prefers current minified files when available and falls back safely to source files when minified assets are stale
+
+= 2.0.0 =
+* Added: Google Search Console integration (clicks, impressions, CTR, position, queries, pages, device breakdown)
+* Added: PageSpeed Insights tab with animated SVG score rings and Core Web Vitals grid (LCP, INP, CLS, FCP, TBT, Speed Index)
+* Added: Optional lightweight engagement tracking script (under 2 KB) for outbound links, scroll depth, file downloads, element clicks
+* Added: 4 new GA4 stat cards  Pageviews, Avg. Session Duration, Bounce Rate, New vs Returning
+* Added: Traffic Channel Report card (Organic, Direct, Social, Referral, Email, Paid Search)
+* Added: Top Posts card  filters GA4 for blog/post/news URL paths
+* Added: Addons showcase page with category filter tabs
+* Added: Tabbed dashboard (Overview / Search Console / PageSpeed)
+* Added: 6-tab Settings page (GA4, Search Console, PageSpeed, Engagement, AI Insights, Docs)
+* Added: Shared JWT authentication helper  one service account powers both GA4 and Search Console
+* Improved: Responsive layout across all screen sizes
+* Improved: Top Pages card now shows bounce rate and average time on page
+* Security: All API credentials encrypted with AES-256-CBC  no plaintext storage
+* Security: PageSpeed API key now encrypted at rest (migrates any legacy plaintext value on first save)
+* Performance: Chart.js bundled locally  no external CDN dependency
+* Performance: Minified JS and CSS served in production with SCRIPT_DEBUG fallback to source files
+
 = 1.1.0 =
-* Incremental daily sync: only orders/products modified since the last
-  checkpoint are sent (per-entity cursors that advance only after a page is
-  confirmed received). The full historical sync now runs as a weekly
-  reconciliation instead of daily.
-* Realtime updates: order and product changes (create/update/status/refund/
-  stock) are batched and pushed about a minute after they happen.
-* Retry with backoff (1m/5m/15m) for failed sync pages — a temporary API
-  outage no longer stalls or wedges the sync chain.
-* Every bulk payload now carries a sync_batch_id (uuid per run) so
-  server-side upserts are idempotent.
-* HPOS: declared compatibility with WooCommerce High-Performance Order
-  Storage (custom order tables).
-* NEW, opt-in (off by default): share published pages, posts and product
-  descriptions with the Insightistic AI Knowledge Base. Password-protected,
-  private and draft content is never sent; add the `_insightistic_exclude`
-  post meta to exclude individual posts. Deletions are propagated.
-* Manual resync by date range: optionally limit a manual sync to orders
-  created between two dates (License screen).
+* Added: AI Insights panel  OpenAI, Gemini, OpenRouter (free models), Anthropic Claude
+* Added: Source/Medium attribution table with revenue attribution
+* Added: Traffic donut chart by source
+* Added: 15-minute transient caching to minimise API quota usage
+* Added: AES-256 encryption for all stored credentials
 
 = 1.0.0 =
-* Initial release: license-key activation (spec §4), HMAC connector sync
-  (orders/products/customers/site-health), daily license validation.
+* Initial release  GA4 sessions, users, revenue, Top Countries, Top Pages, time-series chart
+
+== Upgrade Notice ==
+
+= 4.7.2 =
+AI results now appear beside the dashboard actions and KPI cards. Top Posts supports root-level permalinks, PageSpeed has richer details, and the Account page contains the AI credit view.
+
+= 2.0.0 =
+Major feature release. Adds Search Console, PageSpeed, Engagement Tracking, and 6 new dashboard cards. No breaking changes  existing GA4 credentials and settings are preserved automatically.

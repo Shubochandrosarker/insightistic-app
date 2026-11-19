@@ -27,6 +27,7 @@
 
 ## VPS deployment state
 
+- **Verified live:** Release 040d750103139b2aeb56b48c3db69532207b8996 fixed peer certificate capture for new uptime monitors. The reviewer workspace was activated with its intended Tier 5 admin override. The user signed in and operated the recorder while the production walkthrough covered Uptime, Reports, PageSpeed, JOLLY, AI Insights, Site Audit, Usage, Lifetime Billing, and Licenses. The Stripe portal segment and saved recording review remain pending. [Reviewer recording work log](work-log/2026-11-19/appsumo-reviewer-production-recording.md).
 - **Verified live:** Release 0a4c85959688081c1bb34f3de18e0d3045019c76 updates all five AppSumo tiers, applies the report and team allowances, and enables Executive insights on Tiers 4 and 5. Public catalogs returned revised values on both production hosts. The earlier Tier 3 licenses retain their existing features. The AppSumo offer edits are saved in the reviewer draft, and the revised public WordPress template is pending deployment. [Pricing and listing work log](work-log/2026-11-19/appsumo-pricing-and-listing.md).
 - **Prepared:** [AppSumo recording script](../docs/APPSUMO-REVIEW-RECORDING-SCRIPT.md) for review items 1–8 and the written answers to items 9–11. The reviewer recordings and submission remain pending.
 

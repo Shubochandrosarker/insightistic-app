@@ -278,12 +278,14 @@ class CopilotController extends Controller
                 // Citations: ONLY from the retrieval set the server built.
                 // citation_refs from the model filter which retrieved items
                 // are shown; unknown refs are dropped, never invented.
-                $refs = collect($result['answer_json']['citation_refs'] ?? [])
-                    ->filter(fn ($r) => is_string($r))->values();
+                $reportedRefs = $result['answer_json']['citation_refs'] ?? null;
+                $refs = is_array($reportedRefs)
+                    ? array_fill_keys(array_filter($reportedRefs, 'is_string'), true)
+                    : null;
                 $citations = [];
                 foreach ($context['knowledge_hits'] as $i => $hit) {
                     $refId = 'K' . ($i + 1);
-                    if ($refs->isNotEmpty() && ! $refs->contains($refId)) {
+                    if ($refs !== null && ! isset($refs[$refId])) {
                         continue;
                     }
                     $citations[] = AiCitation::create([
@@ -298,22 +300,26 @@ class CopilotController extends Controller
                         'last_indexed_at'     => $hit['chunk']->source?->last_indexed_at,
                     ]);
                 }
-                foreach ($context['evidence'] as $type => $bundle) {
-                    foreach (array_slice($bundle['evidence'], 0, 4) as $ev) {
-                        $citations[] = AiCitation::create([
-                            'ai_message_id' => $assistantMessage->id,
-                            'source_type'   => (string) ($ev['source'] ?? $type),
-                            'title'         => (string) ($ev['label'] ?? $type),
-                            'snippet'       => (string) ($ev['value'] ?? ''),
-                            'url'           => $ev['url'] ?? null,
-                            'data_date'     => null,
-                            'last_indexed_at' => null,
-                        ]);
-                    }
+                $analyticsSources = $context['analytics_sources'];
+                $citedSources = $refs === null ? $analyticsSources : array_intersect_key($analyticsSources, $refs);
+                foreach (array_slice($citedSources, 0, 12) as $ev) {
+                    $evidenceDate = $ev['date_range'] ?? '';
+                    $citations[] = AiCitation::create([
+                        'ai_message_id' => $assistantMessage->id,
+                        'source_type'   => $ev['source'],
+                        'title'         => $ev['label'],
+                        'snippet'       => (string) $ev['value'],
+                        'url'           => $ev['url'] ?? null,
+                        'data_date'     => preg_match('/^\d{4}-\d{2}-\d{2}$/D', $evidenceDate) ? $evidenceDate : null,
+                        'last_indexed_at' => null,
+                    ]);
                 }
 
                 $answerJson = $result['answer_json'];
                 if (is_array($answerJson)) {
+                    if ($analyticsSources === [] && $context['knowledge_hits']->isEmpty()) {
+                        $answerJson['confidence'] = 'low';
+                    }
                     $answerJson['date_range'] = $range
                         ? ['from' => $range->dateFrom(), 'to' => $range->dateTo()]
                         : null;
@@ -343,7 +349,7 @@ class CopilotController extends Controller
 
                 $emit('citations', [
                     'citations' => collect($citations)->map(fn ($c) => $c->only([
-                        'id', 'source_type', 'title', 'url', 'snippet', 'score', 'last_indexed_at',
+                        'id', 'source_type', 'title', 'url', 'snippet', 'score', 'data_date', 'last_indexed_at',
                     ])),
                 ]);
                 $emit('run.completed', [

@@ -45,7 +45,7 @@ class CopilotContextBuilder
      *   knowledge_base_ids?: int[], ai_category?: ?string, agent_slug?: ?string,
      *   question: string
      * } $selection
-     * @return array{evidence: array, knowledge_hits: \Illuminate\Support\Collection, prompt_context: string}
+     * @return array{analytics_sources: array, knowledge_hits: \Illuminate\Support\Collection, prompt_context: string}
      */
     public function build(Organization $org, array $selection): array
     {
@@ -54,7 +54,7 @@ class CopilotContextBuilder
         $range = $selection['date_range'] ?? null;
 
         if ($site && $range) {
-            $types = ($selection['sources'] ?? []) ?: self::AUTO_SOURCES;
+            $types = $selection['sources'] ?? self::AUTO_SOURCES;
 
             foreach (array_values(array_unique(array_intersect($types, self::SOURCE_TYPES))) as $type) {
                 $bundle = $this->contexts->assemble($type, $site, $range);
@@ -93,36 +93,53 @@ class CopilotContextBuilder
             \App\Support\SafeLog::warning('Copilot shared-brain lookup failed', ['exception' => $e::class]);
         }
 
+        $analyticsSources = $this->analyticsSources($evidence);
+
         return [
-            'evidence'       => $evidence,
+            'analytics_sources' => $analyticsSources,
             'knowledge_hits' => $knowledgeHits,
             'shared_brain'   => $sharedBrain,
-            'prompt_context' => $this->renderPromptContext($evidence, $knowledgeHits, $range, $sharedBrain),
+            'prompt_context' => $this->renderPromptContext($evidence, $analyticsSources, $knowledgeHits, $range, $sharedBrain),
         ];
     }
 
-    private function renderPromptContext(array $evidence, $knowledgeHits, ?DateRange $range, array $sharedBrain = []): string
+    private function analyticsSources(array $evidence): array
+    {
+        $sources = [];
+        $seen = [];
+        foreach ($evidence as $type => $bundle) {
+            foreach (array_slice($bundle['evidence'], 0, 12) as $item) {
+                $item['source'] ??= $type;
+                // Executive may also contain the same audit and speed measurements.
+                $key = serialize([$item['source'], $item['label'], $item['value'], $item['date_range'] ?? null]);
+                if (isset($seen[$key])) {
+                    continue;
+                }
+                $seen[$key] = true;
+                $sources['A'.(count($sources) + 1)] = $item;
+            }
+        }
+
+        return $sources;
+    }
+
+    private function renderPromptContext(array $evidence, array $analyticsSources, $knowledgeHits, ?DateRange $range, array $sharedBrain = []): string
     {
         $parts = [];
 
         if ($evidence !== []) {
-            $metrics = [];
+            $metrics = array_map(fn (array $bundle) => $bundle['raw'], $evidence);
             $sourceLines = [];
-            $sourceNumber = 1;
-            foreach ($evidence as $type => $bundle) {
-                $metrics[$type] = $bundle['raw'];
-                foreach (array_slice($bundle['evidence'] ?? [], 0, 12) as $item) {
-                    $ref = 'A'.$sourceNumber++;
-                    $sourceLines[] = sprintf(
-                        '[%s] %s · %s: %s%s%s',
-                        $ref,
-                        strtoupper(str_replace('_', ' ', $type)),
-                        self::redactPii((string) ($item['label'] ?? 'Evidence')),
-                        self::redactPii((string) ($item['value'] ?? '')),
-                        ! empty($item['date_range']) ? ' ('.(string) $item['date_range'].')' : '',
-                        ! empty($item['url']) ? ' (URL: '.(string) $item['url'].')' : '',
-                    );
-                }
+            foreach ($analyticsSources as $ref => $item) {
+                $sourceLines[] = sprintf(
+                    '[%s] %s · %s: %s%s%s',
+                    $ref,
+                    strtoupper(str_replace('_', ' ', $item['source'])),
+                    self::redactPii((string) $item['label']),
+                    self::redactPii((string) $item['value']),
+                    ! empty($item['date_range']) ? ' ('.(string) $item['date_range'].')' : '',
+                    ! empty($item['url']) ? ' (URL: '.(string) $item['url'].')' : '',
+                );
             }
             $parts[] = "ANALYTICS DATA (authoritative, from Insightistic's own database"
                 . ($range ? ", {$range->dateFrom()} to {$range->dateTo()}" : '')

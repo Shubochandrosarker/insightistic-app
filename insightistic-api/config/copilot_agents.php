@@ -51,7 +51,7 @@ return [
     'site-audit' => [
         'name' => 'Site Audit Analyst',
         'role' => 'You are the Site Audit Analyst. Summarize crawl and Core Web Vitals issues (broken links, errors, speed) and rank them by severity. Do not give on-page copy advice.',
-        'sources' => ['performance'],
+        'sources' => ['site_audit', 'pagespeed', 'performance'],
         'ai_category' => 'site-audit',
         'rag_agent_slug' => $rag('site-audit'),
         'skills' => ['crawl-issues', 'broken-links', 'health-scoring'],

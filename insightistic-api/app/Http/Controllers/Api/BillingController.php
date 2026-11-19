@@ -82,7 +82,7 @@ class BillingController extends Controller
             'subscription' => $plainSubscription,
             'usage'        => [
                 'ai_insights' => ['used' => $this->usage->counter($org)->ai_insights_used, 'limit' => $this->usage->insightLimit($org)],
-                'jolly_messages' => ['used' => $this->usage->counter($org)->ai_messages_used, 'limit' => $this->usage->limit($org, 'monthly_ai_messages')],
+                'jolly_messages' => ['used' => (int) $this->usage->counter($org)->ai_messages_used, 'limit' => $this->usage->limit($org, 'monthly_ai_messages')],
                 'connected_sites' => $this->usage->connectedSiteUsage($org),
                 'reports'     => ['used' => $this->usage->counter($org)->reports_generated, 'limit' => $this->usage->reportLimit($org)],
             ] + $this->featureUsage($org),

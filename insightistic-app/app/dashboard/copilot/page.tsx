@@ -36,6 +36,7 @@ interface Citation {
   url?: string | null;
   snippet?: string | null;
   score?: number | null;
+  data_date?: string | null;
   last_indexed_at?: string | null;
 }
 
@@ -234,6 +235,7 @@ export default function CopilotPage() {
   const threadsApi = useApi<{ threads: Thread[] }>("/copilot/threads");
   const suggestionsApi = useApi<{ suggestions: string[] }>("/copilot/suggestions");
   const kbsApi = useApi<{ knowledge_bases: KnowledgeBase[] }>("/knowledge-bases");
+  const usageApi = useApi<{ usage?: { jolly_messages?: { used?: number; limit?: number } } }>("/billing/subscription");
 
   const threads = useMemo(() => threadsApi.data?.threads || [], [threadsApi.data]);
   const kbs = useMemo(() => (kbsApi.data?.knowledge_bases || []).filter((k) => k.status !== "archived"), [kbsApi.data]);
@@ -250,6 +252,12 @@ export default function CopilotPage() {
   const [streamError, setStreamError] = useState<string | null>(null);
   const [quotaMsg, setQuotaMsg] = useState<string | null>(null);
   const [remaining, setRemaining] = useState<number | null>(null);
+  const jollyUsage = usageApi.data?.usage?.jolly_messages;
+  const remainingMessages = remaining ?? (
+    typeof jollyUsage?.used === "number" && typeof jollyUsage.limit === "number"
+      ? Math.max(0, jollyUsage.limit - jollyUsage.used)
+      : null
+  );
   const abortRef = useRef<AbortController | null>(null);
 
   const [sourcesSel, setSourcesSel] = useState<string[]>([]);
@@ -610,8 +618,8 @@ export default function CopilotPage() {
       <PageHeader
         title="Agent JOLLY"
         subtitle="Ask questions about your analytics and your own knowledge bases — answers cite their sources."
-        right={remaining != null ? (
-          <span className="text-xs text-muted">{remaining} AI message{remaining === 1 ? "" : "s"} left this month</span>
+        right={remainingMessages != null ? (
+          <span className="text-xs text-muted">{remainingMessages} JOLLY message{remainingMessages === 1 ? "" : "s"} left this month</span>
         ) : undefined}
       />
 
@@ -888,7 +896,8 @@ export default function CopilotPage() {
                 <div>
                   <h3 className="text-sm font-semibold text-fg">{drawerCitation.title || "Source"}</h3>
                   <p className="text-xs text-muted capitalize">
-                    {drawerCitation.source_type || "source"}
+                    {drawerCitation.source_type === "pagespeed" ? "PageSpeed Insights" : drawerCitation.source_type?.replace(/_/g, " ") || "Source"}
+                    {drawerCitation.data_date && ` · ${drawerCitation.data_date.slice(0, 10)}`}
                     {drawerCitation.score != null && ` · score ${Number(drawerCitation.score).toFixed(2)}`}
                   </p>
                 </div>

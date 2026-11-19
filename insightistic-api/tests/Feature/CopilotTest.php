@@ -4,8 +4,11 @@ use App\Models\AiCitation;
 use App\Models\AiMessage;
 use App\Models\AiRun;
 use App\Models\AiThread;
+use App\Models\CrawlRun;
 use App\Models\KnowledgeChunk;
 use App\Models\KnowledgeSource;
+use App\Models\PerformanceRun;
+use App\Models\Site;
 use Illuminate\Support\Facades\Http;
 
 /**
@@ -127,6 +130,7 @@ ANSWER;
 
     expect($assistant->content)->toContain('WPistic gateway response.')
         ->and($assistant->answer_json['direct_answer'])->toBe('Connected')
+        ->and($assistant->answer_json['confidence'])->toBe('low')
         ->and($run->provider)->toBe('wpistic_gateway')
         ->and($run->model)->toBe('wpistic-gateway:z-ai/glm-5.3');
     expect($stream)->toContain('event: run.completed');
@@ -136,6 +140,67 @@ ANSWER;
         && $request->hasHeader('X-Wpistic-User', 'org-' . $org->id)
         && $request['model'] === 'glm-5.3'
     );
+});
+
+it('cites the actual crawl and both PageSpeed strategies in Auto', function () {
+    [$user, $org] = makeOrgUser('copilot-review-auto@example.com');
+    $org->forceFill(['allow_external_ai' => true])->save();
+    $site = Site::withoutGlobalScopes()->create([
+        'organization_id' => $org->id,
+        'name' => 'Audit test',
+        'domain' => 'audit.example.com',
+    ]);
+    CrawlRun::create([
+        'site_id' => $site->id,
+        'status' => 'completed',
+        'max_pages' => 1000,
+        'pages_discovered' => 486,
+        'pages_crawled' => 486,
+        'issues_found' => 804,
+        'completed_at' => now()->subDay(),
+    ]);
+    foreach (['mobile' => 98, 'desktop' => 99] as $strategy => $score) {
+        PerformanceRun::create([
+            'site_id' => $site->id,
+            'url' => 'https://audit.example.com',
+            'strategy' => $strategy,
+            'status' => 'complete',
+            'run_at' => now(),
+            'performance_score' => $score,
+        ]);
+    }
+
+    config()->set('insightistic.wpistic_gateway', [
+        'base_url' => 'https://ai.wpistic.com',
+        'chat_path' => '/compat/chat/completions',
+        'product_key' => 'test-product-key',
+        'product_id' => 'insightistic',
+        'model' => 'test',
+    ]);
+    $content = "### Crawl and device results\n\n486 pages, 804 findings, mobile 98 and desktop 99.\n\n"
+        . "```json\n{\"confidence\":\"high\",\"citation_refs\":[\"A1\",\"A3\",\"A5\",\"A6\",\"A404\"]}\n```";
+    Http::fake([
+        'https://ai.wpistic.com/compat/chat/completions' => Http::response([
+            'model' => 'test-model',
+            'choices' => [['message' => ['content' => $content]]],
+        ]),
+    ]);
+
+    $id = $this->actingAs($user)->postJson('/api/copilot/threads', ['site_id' => $site->id])
+        ->assertCreated()->json('thread.id');
+    $stream = $this->post("/api/copilot/threads/{$id}/messages", [
+        'content' => 'Show Site Audit and PageSpeed.',
+    ], ['Accept' => 'text/event-stream'])->assertOk()->streamedContent();
+    expect($stream)->toContain('event: run.completed', '### Crawl and device results')
+        ->not->toContain('A404');
+
+    $evidence = AiMessage::where('ai_thread_id', $id)->where('role', 'assistant')->firstOrFail()
+        ->citations()->orderBy('id')->get();
+    expect($evidence->pluck('title')->all())->toBe([
+        'Site Audit status', 'Findings reported by this crawl', 'Mobile Performance score', 'Desktop Performance score',
+    ])->and($evidence->pluck('snippet')->all())->toBe([
+        'Completed: 486 pages crawled, 486 discovered', '804', '98', '99',
+    ])->and($evidence->last()->url)->toBe('/dashboard/performance');
 });
 
 it('uses low reasoning and compatible free endpoints for Copilot', function () {

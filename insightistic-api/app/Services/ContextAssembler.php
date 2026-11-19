@@ -176,9 +176,9 @@ class ContextAssembler
                 ['label' => 'Best practices score', 'value' => $run->best_practices_score ?? 'Not available', 'source' => 'pagespeed', 'date_range' => $dateRange],
                 ['label' => 'SEO score', 'value' => $run->seo_score ?? 'Not available', 'source' => 'pagespeed', 'date_range' => $dateRange],
                 ['label' => 'AI readiness score (derived)', 'value' => $run->ai_readiness_score ?? 'Not available', 'source' => 'pagespeed', 'date_range' => $dateRange],
-                ['label' => 'LCP', 'value' => $run->lcp_ms . 'ms (' . $run->lcp_status . ')', 'source' => 'pagespeed', 'date_range' => $dateRange],
-                ['label' => 'INP', 'value' => $run->inp_ms . 'ms (' . $run->inp_status . ')', 'source' => 'pagespeed', 'date_range' => $dateRange],
-                ['label' => 'CLS', 'value' => $run->cls . ' (' . $run->cls_status . ')', 'source' => 'pagespeed', 'date_range' => $dateRange],
+                ['label' => 'LCP', 'value' => $run->lcp_ms === null ? 'Not available' : $run->lcp_ms . ' ms', 'source' => 'pagespeed', 'date_range' => $dateRange],
+                ['label' => 'INP', 'value' => $run->inp_ms === null ? 'Not available' : $run->inp_ms . ' ms', 'source' => 'pagespeed', 'date_range' => $dateRange],
+                ['label' => 'CLS', 'value' => $run->cls ?? 'Not available', 'source' => 'pagespeed', 'date_range' => $dateRange],
             ],
             'raw' => $run->only([
                 'performance_score', 'accessibility_score', 'best_practices_score',
@@ -209,29 +209,29 @@ class ContextAssembler
             return ['has_data' => false, 'evidence' => [], 'raw' => []];
         }
 
-        $evidence = [];
+        $scores = [];
+        $categories = [];
         foreach ($runs as $run) {
             $device = ucfirst((string) $run->strategy);
             $date = optional($run->run_at)->toDateString();
+            $source = ['source' => 'pagespeed', 'date_range' => $date, 'url' => '/dashboard/performance'];
+            $scores[] = $source + ['label' => "{$device} Performance score", 'value' => $run->performance_score];
             foreach ([
-                'Performance score' => $run->performance_score,
                 'Accessibility score' => $run->accessibility_score ?? 'Not available',
                 'Best practices score' => $run->best_practices_score ?? 'Not available',
                 'SEO score' => $run->seo_score ?? 'Not available',
                 'AI readiness score (derived)' => $run->ai_readiness_score ?? 'Not available',
             ] as $label => $value) {
-                $evidence[] = [
+                $categories[] = $source + [
                     'label' => "{$device} {$label}",
                     'value' => $value,
-                    'source' => 'pagespeed',
-                    'date_range' => $date,
                 ];
             }
         }
 
         return [
             'has_data' => true,
-            'evidence' => $evidence,
+            'evidence' => array_merge($scores, $categories),
             'raw' => [
                 'runs' => $runs->map(fn (PerformanceRun $run) => $run->only([
                     'url', 'strategy', 'run_at', 'performance_score',
@@ -266,17 +266,19 @@ class ContextAssembler
         $health = $pending ? null : $this->crawlHealth->forSite($site);
         $date = optional($run->completed_at ?: $run->created_at)->toDateString();
         $progress = sprintf(
-            '%s: %d/%d pages crawled, %d discovered',
+            '%s: %d pages crawled, %d discovered',
             ucfirst((string) $run->status),
             (int) $run->pages_crawled,
-            (int) $run->max_pages,
             (int) ($run->pages_discovered ?? 0),
         );
 
         $evidence = [
             ['label' => 'Site Audit status', 'value' => $progress, 'source' => 'site_audit', 'date_range' => $date, 'url' => '/dashboard/audit'],
-            ['label' => 'Audit issues', 'value' => $pending ? 'Processing' : (int) ($health['breakdown'] ? array_sum(array_column($health['breakdown'], 'open_issues')) : $run->issues_found), 'source' => 'site_audit', 'date_range' => $date],
+            ['label' => 'Current open audit issues', 'value' => $pending ? 'Processing' : $openIssues->count(), 'source' => 'site_audit', 'date_range' => $date],
         ];
+        if ($run->status === 'completed') {
+            $evidence[] = ['label' => 'Findings reported by this crawl', 'value' => (int) $run->issues_found, 'source' => 'site_audit', 'date_range' => $date];
+        }
         if ($health !== null) {
             $evidence[] = ['label' => 'Health score', 'value' => $health['score'], 'source' => 'site_audit', 'date_range' => $date];
         }

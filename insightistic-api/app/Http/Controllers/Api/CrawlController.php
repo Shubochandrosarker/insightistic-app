@@ -12,6 +12,7 @@ use App\Models\CrawlRun;
 use App\Models\Organization;
 use App\Models\Site;
 use App\Services\Crawler\ChangeDetection;
+use App\Services\Crawler\CrawlBudget;
 use App\Services\Crawler\CrawlHealthScore;
 use App\Services\UsageService;
 use Illuminate\Http\JsonResponse;
@@ -27,16 +28,8 @@ use Throwable;
  * how much of the plan's monthly page budget a run may consume, and the
  * read surfaces over runs/pages/links/issues once results exist.
  *
- * QUOTA DESIGN (crawl_pages_monthly): the budget is ORG-wide, not
- * per-site — the plan entitlement attaches to the organization, so a
- * Growth org with ten sites shares one 50k-page/month pool. There is no
- * usage_counters dimension for crawl pages, so "used" is derived from the
- * ledger that already exists: sum(max_pages) of every crawl_run the org
- * created this calendar month, any status (a failed run still burned
- * crawl capacity). requested + used > limit ⇒ 422 crawl_limit_reached.
- * max_pages is clamped, not rejected: a client asking for 1M pages gets
- * min(1000, plan limit), the same tolerant range handling as the
- * analytics surfaces' window params.
+ * Crawls share the workspace budget. In-flight reservations constrain new
+ * runs, and only processed URLs count as usage when a run settles.
  *
  * COORDINATION (workstream E1): App\Models\{CrawlRun,CrawlPage,CrawlLink,
  * CrawlIssue} and App\Jobs\CrawlSiteJob are created by the parallel
@@ -45,14 +38,11 @@ use Throwable;
  */
 class CrawlController extends Controller
 {
-    /** Hard ceiling on a single run, before the plan limit clamps further. */
-    private const MAX_PAGES_PER_RUN = 1000;
-
     /** The pagination page size every listing here shares. */
     private const PER_PAGE_DEFAULT = 50;
 
     /** GET /sites/{site}/crawl/run — queue a manual crawl (owner/admin). */
-    public function run(Request $request): JsonResponse
+    public function run(Request $request, CrawlBudget $budget): JsonResponse
     {
         $site = $this->site($request);
 
@@ -63,7 +53,7 @@ class CrawlController extends Controller
         // Lock the organization while reserving its org-wide page budget.
         // This also serializes same-site requests, so two rapid clicks cannot
         // both pass the pending/running check before either run is recorded.
-        $result = DB::transaction(function () use ($site, $validated) {
+        $result = DB::transaction(function () use ($site, $validated, $budget) {
             $org = Organization::query()
                 ->whereKey($site->organization_id)
                 ->lockForUpdate()
@@ -83,30 +73,16 @@ class CrawlController extends Controller
                 ], 409);
             }
 
-            $limit = app(UsageService::class)->limit($org, 'http_crawl_pages_monthly');
-            $maxPages = min(
-                (int) ($validated['max_pages'] ?? self::MAX_PAGES_PER_RUN),
-                self::MAX_PAGES_PER_RUN,
-                max($limit, 0),
-            );
+            $site->refresh();
+            $summary = $budget->summary($org, $site);
+            $maxPages = min($validated['max_pages'] ?? $summary['max_next_run'], $summary['max_next_run']);
 
-            if ($limit <= 0 || $maxPages < 1) {
+            if ($maxPages < 1) {
                 return response()->json([
-                    'code'    => 'crawl_limit_reached',
-                    'limit'   => $limit,
-                    'used'    => $this->monthlyUsed($site),
-                    'message' => 'Your plan includes no crawl pages. Upgrade to run crawls.',
-                ], 422);
-            }
-
-            $used = $this->monthlyUsed($site);
-            if ($used + $maxPages > $limit) {
-                return response()->json([
-                    'code'    => 'crawl_limit_reached',
-                    'limit'   => $limit,
-                    'used'    => $used,
-                    'message' => 'Monthly crawl page budget exhausted. Upgrade or wait for the next cycle.',
-                ], 422);
+                    'code' => 'crawl_limit_reached',
+                    'message' => 'No crawl pages are available under the project and workspace limits.',
+                    'budget' => $summary,
+                ] + $summary['workspace'], 422);
             }
 
             // Persist the queued run before publishing the job. Its ID and
@@ -162,8 +138,25 @@ class CrawlController extends Controller
         ]);
     }
 
+    /** PATCH /sites/{site}/crawl/settings — a project cap within the shared allowance. */
+    public function settings(Request $request, CrawlBudget $budget): JsonResponse
+    {
+        $site = $this->site($request);
+
+        return DB::transaction(function () use ($request, $site, $budget) {
+            $org = Organization::query()->whereKey($site->organization_id)->lockForUpdate()->firstOrFail();
+            $workspaceLimit = app(UsageService::class)->limit($org, 'http_crawl_pages_monthly');
+            $values = $request->validate([
+                'monthly_page_limit' => ['present', 'nullable', 'integer', 'min:0', "max:{$workspaceLimit}"],
+            ]);
+            $site->forceFill(['crawl_pages_monthly_limit' => $values['monthly_page_limit']])->save();
+
+            return response()->json(['budget' => $budget->summary($org, $site)]);
+        });
+    }
+
     /** GET /sites/{site}/crawl/runs — the 20 most recent runs. */
-    public function runs(Request $request): JsonResponse
+    public function runs(Request $request, CrawlBudget $budget): JsonResponse
     {
         $site = $this->site($request);
 
@@ -176,7 +169,11 @@ class CrawlController extends Controller
                 'issues_found', 'error_summary',
             ]);
 
-        return response()->json(['runs' => $runs]);
+        return response()->json([
+            'runs' => $runs,
+            'budget' => $budget->summary($site->organization, $site),
+            'can_manage' => in_array($request->user()->roleIn($site->organization), ['owner', 'admin'], true),
+        ]);
     }
 
     /**
@@ -232,7 +229,7 @@ class CrawlController extends Controller
             ->orderBy('id');
 
         [$page, $meta] = $this->paginate($query, $request, [
-            'id', 'run_id', 'url', 'status_code', 'indexable', 'title',
+            'id', 'run_id', 'url', 'status_code', 'content_type', 'indexable', 'title',
             'meta_description', 'word_count', 'h1_count', 'canonical_url', 'response_ms',
         ]);
 
@@ -391,20 +388,6 @@ class CrawlController extends Controller
         ]);
 
         return response()->json(['data' => $page] + $meta);
-    }
-
-    /**
-     * Org-wide crawl budget consumed this calendar month: every run's
-     * max_pages, regardless of outcome — a run that failed on page 3 still
-     * reserved (and mostly burned) its allowance.
-     */
-    private function monthlyUsed(Site $site): int
-    {
-        $siteIds = $site->organization->sites()->pluck('id');
-
-        return (int) CrawlRun::whereIn('site_id', $siteIds)
-            ->whereBetween('created_at', [now()->startOfMonth(), now()])
-            ->sum('max_pages');
     }
 
     /** ?run_id= or, by default, the site's most recent run. */

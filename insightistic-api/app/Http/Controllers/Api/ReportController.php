@@ -139,17 +139,20 @@ class ReportController extends Controller
      */
     public function downloadPdf(Request $request, int $report)
     {
-        return $this->streamReport($report, 'pdf_url', 'application/pdf');
+        return $this->streamReport($request, $report, 'pdf_url', 'application/pdf');
     }
 
     /** GET /reports/{report}/html — signed, unauthenticated. See downloadPdf(). */
     public function downloadHtml(Request $request, int $report)
     {
-        return $this->streamReport($report, 'html_url', 'text/html');
+        return $this->streamReport($request, $report, 'html_url', 'text/html; charset=UTF-8', $request->boolean('download'));
     }
 
-    private function streamReport(int $reportId, string $column, string $contentType)
+    private function streamReport(Request $request, int $reportId, string $column, string $contentType, bool $download = false)
     {
+        // Honor still-valid absolute links issued before the proxy-safe rollout.
+        abort_unless($request->hasValidSignature(false) || $request->hasValidSignature(), 403, 'Invalid signature.');
+
         // No tenant/auth context on a signed link — the signature itself is
         // the access control, so this deliberately bypasses the org scope.
         $row = ClientReport::withoutGlobalScope('organization')->find($reportId);
@@ -160,7 +163,16 @@ class ReportController extends Controller
             return response()->json(['message' => 'Report not found.'], 404);
         }
 
-        return Storage::disk($disk)->response($path, null, ['Content-Type' => $contentType]);
+        $headers = [
+            'Content-Type' => $contentType,
+            'Cache-Control' => 'private, no-store',
+            'Referrer-Policy' => 'no-referrer',
+            'X-Content-Type-Options' => 'nosniff',
+        ];
+
+        return $download
+            ? Storage::disk($disk)->download($path, 'insightistic-report-'.$reportId.'.html', $headers)
+            : Storage::disk($disk)->response($path, null, $headers);
     }
 
     /**

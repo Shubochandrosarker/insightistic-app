@@ -42,21 +42,21 @@ it('seeds all eight current account tiers with the approved commercial limits', 
 it('seeds the approved tracked-keyword caps and rank cadence for every tier', function () {
     $this->seed(PlanSeeder::class);
 
-    // Approved pricing grid (2026-11-11): keyword tracking is metered far
-    // below the old "capacity" numbers because every check is a paid SERP
-    // call; lifetime/free tiers also run weekly, not nightly.
+    // Preserve the published caps for historical Founding Angel plans and the five AppSumo tiers.
     $expected = [
         'free' => [3, 'weekly'],
         'starter' => [30, 'daily'],
         'growth' => [100, 'daily'],
         'agency' => [250, 'daily'],
         'agency_pro' => [600, 'daily'],
-        'angel_solo' => [20, 'weekly'],
-        'angel_studio' => [60, 'weekly'],
-        'angel_agency' => [150, 'weekly'],
-        'appsumo_solo' => [20, 'weekly'],
-        'appsumo_studio' => [40, 'weekly'],
-        'appsumo_agency' => [100, 'weekly'],
+        'angel_solo' => [150, 'weekly'],
+        'angel_studio' => [500, 'weekly'],
+        'angel_agency' => [1500, 'weekly'],
+        'appsumo_tier_1' => [10, 'weekly'],
+        'appsumo_tier_2' => [20, 'weekly'],
+        'appsumo_tier_3' => [40, 'weekly'],
+        'appsumo_tier_4' => [100, 'weekly'],
+        'appsumo_tier_5' => [250, 'weekly'],
     ];
 
     $catalog = array_merge(

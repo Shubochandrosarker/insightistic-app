@@ -58,14 +58,16 @@ class PerformanceController extends Controller
             ->with('issues')
             ->first();
 
-        if (! $run) {
-            return response()->json(['strategy' => $strategy, 'run' => null]);
-        }
+        $attempt = PerformanceRun::where('site_id', $site->id)
+            ->where('strategy', $strategy)
+            ->orderByDesc('id')
+            ->first(['id', 'status', 'run_at', 'performance_score']);
 
         return response()->json([
             'strategy' => $strategy,
             'run'      => $run,
-            'issues'   => $run->issues()->orderByDesc('savings_ms')->limit(10)->get(),
+            'issues'   => $run?->issues()->orderByDesc('savings_ms')->limit(10)->get() ?? [],
+            'latest_attempt' => $attempt,
         ]);
     }
 

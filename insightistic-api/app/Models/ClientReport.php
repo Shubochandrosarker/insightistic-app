@@ -24,7 +24,7 @@ class ClientReport extends Model
     // unopenable. ReportController::downloadPdf/downloadHtml verify the
     // signature and stream the file directly, so these links work regardless
     // of `APP_URL` drift or a missing `public/storage` symlink.
-    protected $appends = ['pdf_link', 'html_link'];
+    protected $appends = ['pdf_link', 'html_link', 'html_download_link'];
 
     protected function casts(): array
     {
@@ -50,8 +50,23 @@ class ClientReport extends Model
         return $this->html_url ? $this->signedLink('reports.download.html') : null;
     }
 
-    private function signedLink(string $routeName): string
+    public function getHtmlDownloadLinkAttribute(): ?string
     {
-        return URL::temporarySignedRoute($routeName, now()->addHour(), ['report' => $this->id]);
+        return $this->html_url ? $this->signedLink('reports.download.html', ['download' => 1]) : null;
+    }
+
+    private function signedLink(string $routeName, array $options = []): string
+    {
+        // Sign the route and query before adding the public origin. A proxy's
+        // host, scheme or internal port cannot affect the signature.
+        $configured = config(app()->isProduction() ? 'insightistic.app_url' : 'app.url');
+        $origin = parse_url((string) $configured);
+        $scheme = strtolower($origin['scheme'] ?? 'https');
+        $host = $origin['host'] ?? '';
+        $port = $origin['port'] ?? null;
+        $suffix = $port && ! in_array($port, [80, 443], true) ? ':'.$port : '';
+        $path = URL::temporarySignedRoute($routeName, now()->addHour(), ['report' => $this->id] + $options, absolute: false);
+
+        return $host !== '' ? $scheme.'://'.$host.$suffix.$path : $path;
     }
 }

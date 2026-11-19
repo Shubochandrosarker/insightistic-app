@@ -15,18 +15,31 @@
     $sevColor = $sev === 'high' ? '#dc2626' : ($sev === 'medium' ? '#d97706' : '#16a34a');
 @endphp
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
 <meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ $report['title'] }}</title>
 <style>
     * { font-family: DejaVu Sans, sans-serif; }
     body { color: #1f2733; font-size: 12px; margin: 0; }
     .wrap { padding: 28px 32px; }
     .header { border-bottom: 3px solid {{ $primary }}; padding-bottom: 14px; margin-bottom: 18px; }
     .header .brand { font-size: 18px; font-weight: bold; color: {{ $primary }}; }
-    .header .title { font-size: 15px; margin-top: 4px; }
-    .header .period { color: #6b7280; font-size: 11px; margin-top: 2px; }
-    .logo { max-height: 40px; }
+    .header .title { color: #17212f; font-size: 23px; line-height: 1.2; margin: 8px 0 4px; }
+    .header .period { color: #455264; font-size: 11px; margin-top: 2px; }
+    .logo { max-height: 40px; max-width: 190px; }
+    .header, .kpi tr, .ai { page-break-inside: avoid; }
+    @media screen {
+        body { background: #f0f3f7; }
+        .wrap { max-width: 890px; margin: 28px auto; background: white; border: 1px solid #dee4ea; border-radius: 14px; }
+    }
+    @media screen and (max-width: 600px) {
+        .wrap { margin: 0; padding: 22px 16px; border: 0; border-radius: 0; }
+        .kpi, .kpi tbody { display: block; }
+        .kpi tr { display: flex; flex-wrap: wrap; }
+        .kpi td { box-sizing: border-box; width: 50%; }
+    }
     h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .5px; color: #6b7280;
          border-bottom: 1px solid #e5e7eb; padding-bottom: 5px; margin: 22px 0 10px; }
     table { width: 100%; border-collapse: collapse; }
@@ -57,7 +70,7 @@
             <img src="{{ $brand['logo_url'] }}" class="logo" alt="logo">
         @endif
         <div class="brand">{{ $brand['name'] }}</div>
-        <div class="title">{{ $report['title'] }}</div>
+        <h1 class="title">{{ $report['title'] }}</h1>
         <div class="period">{{ $period['from'] }} → {{ $period['to'] }}</div>
     </div>
 

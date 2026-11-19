@@ -24,6 +24,7 @@ import { FileSearch } from "lucide-react";
 type CrawlPageRow = {
   url: string;
   status_code: number | null;
+  content_type: string | null;
   indexable: boolean;
   title: string | null;
   meta_description: string | null;
@@ -118,6 +119,7 @@ export default function AuditPagesPage() {
           </span>
         ),
     },
+    { key: "content_type", label: "Resource", render: (r) => <span className="block max-w-[11rem] truncate text-xs text-muted" title={r.content_type ?? undefined}>{r.content_type || "Unknown"}</span> },
     { key: "title", label: "Title", render: (r) => <span className="block max-w-[16rem] truncate text-sm" title={r.title ?? undefined}>{r.title || <span className="text-muted">—</span>}</span> },
     { key: "word_count", label: "Words", align: "right", render: (r) => num(r.word_count ?? undefined) },
     { key: "h1_count", label: "H1", align: "right", render: (r) => num(r.h1_count ?? undefined) },

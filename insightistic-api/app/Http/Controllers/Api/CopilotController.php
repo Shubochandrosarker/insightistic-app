@@ -152,7 +152,7 @@ class CopilotController extends Controller
             'from'               => ['nullable', 'date'],
             'to'                 => ['nullable', 'date'],
             'sources'            => ['nullable', 'array'],
-            'sources.*'          => [Rule::in(\App\Services\ContextAssembler::TYPES)],
+            'sources.*'          => [Rule::in(CopilotContextBuilder::SOURCE_TYPES)],
             'knowledge_base_ids' => ['nullable', 'array'],
             'knowledge_base_ids.*' => ['integer'],
             'ai_category'        => ['nullable', 'string', 'max:80'],
@@ -241,7 +241,7 @@ class CopilotController extends Controller
         $context = $this->contextBuilder->build($org, [
             'site'               => $site,
             'date_range'         => $range,
-            'sources'            => $data['sources'] ?? ['executive'],
+            'sources'            => $data['sources'] ?? null,
             'knowledge_base_ids' => $kbIds,
             'ai_category'       => $data['ai_category'] ?? null,
             'agent_slug'        => $data['agent_slug'] ?? null,
@@ -305,6 +305,7 @@ class CopilotController extends Controller
                             'source_type'   => (string) ($ev['source'] ?? $type),
                             'title'         => (string) ($ev['label'] ?? $type),
                             'snippet'       => (string) ($ev['value'] ?? ''),
+                            'url'           => $ev['url'] ?? null,
                             'data_date'     => null,
                             'last_indexed_at' => null,
                         ]);

@@ -54,6 +54,7 @@ class LicenseController extends Controller
 
         return response()->json([
             'licenses'      => $items,
+            'connected_sites' => app(\App\Services\UsageService::class)->connectedSiteUsage($org),
             'trial_ends_at' => $org->trial_ends_at?->toIso8601String(),
             'renewal_at'    => $org->subscription?->current_period_end?->toIso8601String(),
             'credits'       => $this->creditWallet->summary($org),

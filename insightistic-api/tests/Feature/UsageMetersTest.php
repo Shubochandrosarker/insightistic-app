@@ -18,8 +18,8 @@ it('reports org-wide tracked keyword, crawl page and AI prompt run meters on the
         'site_id' => $site->id, 'keyword' => 'paused', 'engine' => 'google', 'device' => 'desktop', 'active' => false,
         'config_hash' => RankKeyword::makeConfigHash('paused', 'google', null, 'en', 'desktop', null),
     ]);
-    CrawlRun::create(['site_id' => $site->id, 'status' => 'completed', 'trigger' => 'manual', 'max_pages' => 300]);
-    $old = CrawlRun::create(['site_id' => $site->id, 'status' => 'completed', 'trigger' => 'manual', 'max_pages' => 900]);
+    CrawlRun::create(['site_id' => $site->id, 'status' => 'completed', 'trigger' => 'manual', 'max_pages' => 5000, 'pages_crawled' => 300]);
+    $old = CrawlRun::create(['site_id' => $site->id, 'status' => 'completed', 'trigger' => 'manual', 'max_pages' => 900, 'pages_crawled' => 900]);
     $old->forceFill(['created_at' => now()->subMonthNoOverflow()->startOfMonth()])->save();
 
     $res = $this->withToken($token)->getJson('/api/billing/subscription')->assertOk();

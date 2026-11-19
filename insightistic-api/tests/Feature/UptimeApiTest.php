@@ -119,14 +119,14 @@ it('creates, updates and deletes the site single monitor with history cascade', 
     // Update — still exactly one monitor row.
     $this->actingAs($owner)
         ->postJson("/api/sites/{$site->id}/uptime/monitors", [
-            'url'              => 'https://status.example.com/health',
+            'url'              => 'https://93.184.216.34/health',
             'method'           => 'HEAD',
             'expected_status'  => 204,
             'interval_minutes' => 15,
             'active'           => false,
         ])
         ->assertOk()
-        ->assertJsonPath('monitor.url', 'https://status.example.com/health')
+        ->assertJsonPath('monitor.url', 'https://93.184.216.34/health')
         ->assertJsonPath('monitor.method', 'HEAD')
         ->assertJsonPath('monitor.expected_status', 204)
         ->assertJsonPath('monitor.interval_minutes', 15)
@@ -207,6 +207,7 @@ it('returns the full overview shape including ssl days and tone', function () {
         'url'              => 'https://watched.example.com/',
         'interval_minutes' => 5,
         'ssl_expires_at'   => Carbon::now()->addDays(30)->toDateString(),
+        'ssl_checked_at'   => now(),
     ]);
 
     // Two checks in the window (one up, one down) + one incident lifecycle.

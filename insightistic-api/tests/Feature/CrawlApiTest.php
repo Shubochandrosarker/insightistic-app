@@ -228,10 +228,9 @@ it('rejects a run when the monthly crawl budget is spent', function () {
     ]);
     $site = crawlSite($org);
 
-    // 300 (completed) + 250 (failed) = 550 burned this month: failed runs
-    // count too, they still reserved crawl capacity.
-    makeCrawlRun($site, ['status' => 'completed', 'max_pages' => 300]);
-    makeCrawlRun($site, ['status' => 'failed', 'max_pages' => 250]);
+    // Failed runs count the URLs they processed before failing.
+    makeCrawlRun($site, ['status' => 'completed', 'max_pages' => 500, 'pages_crawled' => 300]);
+    makeCrawlRun($site, ['status' => 'failed', 'max_pages' => 500, 'pages_crawled' => 250]);
 
     $this->actingAs($user)
         ->postJson("/api/sites/{$site->id}/crawl/run", ['max_pages' => 100])
@@ -253,7 +252,7 @@ it('counts the whole organization against the monthly budget, not just the site'
     $site = crawlSite($org, 'site-a.crawl.example.com');
     $sibling = crawlSite($org, 'site-b.crawl.example.com');
 
-    makeCrawlRun($sibling, ['status' => 'completed', 'max_pages' => 500]);
+    makeCrawlRun($sibling, ['status' => 'completed', 'max_pages' => 500, 'pages_crawled' => 500]);
 
     $this->actingAs($user)
         ->postJson("/api/sites/{$site->id}/crawl/run")
@@ -262,6 +261,30 @@ it('counts the whole organization against the monthly budget, not just the site'
         ->assertJsonPath('used', 500);
 
     Queue::assertNothingPushed();
+});
+
+it('shows actual pages, reserves in-flight capacity and enforces a saved project limit', function () {
+    Queue::fake();
+
+    [$owner, $org] = makeOrgUser('crawl-project-limit@example.com', ['crawl_pages_monthly' => 10000]);
+    $site = crawlSite($org, 'project-a.crawl.example.com');
+    $sibling = crawlSite($org, 'project-b.crawl.example.com');
+
+    makeCrawlRun($site, ['max_pages' => 5000, 'pages_crawled' => 486]);
+    makeCrawlRun($sibling, ['status' => 'running', 'max_pages' => 1000, 'pages_crawled' => 100]);
+
+    $this->actingAs($owner)
+        ->patchJson("/api/sites/{$site->id}/crawl/settings", ['monthly_page_limit' => 500])
+        ->assertOk()
+        ->assertJsonPath('budget.project.used', 486)
+        ->assertJsonPath('budget.project.remaining', 14)
+        ->assertJsonPath('budget.workspace.used', 586)
+        ->assertJsonPath('budget.workspace.reserved', 900)
+        ->assertJsonPath('budget.workspace.remaining', 8514);
+
+    $this->postJson("/api/sites/{$site->id}/crawl/run", ['max_pages' => 1000])
+        ->assertOk()
+        ->assertJsonPath('max_pages', 14);
 });
 
 it('409s while a crawl is pending or running and names the run', function () {

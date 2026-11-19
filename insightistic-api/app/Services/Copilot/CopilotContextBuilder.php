@@ -25,6 +25,14 @@ use App\Support\DateRange;
  */
 class CopilotContextBuilder
 {
+    public const SOURCE_TYPES = [
+        'executive', 'traffic', 'seo', 'performance', 'commerce',
+        'products', 'customers', 'content', 'alerts', 'report',
+        'site_audit', 'pagespeed',
+    ];
+
+    private const AUTO_SOURCES = ['site_audit', 'pagespeed', 'executive'];
+
     public function __construct(
         private ContextAssembler $contexts,
         private KnowledgeRetriever $retriever,
@@ -45,11 +53,10 @@ class CopilotContextBuilder
         $site = $selection['site'] ?? null;
         $range = $selection['date_range'] ?? null;
 
-        // Analytics evidence — only for context types the caller selected
-        // (default: executive summary bundle when a site is in scope).
         if ($site && $range) {
-            $types = $selection['sources'] ?? ['executive'];
-            foreach (array_intersect($types, ContextAssembler::TYPES) as $type) {
+            $types = ($selection['sources'] ?? []) ?: self::AUTO_SOURCES;
+
+            foreach (array_values(array_unique(array_intersect($types, self::SOURCE_TYPES))) as $type) {
                 $bundle = $this->contexts->assemble($type, $site, $range);
                 if ($bundle['has_data']) {
                     $evidence[$type] = $bundle;
@@ -71,7 +78,7 @@ class CopilotContextBuilder
             ],
         );
         } catch (\Throwable $e) {
-            $knowledgeHits = [];
+            $knowledgeHits = collect();
             \App\Support\SafeLog::warning('Copilot knowledge lookup failed', ['exception' => $e::class]);
         }
 
@@ -100,12 +107,31 @@ class CopilotContextBuilder
 
         if ($evidence !== []) {
             $metrics = [];
+            $sourceLines = [];
+            $sourceNumber = 1;
             foreach ($evidence as $type => $bundle) {
                 $metrics[$type] = $bundle['raw'];
+                foreach (array_slice($bundle['evidence'] ?? [], 0, 12) as $item) {
+                    $ref = 'A'.$sourceNumber++;
+                    $sourceLines[] = sprintf(
+                        '[%s] %s · %s: %s%s%s',
+                        $ref,
+                        strtoupper(str_replace('_', ' ', $type)),
+                        self::redactPii((string) ($item['label'] ?? 'Evidence')),
+                        self::redactPii((string) ($item['value'] ?? '')),
+                        ! empty($item['date_range']) ? ' ('.(string) $item['date_range'].')' : '',
+                        ! empty($item['url']) ? ' (URL: '.(string) $item['url'].')' : '',
+                    );
+                }
             }
             $parts[] = "ANALYTICS DATA (authoritative, from Insightistic's own database"
                 . ($range ? ", {$range->dateFrom()} to {$range->dateTo()}" : '')
-                . "):\n" . json_encode($metrics, JSON_UNESCAPED_SLASHES | JSON_PARTIAL_OUTPUT_ON_ERROR);
+                . "):\n"
+                . "SOURCE INDEX — cite these verified blocks as A1, A2, etc.:\n"
+                . implode("\n", $sourceLines)
+                . "\n<analytics_json>\n"
+                . json_encode($metrics, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_PARTIAL_OUTPUT_ON_ERROR)
+                . "\n</analytics_json>\nEND ANALYTICS DATA";
         }
 
         if ($knowledgeHits->isNotEmpty()) {

@@ -1,8 +1,8 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useDashboard } from "@/lib/dashboard";
 import { useApi } from "@/lib/useApi";
-import { apiPost } from "@/lib/api";
+import { apiGet, apiPost } from "@/lib/api";
 import { LineTrend } from "@/components/dashboard/Charts";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
@@ -12,12 +12,40 @@ import { ErrorState } from "@/components/dashboard/states";
 import { Spinner } from "@/components/ui/Spinner";
 import { Gauge } from "lucide-react";
 import { Button } from "@/components/ui/Button";
+import { isSafeHref } from "@/lib/format";
 
 const CWV_TONE: Record<string, "green" | "amber" | "red" | "slate"> = {
   good: "green",
   needs_improvement: "amber",
   poor: "red",
 };
+
+function OpportunityDescription({ text }: { text: string }) {
+  const parts = text.split(/(\[[^\]]+\]\(https?:\/\/[^)\s]+\))/g);
+
+  return (
+    <>
+      {parts.map((part, index) => {
+        const match = part.match(/^\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)$/);
+        if (!match || !isSafeHref(match[2])) {
+          return <span key={index}>{part}</span>;
+        }
+
+        return (
+          <a
+            key={index}
+            href={match[2]}
+            target="_blank"
+            rel="noreferrer"
+            className="text-brand underline underline-offset-2 hover:text-brand/80"
+          >
+            {match[1]}
+          </a>
+        );
+      })}
+    </>
+  );
+}
 
 function ScoreRing({ label, value }: { label: string; value: number | null }) {
   const tone = value == null ? "text-muted" : value >= 90 ? "text-good" : value >= 50 ? "text-warn" : "text-bad";
@@ -41,6 +69,7 @@ export default function PerformancePage() {
   // Runs are queued, not synchronous — Lighthouse takes far longer than a
   // request. The banner says so rather than pretending results are instant.
   const [running, setRunning] = useState(false);
+  const [activeTest, setActiveTest] = useState<{ endpoint: string; previousId: number | null } | null>(null);
   const [runNote, setRunNote] = useState<string | null>(null);
   const [runErr, setRunErr] = useState<string | null>(null);
 
@@ -51,13 +80,69 @@ export default function PerformancePage() {
     setRunErr(null);
     try {
       await apiPost(`${base}/run`, { strategy });
-      setRunNote("Test queued. Results usually appear within a minute — refresh to see them.");
+      setActiveTest({
+        endpoint: base + "/latest?strategy=" + strategy,
+        previousId: latest.data?.latest_attempt?.id ?? null,
+      });
+      setRunNote("PageSpeed test queued.");
     } catch (e: any) {
       setRunErr(e?.message || "Could not queue the test.");
     } finally {
       setRunning(false);
     }
   }
+
+  const reloadLatest = latest.reload;
+  const reloadHistory = history.reload;
+
+  useEffect(() => {
+    if (!activeTest) return;
+    const endpoint = base + "/latest?strategy=" + strategy;
+    if (activeTest.endpoint !== endpoint) {
+      setActiveTest(null);
+      setRunNote(null);
+      setRunErr(null);
+      return;
+    }
+
+    let cancelled = false;
+    let attempts = 0;
+    let timer: ReturnType<typeof setTimeout>;
+    async function check() {
+      try {
+        const status = await apiGet(endpoint);
+        if (cancelled) return;
+        const attempt = status.latest_attempt;
+        if (attempt && attempt.id !== activeTest?.previousId) {
+          if (attempt.status === "complete" && attempt.performance_score != null) {
+            setRunNote("PageSpeed test completed.");
+            setActiveTest(null);
+            reloadLatest();
+            reloadHistory();
+            return;
+          }
+          if (attempt.status === "failed" || attempt.status === "complete") {
+            setRunErr("The latest PageSpeed attempt returned no usable result. Previous results are still shown.");
+            setRunNote(null);
+            setActiveTest(null);
+            return;
+          }
+          setRunNote("PageSpeed test running.");
+        }
+      } catch {
+        // The queue keeps working through a transient status lookup failure.
+      }
+      if (cancelled) return;
+      if (++attempts >= 36) {
+        setRunNote("The test is still queued or running. Check back for its result.");
+        setActiveTest(null);
+        return;
+      }
+      timer = setTimeout(check, 5000);
+    }
+    timer = setTimeout(check, 3000);
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [activeTest, base, strategy, reloadLatest, reloadHistory]);
 
   if (!siteId)
     return (
@@ -68,7 +153,7 @@ export default function PerformancePage() {
       />
     );
 
-  if (latest.loading) return <Spinner />;
+  if (latest.loading && !latest.data) return <Spinner />;
 
   // A failed fetch is not the same as "never tested" — say so and offer a retry.
   // The header stays so the "Run test" action remains reachable.
@@ -80,7 +165,7 @@ export default function PerformancePage() {
           subtitle={`${site?.name || ""} · sourced from PageSpeed Insights / Lighthouse`}
           right={
             <div className="flex items-center gap-2">
-              <Button variant="ghost" disabled={running} onClick={runTest}>
+              <Button variant="ghost" disabled={running || activeTest !== null} onClick={runTest}>
                 {running ? "Queuing…" : "Run test"}
               </Button>
               <div className="flex gap-1 rounded-full bg-card2 p-1">
@@ -117,7 +202,7 @@ export default function PerformancePage() {
         subtitle={`${site?.name || ""} · sourced from PageSpeed Insights / Lighthouse`}
         right={
           <div className="flex items-center gap-2">
-            <Button variant="ghost" disabled={running} onClick={runTest}>
+            <Button variant="ghost" disabled={running || activeTest !== null} onClick={runTest}>
               {running ? "Queuing…" : "Run test"}
             </Button>
           <div className="flex gap-1 rounded-full bg-card2 p-1">
@@ -207,7 +292,11 @@ export default function PerformancePage() {
                   <div key={iss.id} className="flex items-center justify-between gap-3 border-b border-line py-2 last:border-0">
                     <div className="min-w-0">
                       <p className="truncate text-sm font-medium text-fg">{iss.title}</p>
-                      {iss.description && <p className="truncate text-xs text-muted">{iss.description}</p>}
+                      {iss.description && (
+                        <p className="truncate text-xs text-muted">
+                          <OpportunityDescription text={iss.description} />
+                        </p>
+                      )}
                     </div>
                     {iss.savings_ms != null && <span className="shrink-0 text-xs font-semibold text-muted">-{iss.savings_ms}ms</span>}
                   </div>

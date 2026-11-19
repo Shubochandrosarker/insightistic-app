@@ -421,6 +421,7 @@ Route::middleware(['auth:sanctum', 'tenant', 'restrict.impersonation'])->group(f
         Route::get('sites/{site}/crawl/changes', [\App\Http\Controllers\Api\CrawlController::class, 'changes']);
         Route::get('sites/{site}/crawl/health', [\App\Http\Controllers\Api\CrawlController::class, 'health']);
         Route::middleware('role:owner,admin')->group(function () {
+            Route::patch('sites/{site}/crawl/settings', [\App\Http\Controllers\Api\CrawlController::class, 'settings']);
             Route::post('sites/{site}/crawl/run', [\App\Http\Controllers\Api\CrawlController::class, 'run']);
             Route::post('sites/{site}/crawl/issues/{issue}/status', [\App\Http\Controllers\Api\CrawlController::class, 'issueStatus']);
         });
@@ -646,11 +647,9 @@ Route::middleware(['auth:sanctum', 'tenant', 'restrict.impersonation'])->group(f
 // html_link, which can't carry a Sanctum bearer token. Deliberately outside
 // the auth:sanctum group.
 Route::get('reports/{report}/pdf', [ReportController::class, 'downloadPdf'])
-    ->name('reports.download.pdf')
-    ->middleware('signed');
+    ->name('reports.download.pdf');
 Route::get('reports/{report}/html', [ReportController::class, 'downloadHtml'])
-    ->name('reports.download.html')
-    ->middleware('signed');
+    ->name('reports.download.html');
 
 // ---- Super Admin (platform owner; auth + super_admin, NO tenant scope) -----
 Route::prefix('admin')->middleware(['auth:sanctum', 'super_admin'])->group(function () {

@@ -11,6 +11,8 @@ use App\Domain\Billing\TrialService;
 use App\Http\Controllers\Controller;
 use App\Models\EntitlementGrant;
 use App\Models\Plan;
+use App\Models\PlanPrice;
+use App\Services\Crawler\CrawlBudget;
 use App\Services\LicenseService;
 use App\Services\LifecycleMailer;
 use App\Services\StripeService;
@@ -35,7 +37,7 @@ class BillingController extends Controller
     ) {}
 
     /** Current subscription + plan + this month's usage. */
-    public function subscription()
+    public function subscription(Request $request)
     {
         $org = $this->tenancy->organization()->load(['plan', 'subscription', 'currentUsage']);
         $resolved = $this->entitlements->resolve($org);
@@ -44,7 +46,20 @@ class BillingController extends Controller
             $effectivePlan = Plan::find($resolved['plan']['id']);
         }
 
+        $lifetime = $this->lifetimeEntitlement($org, $effectivePlan, $resolved['source']);
+        $plainSubscription = $this->subscriptionPayload($org);
+        $stripeSub = $org->subscription;
+        $stripePlan = ! $lifetime && $stripeSub?->stripe_subscription_id && $this->providerFor($org) === 'stripe';
+        $stripePrice = $stripePlan && $stripeSub->provider_price_id
+            ? PlanPrice::where('provider', 'stripe')->where('provider_price_id', $stripeSub->provider_price_id)
+                ->first(['amount_minor', 'currency', 'billing_interval'])
+            : null;
+
         return response()->json([
+            'lifetime_grant' => $lifetime,
+            'stripe_subscription' => (bool) $stripePlan,
+            'stripe_price' => $stripePrice,
+            'stripe_portal_available' => $stripePlan && $request->user()->roleIn($org) === 'owner',
             'organization' => $org->only(['id', 'name', 'status', 'trial_ends_at', 'trial_started_at', 'trial_plan_slug']),
             'trial'        => app(TrialService::class)->eligibility($org),
             'refund_policy' => [
@@ -57,16 +72,19 @@ class BillingController extends Controller
             ],
             'plan'         => $effectivePlan ? array_merge($effectivePlan->toArray(), [
                 'effective_source' => $resolved['source'], 'effective_status' => $resolved['status'],
+                'billing_model' => $lifetime ? 'lifetime' : ($stripeSub?->stripe_subscription_id ? 'subscription' : null),
                 'features' => $resolved['features'], 'limits' => $resolved['limits'],
             ]) : ['slug' => $resolved['plan']['slug'], 'name' => $resolved['plan']['name'], 'limits' => $resolved['limits'], 'features' => $resolved['features']],
             // Additive extension (roadmap 23-STRIPE-TO-PADDLE-MIGRATION): the
             // provider-neutral columns ride along on the serialized model —
             // null for legacy Stripe rows — and `lifetime_grant` reports an
             // active one-time Paddle purchase. No existing key removed.
-            'subscription' => $this->subscriptionPayload($org),
+            'subscription' => $plainSubscription,
             'usage'        => [
-                'ai_insights' => ['used' => $org->currentUsage->ai_insights_used ?? 0, 'limit' => $resolved['limits']['standard_ai_requests_monthly'] ?? $effectivePlan?->ai_insight_limit],
-                'reports'     => ['used' => $org->currentUsage->reports_generated ?? 0, 'limit' => $resolved['limits']['client_ready_reports_monthly'] ?? $effectivePlan?->report_limit],
+                'ai_insights' => ['used' => $this->usage->counter($org)->ai_insights_used, 'limit' => $this->usage->insightLimit($org)],
+                'jolly_messages' => ['used' => $this->usage->counter($org)->ai_messages_used, 'limit' => $this->usage->limit($org, 'monthly_ai_messages')],
+                'connected_sites' => $this->usage->connectedSiteUsage($org),
+                'reports'     => ['used' => $this->usage->counter($org)->reports_generated, 'limit' => $this->usage->reportLimit($org)],
             ] + $this->featureUsage($org),
             'credits' => $this->creditWallet->summary($org),
         ]);
@@ -75,8 +93,7 @@ class BillingController extends Controller
     /**
      * Org-wide meters for the per-feature plan dimensions, derived from the
      * same ledgers each feature's quota gate counts: active tracked keywords,
-     * crawl pages reserved this calendar month (sum of max_pages of every run,
-     * any status), and AI visibility prompt runs this month.
+     * crawl pages processed this calendar month, and AI visibility prompt runs this month.
      *
      * @return array<string, array{used: int, limit: int}>
      */
@@ -91,10 +108,7 @@ class BillingController extends Controller
                 'used'  => (int) \Illuminate\Support\Facades\DB::table('rank_keywords')->whereIn('site_id', $siteIds)->where('active', true)->count(),
                 'limit' => $usage->limit($org, 'tracked_keywords'),
             ],
-            'crawl_pages' => [
-                'used'  => (int) \Illuminate\Support\Facades\DB::table('crawl_runs')->whereIn('site_id', $siteIds)->where('created_at', '>=', $monthStart)->sum('max_pages'),
-                'limit' => $usage->limit($org, 'http_crawl_pages_monthly'),
-            ],
+            'crawl_pages' => app(CrawlBudget::class)->summary($org)['workspace'],
             'ai_prompt_runs' => [
                 'used'  => (int) \Illuminate\Support\Facades\DB::table('ai_visibility_runs')->whereIn('site_id', $siteIds)->where('created_at', '>=', $monthStart)->count(),
                 'limit' => $usage->limit($org, 'ai_prompt_runs_monthly'),
@@ -177,6 +191,15 @@ class BillingController extends Controller
     public function checkout(Request $request, StripeBillingService $stripeBilling)
     {
         $org = $this->tenancy->organization();
+        $resolved = $this->entitlements->resolve($org);
+        $plan = Plan::find($resolved['plan']['id']);
+        if ($this->lifetimeEntitlement($org, $plan, $resolved['source'])) {
+            return response()->json([
+                'message' => 'Your workspace already has lifetime access.',
+                'code' => 'lifetime_entitlement_active',
+            ], 422);
+        }
+
 
         $data = $request->validate([
             'plan'     => ['required', 'string', 'exists:plans,slug'],
@@ -443,6 +466,22 @@ class BillingController extends Controller
             'organization' => $org->only(['id', 'status', 'trial_ends_at', 'trial_plan_slug']),
             'credits' => $this->creditWallet->summary($org),
         ]);
+    }
+
+    private function lifetimeEntitlement($org, ?Plan $plan, string $source): ?array
+    {
+        $slug = $plan?->slug;
+        if ($plan && (str_starts_with($slug, 'appsumo_') || $source === 'lifetime'
+            || ($plan->limits_json['billing_model'] ?? null) === 'lifetime')) {
+            return [
+                'active' => true,
+                'plan_slug' => $slug,
+                'name' => $plan->name,
+                'provider' => str_starts_with($slug, 'appsumo_') ? 'appsumo' : 'founding_angel',
+            ];
+        }
+
+        return $this->subscriptionPayload($org)['lifetime_grant'] ?? null;
     }
 
     /** Subscription JSON: full model (provider-neutral columns included) + lifetime_grant. */

@@ -19,6 +19,7 @@ const CRAWL_BASE = 'https://crawl.example.com';
 
 function crawlSiteFor(Organization $org): Site
 {
+    $org->plan->update(['limits_json' => ['http_crawl_pages_monthly' => 10000]]);
     return Site::withoutGlobalScope('organization')->create([
         'organization_id' => $org->id,
         'name' => 'Crawl Co',

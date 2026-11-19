@@ -11,6 +11,14 @@ use App\Models\UsageCounter;
  */
 class UsageService
 {
+    public function connectedSiteUsage(Organization $org): array
+    {
+        return [
+            'used' => $org->sites()->withoutGlobalScope('organization')->count(),
+            'limit' => max(1, $this->limit($org, 'connected_websites')),
+        ];
+    }
+
     public function insightLimit(Organization $org): int
     {
         return (int) ($this->resolved($org)['limits']['standard_ai_requests_monthly'] ?? $org->plan?->ai_insight_limit ?? 0);

@@ -5,8 +5,8 @@ import { num } from "@/lib/format";
 
 /**
  * Plan + usage card pinned to the bottom of the sidebar. Best-effort: the
- * billing endpoint is owner/admin-only, so non-privileged users just get the
- * upgrade CTA without usage numbers.
+ * billing endpoint is owner/admin-only, so non-privileged users just get a
+ * link to Usage without displaying unavailable numbers.
  */
 export function PlanCard() {
   const { data } = useApi<any>("/billing/subscription");
@@ -25,21 +25,21 @@ export function PlanCard() {
       {ratio != null ? (
         <>
           <div className="mt-2 text-xs text-muted">
-            {num(used)} / {num(limit)} AI insights used
+            {num(used)} / {num(limit)} standard AI requests used
           </div>
           <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-black/10 dark:bg-white/10">
             <div className="h-full rounded-full bg-brand" style={{ width: `${ratio}%` }} />
           </div>
         </>
       ) : (
-        <div className="mt-2 text-xs text-muted">Manage your subscription and usage.</div>
+        <div className="mt-2 text-xs text-muted">View your plan and usage.</div>
       )}
 
       <Link
-        href="/dashboard/billing"
+        href="/dashboard/usage"
         className="mt-3 block rounded-xl bg-brand py-2 text-center text-xs font-semibold text-white hover:bg-brand2"
       >
-        Upgrade plan
+        View usage
       </Link>
     </div>
   );

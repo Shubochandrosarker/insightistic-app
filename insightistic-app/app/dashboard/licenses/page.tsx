@@ -129,12 +129,12 @@ function OneTimeKeyCard({ rawKey, onDismiss }: { rawKey: string; onDismiss: () =
   );
 }
 
-function ActivationMeter({ used, limit }: { used: number; limit: number }) {
+function ActivationMeter({ label, used, limit }: { label: string; used: number; limit: number }) {
   const pct = limit ? Math.min(100, Math.round((used / limit) * 100)) : 0;
   return (
     <div>
       <div className="mb-1.5 flex items-center justify-between text-sm">
-        <span className="text-muted">Connected websites</span>
+        <span className="text-muted">{label}</span>
         <span className="font-semibold text-fg">{used} of {limit}</span>
       </div>
       <div className="h-2 overflow-hidden rounded-full bg-black/10 dark:bg-white/10">
@@ -158,6 +158,7 @@ const CONNECT_STEPS = [
 export default function LicensesPage() {
   const { data, loading, reload } = useApi<{
     licenses: LicenseRow[];
+    connected_sites?: { used: number; limit: number };
     trial_ends_at: string | null;
     renewal_at: string | null;
     credits?: CreditSummary;
@@ -283,7 +284,8 @@ export default function LicensesPage() {
 
             {/* Usage + entitlements */}
             <Card title="Plan usage" subtitle="What this license unlocks right now.">
-              <ActivationMeter used={license.activations_used} limit={license.activation_limit} />
+              {data?.connected_sites && <ActivationMeter label="Workspace websites" {...data.connected_sites} />}
+                <ActivationMeter label="WordPress plugin activations" used={license.activations_used} limit={license.activation_limit} />
               <div className="mt-4 flex flex-wrap gap-1.5">
                 {license.features.map((f) => (
                   <Badge key={f} tone="green" className="capitalize">

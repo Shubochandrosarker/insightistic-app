@@ -16,7 +16,7 @@ class CrawlPage extends Model
     public $timestamps = false;
 
     protected $fillable = [
-        'run_id', 'site_id', 'url_hash', 'url', 'status_code', 'redirect_to',
+        'run_id', 'site_id', 'url_hash', 'url', 'status_code', 'content_type', 'redirect_to',
         'indexable', 'robots_noindex', 'canonical_url', 'title', 'meta_description',
         'h1_count', 'word_count', 'content_hash', 'schema_types_json',
         'response_ms', 'size_bytes', 'created_at',

@@ -103,6 +103,7 @@ class CrawlRunExecutor
             $sitemapUrls = $this->sitemaps->discover($baseUrl, $robots->sitemapUrls(), self::USER_AGENT);
 
             $pending = $this->seedFrontier($run, [$baseUrl.'/', ...$sitemapUrls]);
+            $this->syncProgress($run);
 
             for ($i = 0; $i < min(self::INITIAL_CHAINS, $pending); $i++) {
                 CrawlUrlJob::dispatch($run->id);
@@ -155,6 +156,7 @@ class CrawlRunExecutor
 
         if ($run->config('respect_robots', true) && ! $robots->isAllowed($path.($query !== null ? '?'.$query : ''))) {
             $this->finishFrontierRow($row->id, CrawlFrontier::STATUS_SKIPPED, 'robots_disallowed');
+            $this->syncProgress($run);
 
             return $this->nextStep($run);
         }
@@ -173,7 +175,8 @@ class CrawlRunExecutor
             ])
                 ->timeout(10)
                 // Observe redirects instead of following them: the redirect
-                // itself is recorded data (crawl_pages.redirect_to).
+                // itself is recorded data (crawl_pages.redirect_to), and the
+                // destination is added to the same-host frontier explicitly.
                 ->withOptions(['allow_redirects' => false])
                 ->get($row->url);
 
@@ -186,6 +189,7 @@ class CrawlRunExecutor
         }
 
         CrawlRun::query()->where('id', $run->id)->increment('pages_crawled');
+        $this->syncProgress($run);
 
         return $this->nextStep($run);
     }
@@ -339,10 +343,24 @@ class CrawlRunExecutor
     {
         $status = $response->status();
         $body = (string) $response->body();
-        $contentType = (string) $response->header('Content-Type');
+        $contentType = trim((string) $response->header('Content-Type'));
         $location = $response->header('Location');
 
-        $isHtml = $status >= 200 && $status < 300 && str_contains(strtolower($contentType), 'text/html');
+        $isHtml = $status >= 200 && $status < 300 && preg_match(
+            '/(?:text\/html|application\/xhtml\+xml)/i',
+            $contentType,
+        ) === 1;
+
+        // Some sites omit Content-Type on a normal HTML document. Only use a
+        // conservative body sniff when the header is absent; an explicit
+        // text/plain, XML, image, PDF, etc. must never receive HTML SEO rules.
+        if ($status >= 200 && $status < 300 && $contentType === '') {
+            $isHtml = preg_match('/<html\b|<!doctype\s+html/i', $body) === 1;
+        }
+
+        $storedContentType = $contentType !== ''
+            ? mb_substr($contentType, 0, 160)
+            : ($isHtml ? 'text/html' : 'application/octet-stream');
 
         $page = CrawlPage::query()->firstOrCreate(
             ['run_id' => $run->id, 'url_hash' => $row->url_hash],
@@ -350,6 +368,7 @@ class CrawlRunExecutor
                 'site_id' => $run->site_id,
                 'url' => $row->url,
                 'status_code' => $status,
+                'content_type' => $storedContentType,
                 'redirect_to' => $this->absoluteRedirectTarget($row->url, $status, $location),
                 'response_ms' => $responseMs,
                 'size_bytes' => strlen($body),
@@ -470,6 +489,8 @@ class CrawlRunExecutor
         foreach (array_chunk(array_values($discovered), 500) as $chunk) {
             DB::table('crawl_frontier')->insertOrIgnore($chunk); // unique(run, url_hash) guards races
         }
+
+        $this->syncProgress($run);
     }
 
     /** Homepage + sitemap URLs, deduplicated, capped at the page budget. */
@@ -506,7 +527,20 @@ class CrawlRunExecutor
             DB::table('crawl_frontier')->insertOrIgnore($chunk);
         }
 
+        $this->syncProgress($run);
+
         return $this->frontierCount($run, CrawlFrontier::STATUS_PENDING);
+    }
+
+    /** Publish discovery progress while a run is still pending/running. */
+    private function syncProgress(CrawlRun $run): void
+    {
+        CrawlRun::query()
+            ->whereKey($run->id)
+            ->whereIn('status', ['pending', 'running'])
+            ->update([
+                'pages_discovered' => $this->frontierTotal($run),
+            ]);
     }
 
     private function finishFrontierRow(int $rowId, string $status, ?string $error = null): void

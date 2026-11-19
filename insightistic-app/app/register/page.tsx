@@ -36,7 +36,7 @@ export default function Register() {
   useEffect(() => {
     if (!loading && user) {
       const nextPlan = new URLSearchParams(window.location.search).get("plan");
-      router.replace(nextPlan ? `/dashboard/billing?plan=${encodeURIComponent(nextPlan)}` : (user.is_super_admin ? "/admin" : "/dashboard"));
+      router.replace(nextPlan ? `/dashboard/subscribe?plan=${encodeURIComponent(nextPlan)}` : (user.is_super_admin ? "/admin" : "/dashboard"));
     }
   }, [user, loading, router]);
 
@@ -69,7 +69,7 @@ export default function Register() {
       if (!plan || plan === "free") {
         router.push("/dashboard/licenses");
       } else {
-        router.push(`/dashboard/billing?plan=${plan}&interval=${interval}`);
+        router.push(`/dashboard/subscribe?plan=${plan}&interval=${interval}`);
       }
     } catch (e: any) {
       setErr(e.message || "Sign up failed");

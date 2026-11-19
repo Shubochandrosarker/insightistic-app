@@ -3,6 +3,8 @@
 namespace App\Services;
 
 use App\Models\Alert;
+use App\Models\CrawlIssue;
+use App\Models\CrawlRun;
 use App\Models\EngagementDaily;
 use App\Models\PerformanceRun;
 use App\Models\SeoDaily;
@@ -11,6 +13,7 @@ use App\Models\Site;
 use App\Models\TrafficDaily;
 use App\Models\TrafficDimensionSnapshot;
 use App\Support\DateRange;
+use App\Services\Crawler\CrawlHealthScore;
 
 /**
  * Assembles authorized, server-side evidence for contextual AI insights
@@ -32,9 +35,13 @@ class ContextAssembler
     public const TYPES = [
         'executive', 'traffic', 'seo', 'performance', 'commerce',
         'products', 'customers', 'content', 'alerts', 'report',
+        'site_audit', 'pagespeed',
     ];
 
-    public function __construct(private MetricsAssembler $commerce) {}
+    public function __construct(
+        private MetricsAssembler $commerce,
+        private CrawlHealthScore $crawlHealth,
+    ) {}
 
     public function assemble(string $type, Site $site, DateRange $range, ?string $focus = null): array
     {
@@ -42,6 +49,8 @@ class ContextAssembler
             'traffic'     => $this->traffic($site, $range),
             'seo'         => $this->seo($site, $range),
             'performance' => $this->performance($site, $focus),
+            'pagespeed'   => $this->pagespeed($site),
+            'site_audit'  => $this->siteAudit($site),
             'commerce'    => $this->commerceCtx($site, $range),
             'products'    => $this->products($site, $range),
             'customers'   => $this->customers($site),
@@ -163,11 +172,145 @@ class ContextAssembler
             'has_data' => true,
             'evidence' => [
                 ['label' => 'Performance score', 'value' => $run->performance_score, 'source' => 'pagespeed', 'date_range' => $dateRange],
+                ['label' => 'Accessibility score', 'value' => $run->accessibility_score ?? 'Not available', 'source' => 'pagespeed', 'date_range' => $dateRange],
+                ['label' => 'Best practices score', 'value' => $run->best_practices_score ?? 'Not available', 'source' => 'pagespeed', 'date_range' => $dateRange],
+                ['label' => 'SEO score', 'value' => $run->seo_score ?? 'Not available', 'source' => 'pagespeed', 'date_range' => $dateRange],
+                ['label' => 'AI readiness score (derived)', 'value' => $run->ai_readiness_score ?? 'Not available', 'source' => 'pagespeed', 'date_range' => $dateRange],
                 ['label' => 'LCP', 'value' => $run->lcp_ms . 'ms (' . $run->lcp_status . ')', 'source' => 'pagespeed', 'date_range' => $dateRange],
                 ['label' => 'INP', 'value' => $run->inp_ms . 'ms (' . $run->inp_status . ')', 'source' => 'pagespeed', 'date_range' => $dateRange],
                 ['label' => 'CLS', 'value' => $run->cls . ' (' . $run->cls_status . ')', 'source' => 'pagespeed', 'date_range' => $dateRange],
             ],
-            'raw' => $run->only(['performance_score', 'accessibility_score', 'lcp_ms', 'lcp_status', 'inp_ms', 'inp_status', 'cls', 'cls_status', 'strategy']),
+            'raw' => $run->only([
+                'performance_score', 'accessibility_score', 'best_practices_score',
+                'seo_score', 'ai_readiness_score', 'lcp_ms', 'lcp_status',
+                'inp_ms', 'inp_status', 'cls', 'cls_status', 'strategy', 'run_at',
+            ]),
+        ];
+    }
+
+    /** Latest completed PageSpeed evidence for both device strategies. */
+    private function pagespeed(Site $site): array
+    {
+        $runs = collect();
+        foreach (['mobile', 'desktop'] as $strategy) {
+            $run = PerformanceRun::where('site_id', $site->id)
+                ->where('strategy', $strategy)
+                ->where('status', 'complete')
+                ->whereNotNull('performance_score')
+                ->orderByDesc('run_at')
+                ->first();
+
+            if ($run) {
+                $runs->push($run);
+            }
+        }
+
+        if ($runs->isEmpty()) {
+            return ['has_data' => false, 'evidence' => [], 'raw' => []];
+        }
+
+        $evidence = [];
+        foreach ($runs as $run) {
+            $device = ucfirst((string) $run->strategy);
+            $date = optional($run->run_at)->toDateString();
+            foreach ([
+                'Performance score' => $run->performance_score,
+                'Accessibility score' => $run->accessibility_score ?? 'Not available',
+                'Best practices score' => $run->best_practices_score ?? 'Not available',
+                'SEO score' => $run->seo_score ?? 'Not available',
+                'AI readiness score (derived)' => $run->ai_readiness_score ?? 'Not available',
+            ] as $label => $value) {
+                $evidence[] = [
+                    'label' => "{$device} {$label}",
+                    'value' => $value,
+                    'source' => 'pagespeed',
+                    'date_range' => $date,
+                ];
+            }
+        }
+
+        return [
+            'has_data' => true,
+            'evidence' => $evidence,
+            'raw' => [
+                'runs' => $runs->map(fn (PerformanceRun $run) => $run->only([
+                    'url', 'strategy', 'run_at', 'performance_score',
+                    'accessibility_score', 'best_practices_score', 'seo_score',
+                    'ai_readiness_score', 'lcp_ms', 'inp_ms', 'cls',
+                ]))->values()->all(),
+                'ai_readiness_note' => 'AI readiness is a product-derived score from SEO and machine-readability audits; Lighthouse does not publish a native AI-readiness category.',
+            ],
+        ];
+    }
+
+    /** Latest crawl progress, health, and issue evidence for JOLLY/insights. */
+    private function siteAudit(Site $site): array
+    {
+        $run = CrawlRun::where('site_id', $site->id)
+            ->orderByDesc('id')
+            ->first([
+                'id', 'status', 'trigger', 'started_at', 'completed_at',
+                'created_at', 'max_pages', 'pages_discovered', 'pages_crawled',
+                'issues_found', 'error_summary',
+            ]);
+
+        if (! $run) {
+            return ['has_data' => false, 'evidence' => [], 'raw' => []];
+        }
+
+        $pending = in_array($run->status, ['pending', 'running'], true);
+        $openIssues = CrawlIssue::where('site_id', $site->id)
+            ->where('status', CrawlIssue::STATUS_OPEN)
+            ->get(['issue_code', 'severity', 'category', 'target_url']);
+
+        $health = $pending ? null : $this->crawlHealth->forSite($site);
+        $date = optional($run->completed_at ?: $run->created_at)->toDateString();
+        $progress = sprintf(
+            '%s: %d/%d pages crawled, %d discovered',
+            ucfirst((string) $run->status),
+            (int) $run->pages_crawled,
+            (int) $run->max_pages,
+            (int) ($run->pages_discovered ?? 0),
+        );
+
+        $evidence = [
+            ['label' => 'Site Audit status', 'value' => $progress, 'source' => 'site_audit', 'date_range' => $date, 'url' => '/dashboard/audit'],
+            ['label' => 'Audit issues', 'value' => $pending ? 'Processing' : (int) ($health['breakdown'] ? array_sum(array_column($health['breakdown'], 'open_issues')) : $run->issues_found), 'source' => 'site_audit', 'date_range' => $date],
+        ];
+        if ($health !== null) {
+            $evidence[] = ['label' => 'Health score', 'value' => $health['score'], 'source' => 'site_audit', 'date_range' => $date];
+        }
+
+        return [
+            'has_data' => true,
+            'evidence' => $evidence,
+            'raw' => [
+                'pending' => $pending,
+                'run' => $run->only([
+                    'id', 'status', 'trigger', 'started_at', 'completed_at',
+                    'max_pages', 'pages_discovered', 'pages_crawled',
+                    'issues_found', 'error_summary',
+                ]),
+                'health' => $health ? [
+                    'score' => $health['score'],
+                    'mode' => $health['mode'] ?? 'uniform',
+                    'breakdown' => $health['breakdown'] ?? [],
+                    'top_issues' => collect($health['top_issues'] ?? [])->map(fn ($issue) => [
+                        'issue_code' => $issue->issue_code,
+                        'severity' => $issue->severity,
+                        'category' => $issue->category,
+                        'target_url' => $issue->target_url,
+                    ])->values()->all(),
+                ] : null,
+                'open_issue_count' => $openIssues->count(),
+                'open_issue_categories' => $openIssues->groupBy('category')->map->count()->all(),
+                'open_issue_examples' => $openIssues->take(10)->map(fn (CrawlIssue $issue) => [
+                    'issue_code' => $issue->issue_code,
+                    'severity' => $issue->severity,
+                    'category' => $issue->category,
+                    'target_url' => $issue->target_url,
+                ])->values()->all(),
+            ],
         ];
     }
 
@@ -269,15 +412,23 @@ class ContextAssembler
         $traffic  = $this->traffic($site, $range);
         $seo      = $this->seo($site, $range);
         $alerts   = $this->alerts($site);
+        $audit    = $this->siteAudit($site);
+        $speed    = $this->pagespeed($site);
 
         return [
-            'has_data' => $commerce['has_data'] || $traffic['has_data'] || $seo['has_data'],
-            'evidence' => array_merge($commerce['evidence'], $traffic['evidence'], $seo['evidence'], $alerts['evidence']),
+            'has_data' => $commerce['has_data'] || $traffic['has_data'] || $seo['has_data']
+                || $audit['has_data'] || $speed['has_data'],
+            'evidence' => array_merge(
+                $commerce['evidence'], $traffic['evidence'], $seo['evidence'],
+                $alerts['evidence'], $audit['evidence'], $speed['evidence'],
+            ),
             'raw' => [
                 'commerce' => $commerce['raw'],
                 'traffic'  => $traffic['raw'],
                 'seo'      => $seo['raw'],
                 'alerts'   => $alerts['raw'],
+                'site_audit' => $audit['raw'],
+                'pagespeed' => $speed['raw'],
             ],
         ];
     }

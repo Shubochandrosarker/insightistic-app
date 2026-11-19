@@ -127,7 +127,7 @@ it('fires each issue code with the correct severity and category', function () {
         ->and(CrawlIssue::query()->where('target_url', 'https://issues.example.com/healthy')->count())->toBe(0);
 });
 
-it('links broken and redirecting internal link targets through the link graph', function () {
+it('deduplicates broken internal links and keeps redirects as page findings', function () {
     [, $org] = makeOrgUser('issues-links@example.com');
     $site = issuesSiteFor($org);
     $run = issuesStartRun($site);
@@ -156,20 +156,43 @@ it('links broken and redirecting internal link targets through the link graph', 
     $found = $engine->finalize($run);
 
     $brokenIssue = CrawlIssue::query()->where('issue_code', 'broken_internal_link')->sole();
-    $redirectIssue = CrawlIssue::query()->where('issue_code', 'redirecting_internal_link')->sole();
-
     expect($brokenIssue->severity)->toBe('high')
         ->and($brokenIssue->category)->toBe('links')
         ->and($brokenIssue->target_url)->toBe('https://issues.example.com/broken')
         ->and($brokenIssue->evidence_json['status_code'])->toBe(404)
         ->and($brokenIssue->evidence_json['sources'])->toContain('https://issues.example.com/source')
-        ->and($redirectIssue->severity)->toBe('low')
-        ->and($redirectIssue->category)->toBe('links')
-        ->and($redirectIssue->target_url)->toBe('https://issues.example.com/old')
+        ->and(CrawlIssue::query()->where('issue_code', 'redirecting_internal_link')->count())->toBe(0)
+        ->and(CrawlIssue::query()->where('issue_code', 'redirect')->count())->toBe(0)
         // healthy target fired nothing
         ->and(CrawlIssue::query()->where('target_url', 'https://issues.example.com/ok')->count())->toBe(0)
         // finalize counts exactly what this run saw
-        ->and($found)->toBe(2);
+        ->and($found)->toBe(1);
+});
+
+it('does not apply html checks to non-html resources', function () {
+    [, $org] = makeOrgUser('issues-resource-types@example.com');
+    $site = issuesSiteFor($org);
+    $run = issuesStartRun($site);
+    $engine = issuesEngine();
+
+    $engine->evaluate($run, issuesPage($run, '/robots.txt', [
+        'content_type' => 'text/plain; charset=utf-8',
+        'title' => null,
+        'meta_description' => null,
+        'canonical_url' => null,
+        'h1_count' => 0,
+        'word_count' => 0,
+    ]));
+    $engine->evaluate($run, issuesPage($run, '/sitemap.xml', [
+        'content_type' => 'application/xml',
+        'title' => null,
+        'meta_description' => null,
+        'canonical_url' => null,
+        'h1_count' => 0,
+        'word_count' => 0,
+    ]));
+
+    expect(CrawlIssue::query()->count())->toBe(0);
 });
 
 it('keeps fingerprint identity stable across runs', function () {

@@ -1,6 +1,8 @@
 "use client";
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import Markdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { useDashboard, PERIODS } from "@/lib/dashboard";
 import { useApi } from "@/lib/useApi";
 import { apiGet, apiPost, apiPatch, apiDelete, getToken, type ApiError } from "@/lib/api";
@@ -61,7 +63,7 @@ interface ChatMsg {
 
 const ANALYTICS_SOURCES = [
   "executive", "traffic", "seo", "performance", "commerce",
-  "products", "customers", "content", "alerts",
+  "products", "customers", "content", "alerts", "site_audit", "pagespeed",
 ] as const;
 
 const CONFIDENCE_TONE: Record<string, "green" | "amber" | "red"> = {
@@ -78,16 +80,16 @@ function parseAnswerJson(raw: any): AnswerJson | null {
   return typeof raw === "object" ? raw : null;
 }
 
-/** Minimal rich text: paragraphs preserved via pre-wrap, **bold** spans handled. */
 function RichText({ text }: { text: string }) {
-  const parts = text.split(/(\*\*[^*]+\*\*)/g);
   return (
-    <div className="whitespace-pre-wrap break-words text-sm leading-relaxed">
-      {parts.map((p, i) =>
-        p.startsWith("**") && p.endsWith("**") && p.length > 4
-          ? <strong key={i} className="font-semibold">{p.slice(2, -2)}</strong>
-          : <Fragment key={i}>{p}</Fragment>
-      )}
+    <div className="space-y-2 break-words text-sm leading-relaxed [&_a]:text-violet [&_a]:underline [&_blockquote]:border-l-2 [&_blockquote]:pl-3 [&_h1]:font-bold [&_h2]:font-bold [&_h3]:font-semibold [&_ol]:list-decimal [&_ol]:pl-5 [&_pre]:overflow-x-auto [&_pre]:rounded-lg [&_pre]:bg-card2 [&_pre]:p-3 [&_td]:border [&_td]:p-2 [&_th]:border [&_th]:p-2 [&_ul]:list-disc [&_ul]:pl-5">
+      <Markdown
+        skipHtml
+        remarkPlugins={[remarkGfm]}
+        disallowedElements={["img"]}
+        urlTransform={(url) => isSafeHref(url) ? url : ""}
+        components={{ a: ({ children, href }) => href ? <a href={href} target="_blank" rel="noreferrer">{children}</a> : <span>{children}</span> }}
+      >{text}</Markdown>
     </div>
   );
 }
@@ -687,7 +689,7 @@ export default function CopilotPage() {
             <MultiSelect
               label="Data"
               allLabel="Analytics sources (auto when none picked)"
-              options={ANALYTICS_SOURCES.map((s) => ({ value: s, label: s }))}
+              options={ANALYTICS_SOURCES.map((s) => ({ value: s, label: s === "site_audit" ? "Site Audit" : s === "pagespeed" ? "PageSpeed Insights" : s.charAt(0).toUpperCase() + s.slice(1) }))}
               selected={sourcesSel}
               onToggle={(v) => setSourcesSel((sel) => sel.includes(v) ? sel.filter((x) => x !== v) : [...sel, v])}
             />

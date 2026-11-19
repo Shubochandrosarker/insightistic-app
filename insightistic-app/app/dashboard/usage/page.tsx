@@ -29,7 +29,9 @@ const USAGE_LABELS: Record<string, string> = {
   tracked_keywords: "Tracked keywords",
   crawl_pages: "Crawl pages",
   ai_prompt_runs: "AI prompt runs",
-  ai_insights: "AI insights",
+  ai_insights: "Standard AI requests",
+  jolly_messages: "JOLLY messages",
+  connected_sites: "Workspace websites",
   reports: "Reports",
 };
 

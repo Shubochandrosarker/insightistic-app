@@ -30,6 +30,13 @@ export type CrawlRun = {
   error_summary?: string | null;
 };
 
+export type CrawlBudget = {
+  workspace: { used: number; reserved: number; remaining: number; limit: number };
+  project: { used: number; reserved: number; limit: number | null; remaining: number };
+  max_next_run: number;
+  resets_at: string;
+};
+
 export type CrawlIssueSeverity = "critical" | "high" | "medium" | "low";
 
 export type CrawlIssue = {
@@ -57,7 +64,7 @@ const ISSUE_CODE_LABELS: Record<string, string> = {
   schema_parse_error: "Structured data error",
   image_missing_alt: "Images missing alt",
   broken_internal_link: "Broken internal link",
-  redirecting_internal_link: "Redirecting internal link",
+  redirect: "Redirect",
 };
 
 export function issueCodeLabel(code: string): string {
@@ -109,6 +116,8 @@ export function crawlRunsFromResponse(res: unknown): CrawlRun[] {
  */
 export function useLatestRun(siteId: number | null) {
   const [runs, setRuns] = useState<CrawlRun[]>([]);
+  const [canManage, setCanManage] = useState(false);
+  const [budget, setBudget] = useState<CrawlBudget | null>(null);
   const [loading, setLoading] = useState(!!siteId);
   const [error, setError] = useState<string | null>(null);
 
@@ -117,7 +126,11 @@ export function useLatestRun(siteId: number | null) {
     setLoading(true);
     setError(null);
     apiGet(`/sites/${siteId}/crawl/runs`)
-      .then((res: any) => setRuns(crawlRunsFromResponse(res)))
+      .then((res) => {
+        setRuns(crawlRunsFromResponse(res));
+        setBudget(res.budget ?? null);
+        setCanManage(res.can_manage === true);
+      })
       .catch((e: any) => setError(e?.message || "Couldn't load crawl runs."))
       .finally(() => setLoading(false));
   }, [siteId]);
@@ -126,7 +139,11 @@ export function useLatestRun(siteId: number | null) {
     reload();
   }, [reload]);
 
-  return { latestRun: runs.length ? runs[0] : null, runs, loading, error, reload };
+  const reportProgress = useCallback((run: CrawlRun) => {
+    setRuns((current) => [run, ...current.filter((item) => String(item.id) !== String(run.id))].slice(0, 20));
+  }, []);
+
+  return { reportProgress, latestRun: runs.length ? runs[0] : null, runs, budget, setBudget, canManage, loading, error, reload };
 }
 
 /** Run status chip: completed green, running amber + pulse, failed red, queued/cancelled neutral. */
@@ -162,12 +179,16 @@ export function RunBar({
   siteId,
   run,
   onSettled,
+  onBudget,
+  onProgress,
   compact = false,
 }: {
   siteId: number | null;
   run: CrawlRun | null;
   /** Called when a dispatched crawl settles (or polling gives up) — reload your page data. */
   onSettled?: () => void;
+  onBudget?: (budget: CrawlBudget) => void;
+  onProgress?: (run: CrawlRun) => void;
   compact?: boolean;
 }) {
   const [starting, setStarting] = useState(false);
@@ -202,6 +223,7 @@ export function RunBar({
     apiGet(`/sites/${siteId}/crawl/runs`)
       .then((res: any) => {
         if (!alive.current) return;
+        if (res.budget) onBudget?.(res.budget);
         const list = crawlRunsFromResponse(res);
         const current = list.find((candidate) => String(candidate.id) === String(runId));
 
@@ -213,6 +235,7 @@ export function RunBar({
         }
 
         setActiveRun(current);
+        onProgress?.(current);
         if (current.status === "pending" || current.status === "running") {
           setTimeout(() => poll(runId, tries + 1), 5000);
           return;
@@ -234,7 +257,7 @@ export function RunBar({
         setMsg({ text: "Lost track of the crawl status — try running again or reloading.", tone: "warn" });
         onSettledRef.current?.();
       });
-  }, [siteId]);
+  }, [siteId, onBudget, onProgress]);
 
   useEffect(() => {
     if (!siteId || !run || (run.status !== "pending" && run.status !== "running")) return;
@@ -262,7 +285,7 @@ export function RunBar({
           throw new Error("The server did not return the crawl run ID.");
         }
         observedRunId.current = String(runId);
-        setActiveRun({
+        const queued: CrawlRun = {
           id: runId,
           status: "pending",
           trigger: "manual",
@@ -272,7 +295,9 @@ export function RunBar({
           pages_discovered: 0,
           pages_crawled: 0,
           issues_found: 0,
-        });
+        };
+        setActiveRun(queued);
+        onProgress?.(queued);
         setStarting(false);
         setPolling(true);
         setMsg({ text: "Crawl dispatched — watching progress…", tone: "info" });
@@ -286,7 +311,7 @@ export function RunBar({
           setMsg({ text: "A crawl is already running.", tone: "warn" });
         } else if (e?.data?.code === "crawl_limit_reached") {
           setMsg({
-            text: `Monthly crawl limit reached — ${num(e?.data?.used)} of ${num(e?.data?.limit)} pages used this month. Upgrade your plan for a higher quota.`,
+            text: e?.data?.message || "The monthly crawl limit has been reached.",
             tone: "warn",
           });
         } else if (e?.status === 403) {

@@ -38,7 +38,7 @@ function appsumoOrgWithLicense(): array
     [, $org] = makeOrgUser('appsumo-' . Str::random(6) . '@example.com');
 
     $plan = Plan::create([
-        'name' => 'AppSumo Agency', 'slug' => 'appsumo_agency',
+        'name' => 'AppSumo Agency', 'slug' => 'appsumo_tier_3',
         'site_limit' => 25, 'user_limit' => 10, 'ai_insight_limit' => 100,
         'report_limit' => 100, 'is_active' => true,
     ]);
@@ -114,7 +114,7 @@ it('upserts a purchase by license_key and keeps the raw payload', function () {
     expect($row->event)->toBe('purchase')
         ->and($row->license_status)->toBe('inactive')
         ->and($row->tier)->toBe(2)
-        ->and($row->plan_slug)->toBe('appsumo_studio')
+        ->and($row->plan_slug)->toBe('appsumo_tier_2')
         ->and($row->event_timestamp)->toBe(1318781876406)
         ->and($row->is_test)->toBeFalse()
         ->and($row->raw['extra']['reason'])->toBe('Purchased');
@@ -153,7 +153,7 @@ it('marks the previous license deactivated and links the new key on upgrade', fu
     $row = AppSumoLicense::where('license_key', $newKey)->firstOrFail();
     expect($row->prev_license_key)->toBe($oldKey)
         ->and($row->tier)->toBe(2)
-        ->and($row->plan_slug)->toBe('appsumo_studio');
+        ->and($row->plan_slug)->toBe('appsumo_tier_2');
 
     $prev = AppSumoLicense::where('license_key', $oldKey)->firstOrFail();
     expect($prev->license_status)->toBe('deactivated')
@@ -168,7 +168,7 @@ it('applies tier changes and deactivation to the linked Insightistic license', f
 
     AppSumoLicense::create([
         'license_key' => $key, 'event' => 'purchase', 'license_status' => 'inactive',
-        'tier' => 1, 'plan_slug' => 'appsumo_solo',
+        'tier' => 1, 'plan_slug' => 'appsumo_tier_1',
         'org_id' => $org->id, 'license_id' => $license->id,
         'raw' => [], 'event_timestamp' => 0,
     ]);
@@ -198,9 +198,11 @@ it('applies tier changes and deactivation to the linked Insightistic license', f
 it('maps known AppSumo tiers and refuses unknown tiers rather than granting a wrong plan', function () {
     $service = app(AppSumoLicenseService::class);
 
-    expect($service->tierToPlanSlug(1))->toBe('appsumo_solo')
-        ->and($service->tierToPlanSlug(2))->toBe('appsumo_studio')
-        ->and($service->tierToPlanSlug(3))->toBe('appsumo_agency');
+    expect($service->tierToPlanSlug(1))->toBe('appsumo_tier_1')
+        ->and($service->tierToPlanSlug(2))->toBe('appsumo_tier_2')
+        ->and($service->tierToPlanSlug(3))->toBe('appsumo_tier_3')
+        ->and($service->tierToPlanSlug(4))->toBe('appsumo_tier_4')
+        ->and($service->tierToPlanSlug(5))->toBe('appsumo_tier_5');
 
     expect(fn () => $service->tierToPlanSlug(null))->toThrow(InvalidArgumentException::class);
     expect(fn () => $service->tierToPlanSlug(0))->toThrow(InvalidArgumentException::class);
@@ -231,7 +233,7 @@ it('exchanges the OAuth code and redirects to the claim page', function () {
     $this->get("/api/appsumo/oauth/callback?code=abc123&state={$state}")
         ->assertRedirect("https://app.insightistic.com/appsumo/claim?license={$key}");
 
-    expect(AppSumoLicense::where('license_key', $key)->firstOrFail()->plan_slug)->toBe('appsumo_agency');
+    expect(AppSumoLicense::where('license_key', $key)->firstOrFail()->plan_slug)->toBe('appsumo_tier_3');
 
     // The single-use code and the state-provided PKCE verifier reach the exchange.
     Http::assertSent(function ($request) {
@@ -269,7 +271,7 @@ it('preserves linked customer entitlement across upgrade and old-key deactivate 
     [$org, , $license] = appsumoOrgWithLicense();
 
     $studio = Plan::create([
-        'name' => 'AppSumo Studio', 'slug' => 'appsumo_studio',
+        'name' => 'AppSumo Tier 2', 'slug' => 'appsumo_tier_2',
         'site_limit' => 10, 'user_limit' => 3, 'ai_insight_limit' => 600,
         'report_limit' => 25, 'is_active' => true,
     ]);
@@ -280,7 +282,7 @@ it('preserves linked customer entitlement across upgrade and old-key deactivate 
 
     AppSumoLicense::create([
         'license_key' => $oldKey, 'event' => 'activate', 'license_status' => 'active',
-        'tier' => 1, 'plan_slug' => 'appsumo_solo',
+        'tier' => 1, 'plan_slug' => 'appsumo_tier_1',
         'org_id' => $org->id, 'user_id' => $owner, 'license_id' => $license->id,
         'raw' => [], 'event_timestamp' => 100,
     ]);
@@ -341,7 +343,7 @@ it('revokes an existing license when AppSumo omits the tier on deactivate', func
 
     AppSumoLicense::create([
         'license_key' => $key, 'event' => 'activate', 'license_status' => 'active',
-        'tier' => 3, 'plan_slug' => 'appsumo_agency',
+        'tier' => 3, 'plan_slug' => 'appsumo_tier_3',
         'org_id' => $org->id, 'user_id' => $org->owner_user_id,
         'license_id' => $license->id, 'raw' => [], 'event_timestamp' => 1,
     ]);
@@ -383,7 +385,7 @@ it('stores an official tierless purchase until activation supplies its real tier
 
     $row->refresh();
     expect($row->tier)->toBe(1)
-        ->and($row->plan_slug)->toBe('appsumo_solo')
+        ->and($row->plan_slug)->toBe('appsumo_tier_1')
         ->and(app(AppSumoLicenseService::class)->isClaimable($row))->toBeTrue();
 });
 
@@ -406,6 +408,6 @@ it('does not let a late purchase retry undo a completed activation', function ()
 
     $row = AppSumoLicense::where('license_key', $key)->firstOrFail();
     expect($row->event)->toBe('activate')
-        ->and($row->plan_slug)->toBe('appsumo_solo')
+        ->and($row->plan_slug)->toBe('appsumo_tier_1')
         ->and(app(AppSumoLicenseService::class)->isClaimable($row))->toBeTrue();
 });

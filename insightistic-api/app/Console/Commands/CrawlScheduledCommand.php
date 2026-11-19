@@ -21,9 +21,8 @@ use Illuminate\Console\Command;
  * whose last crawl errored still deserves a retry on cadence; trigger is
  * irrelevant, a manual run counts as the site's freshness mark) is older
  * than crawl_frequency_days, and nothing is currently in flight. The
- * monthly page budget itself is not spent here — CrawlController enforces
- * it for manual runs and each scheduled run is capped at
- * min(1000, plan limit), the same per-run ceiling the API applies.
+ * the worker reserves the remaining workspace budget under the same lock
+ * as manual runs.
  *
  * Unlike the PageSpeed scheduler, sites do NOT need a connected plugin —
  * the crawler fetches the live site over HTTP, so not-archived is the only

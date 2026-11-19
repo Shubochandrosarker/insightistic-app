@@ -3,10 +3,13 @@
 namespace App\Jobs;
 
 use App\Models\CrawlRun;
+use App\Models\Organization;
 use App\Models\Site;
 use App\Services\Crawler\CrawlRunExecutor;
+use App\Services\Crawler\CrawlBudget;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
+use Illuminate\Support\Facades\DB;
 use Throwable;
 
 /**
@@ -48,23 +51,22 @@ class CrawlSiteJob implements ShouldQueue
         }
 
         $run = $this->runId === null
-            ? null
+            ? $this->reserve($site)
             : CrawlRun::query()
                 ->where('site_id', $site->id)
                 ->where('status', 'pending')
                 ->find($this->runId);
 
         // A reserved manual run must still be pending when its worker starts.
-        if ($this->runId !== null && $run === null) {
+        if ($run === null) {
             return;
         }
 
-        // Never stack crawls. Scheduled and initial runs do not reserve a row
-        // until they execute; a queued manual run owns its own pending row.
+        // A reserved run can proceed only while it is the sole active run for the site.
         $otherInFlight = CrawlRun::query()
             ->where('site_id', $site->id)
             ->whereIn('status', ['pending', 'running'])
-            ->when($this->runId !== null, fn ($query) => $query->where('id', '!=', $this->runId))
+            ->where('id', '!=', $run->id)
             ->exists();
 
         if ($otherInFlight) {
@@ -79,7 +81,7 @@ class CrawlSiteJob implements ShouldQueue
         }
 
         try {
-            $executor->startRun($site, $this->maxPages, $this->trigger, $this->delayMs, $run?->id);
+            $executor->startRun($site, (int) $run->max_pages, $this->trigger, $this->delayMs, $run->id);
         } catch (Throwable $e) {
             // If startup fails before the executor can transition the row,
             // release its reserved budget while preserving the failure.
@@ -94,5 +96,24 @@ class CrawlSiteJob implements ShouldQueue
 
             throw $e;
         }
+    }
+
+    private function reserve(Site $site): ?CrawlRun
+    {
+        return DB::transaction(function () use ($site) {
+            $org = Organization::query()->whereKey($site->organization_id)->lockForUpdate()->first();
+            if (! $org || CrawlRun::where('site_id', $site->id)->whereIn('status', ['pending', 'running'])->exists()) {
+                return null;
+            }
+
+            $pages = min($this->maxPages, app(CrawlBudget::class)->summary($org, $site->refresh())['max_next_run']);
+
+            return $pages > 0 ? CrawlRun::create([
+                'site_id' => $site->id,
+                'status' => 'pending',
+                'trigger' => $this->trigger === 'schedule' ? 'schedule' : 'manual',
+                'max_pages' => $pages,
+            ]) : null;
+        });
     }
 }

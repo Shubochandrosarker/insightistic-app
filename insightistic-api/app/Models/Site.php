@@ -32,6 +32,7 @@ class Site extends Model
             'connector_secret' => 'encrypted', // AES at rest via APP_KEY
             'cloudflare_api_token' => 'encrypted', // AES at rest via APP_KEY
             'archived_at' => 'datetime',
+            'crawl_pages_monthly_limit' => 'integer',
         ];
     }
 

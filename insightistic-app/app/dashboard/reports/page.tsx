@@ -13,6 +13,14 @@ import { EmptyState } from "@/components/dashboard/EmptyState";
 import { Spinner } from "@/components/ui/Spinner";
 import { FileText, Plus, Download, Clock } from "lucide-react";
 
+const reportDate = new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeZone: "UTC" });
+
+function formatReportDate(value: string | null): string {
+  if (!value) return "—";
+  const date = new Date(value);
+  return Number.isNaN(date.valueOf()) ? "—" : reportDate.format(date);
+}
+
 const TYPE_TONE: Record<string, "green" | "violet" | "slate"> = {
   weekly: "green", monthly: "violet", custom: "slate",
 };
@@ -190,7 +198,7 @@ export default function ReportsPage() {
                       <span className="text-sm font-semibold text-fg">{r.title || r.report_type}</span>
                       <Badge tone={TYPE_TONE[r.report_type] || "slate"}>{r.report_type}</Badge>
                     </div>
-                    <div className="text-xs text-muted">{r.period_start} → {r.period_end}{r.sent_to ? ` · sent to ${r.sent_to}` : ""}</div>
+                    <div className="text-xs text-muted">{formatReportDate(r.period_start)} – {formatReportDate(r.period_end)}{r.sent_to ? ` · sent to ${r.sent_to}` : ""}</div>
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
@@ -198,10 +206,15 @@ export default function ReportsPage() {
                     <button onClick={() => send(r.id)} className="rounded-xl border border-line bg-card px-3.5 py-1.5 text-sm font-semibold text-fg hover:bg-card2">Send</button>
                   )}
                   {r.pdf_link && isSafeHref(r.pdf_link) && (
-                    <a href={r.pdf_link} target="_blank" rel="noreferrer" className="rounded-xl bg-brand px-3.5 py-1.5 text-sm font-semibold text-white hover:bg-brand2">PDF</a>
+                    <a href={r.pdf_link} target="_blank" rel="noreferrer" className="rounded-xl bg-brand px-3.5 py-1.5 text-sm font-semibold text-white hover:bg-brand2">View PDF</a>
                   )}
                   {r.html_link && isSafeHref(r.html_link) && (
-                    <a href={r.html_link} target="_blank" rel="noreferrer" className="rounded-xl border border-line bg-card px-3.5 py-1.5 text-sm font-semibold text-fg hover:bg-card2">HTML</a>
+                    <a href={r.html_link} target="_blank" rel="noreferrer" className="rounded-xl border border-line bg-card px-3.5 py-1.5 text-sm font-semibold text-fg hover:bg-card2">View HTML</a>
+                  )}
+                  {r.html_download_link && isSafeHref(r.html_download_link) && (
+                    <a href={r.html_download_link} download className="inline-flex items-center gap-1.5 rounded-xl border border-line bg-card px-3.5 py-1.5 text-sm font-semibold text-fg hover:bg-card2">
+                      <Download size={14} aria-hidden="true" /> Download HTML
+                    </a>
                   )}
                 </div>
               </div>

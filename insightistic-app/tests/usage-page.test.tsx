@@ -44,7 +44,7 @@ describe("Usage page", () => {
 
     render(<UsagePage />);
 
-    expect(await screen.findByText("AI insights")).toBeInTheDocument();
+    expect(await screen.findByText("Standard AI requests")).toBeInTheDocument();
     expect(screen.getByText("2 / 75")).toBeInTheDocument();
     expect(screen.getByText("Reports")).toBeInTheDocument();
     // null limit renders as ∞, never as a 0-limit bar.

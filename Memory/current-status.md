@@ -1,7 +1,7 @@
 # Insightistic current status
 
 **Last reviewed:** 2026-11-19 (Asia/Dhaka)  
-**Status confidence:** high for the deployed production state (round 1 + round 2 fixes, plugin v4.7.3, repo hygiene) — every item below was personally verified today on VPS `srv1691974` before being recorded. Remaining open items are listed as Pending with their exact blocker.
+**Status confidence:** production release and dashboard changes verified on VPS `srv1691974` and in signed-in browser sessions. Earlier rollout records remain under their respective sections.
 
 ## Repository and organization
 
@@ -27,8 +27,10 @@
 
 ## VPS deployment state
 
-- **Verified live:** VPS `srv1691974` runs the app image tag `cd5758c…` and api+queue+scheduler images `fix9-redirects-up`, built from `/opt/stacks/insightistic-src` (commit `457a799` state).
-- **Verified:** Repo `main` is now at `cfd1713`. The delta between the running images and `main` contains no production code changes: `cfd1713`+`2645eba` are repo-structure/agent-docs only; `923e1e6` is plugin-directory sync only. Production code == main code.
+- **Verified live:** App, API, queue and scheduler run release `75a547f9f33b028cee2bc6f4fd9b1f20012a7fe1` from `codex/appsumo-production-review-fixes`, under `/docker/insightistic-app`. This supersedes `24163dd`. Both public version endpoints report the release.
+- **Cloudflare:** Four projects returned crawler matches after switching to Cloudflare's `userAgent` field. The signed-in `www.insightistic.com` project kept its historical edge charts and hid the AI crawlers card after Cloudflare rejected its saved credential.
+- **Performance Tracking:** Signed-in Mobile and Desktop views for `www.brothertours.com` omit the unmeasured INP tile. Regression tests cover the measured case.
+- Details, rollback and verification are in [the dated work log](work-log/2026-11-19/cloudflare-crawlers-and-inp.md).
 
 ## Founder rules (recorded 2026-11-19)
 

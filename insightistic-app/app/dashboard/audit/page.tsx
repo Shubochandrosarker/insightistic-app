@@ -166,7 +166,7 @@ export default function AuditOverviewPage() {
           icon={<FileSearch size={20} />}
           title="Run your first crawl"
           hint="Insightistic hasn't crawled this site yet. A crawl maps your pages, checks every response, and collects broken links and technical SEO issues."
-          action={<RunBar key={siteId} siteId={siteId} run={null} onSettled={refreshAll} onBudget={runs.setBudget} onProgress={runs.reportProgress} compact />}
+          action={<RunBar key={siteId} siteId={siteId} run={null} onSettled={refreshAll} onBudget={runs.setBudget} compact />}
         />
       ) : (
         <>

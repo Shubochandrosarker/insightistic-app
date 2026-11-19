@@ -2,12 +2,14 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Domain\Search\SearchExplorer;
 use App\Http\Controllers\Controller;
 use App\Models\SeoDaily;
 use App\Models\SeoPageSnapshot;
 use App\Models\SeoQuerySnapshot;
 use App\Models\Site;
 use App\Support\DateRange;
+use Carbon\CarbonImmutable;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 
@@ -56,7 +58,7 @@ class SeoController extends Controller
     }
 
     /** GET /sites/{site}/analytics/seo/queries — top queries + opportunity flags for the range. */
-    public function queries(Request $request)
+    public function queries(Request $request, SearchExplorer $explorer)
     {
         $site  = $this->site($request);
         $range = $this->range($request, $site);
@@ -73,11 +75,24 @@ class SeoController extends Controller
                 'prev_clicks', 'prev_impressions', 'prev_ctr', 'prev_position', 'opportunity',
             ]);
 
+        if ($rows->isEmpty()) {
+            $previous = $range->previous();
+            $rows = $explorer->exploreQueries(
+                $site,
+                CarbonImmutable::parse($range->dateFrom()),
+                CarbonImmutable::parse($range->dateTo()),
+                CarbonImmutable::parse($previous->dateFrom()),
+                CarbonImmutable::parse($previous->dateTo()),
+                ['sort' => 'impressions', 'dir' => 'desc'],
+                $limit,
+            )['data'];
+        }
+
         return response()->json(['queries' => $rows]);
     }
 
     /** GET /sites/{site}/analytics/seo/pages — top pages for the range. */
-    public function pages(Request $request)
+    public function pages(Request $request, SearchExplorer $explorer)
     {
         $site  = $this->site($request);
         $range = $this->range($request, $site);
@@ -93,6 +108,19 @@ class SeoController extends Controller
                 'page_path', 'clicks', 'impressions', 'ctr', 'position',
                 'prev_clicks', 'prev_impressions', 'prev_ctr', 'prev_position',
             ]);
+
+        if ($rows->isEmpty()) {
+            $previous = $range->previous();
+            $rows = $explorer->explorePages(
+                $site,
+                CarbonImmutable::parse($range->dateFrom()),
+                CarbonImmutable::parse($range->dateTo()),
+                CarbonImmutable::parse($previous->dateFrom()),
+                CarbonImmutable::parse($previous->dateTo()),
+                ['sort' => 'impressions', 'dir' => 'desc'],
+                $limit,
+            )['data'];
+        }
 
         return response()->json(['pages' => $rows]);
     }

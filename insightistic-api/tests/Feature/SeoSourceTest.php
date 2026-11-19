@@ -171,6 +171,41 @@ it('keeps bing weekly buckets out of the gsc queries endpoint', function () {
         ->and($queries[0]['query'])->toBe('gsc query');
 });
 
+it('uses daily GSC facts when the overview has no matching snapshots', function () {
+    [$user, $org] = makeOrgUser('seo-top-daily@example.com');
+    $site = makeSeoSite($org);
+    $other = makeSeoSite($org, 'other-top-seo.example.com');
+
+    foreach ([
+        ['2026-08-15', 10, 100, 12],
+        ['2026-09-15', 20, 200, 3],
+        ['2026-07-15', 50, 900, 2],
+    ] as [$date, $clicks, $impressions, $position]) {
+        $row = ['site_id' => $site->id, 'date' => $date, 'clicks' => $clicks, 'impressions' => $impressions, 'ctr' => $clicks / $impressions, 'position' => $position];
+        \App\Models\SeoQueryDaily::create($row + ['query' => 'day trip', 'query_hash' => sha1('day trip')]);
+        \App\Models\SeoPageDaily::create($row + ['page_path' => '/day-trip/', 'page_hash' => sha1('/day-trip/')]);
+    }
+
+    \App\Models\SeoQueryDaily::create([
+        'site_id' => $other->id, 'date' => '2026-09-15', 'query' => 'other site',
+        'query_hash' => sha1('other site'), 'clicks' => 300, 'impressions' => 1000, 'ctr' => .3, 'position' => 5,
+    ]);
+
+    $path = "/api/sites/{$site->id}/analytics/seo/";
+    $params = '?' . http_build_query(SEO_WINDOW);
+
+    $this->actingAs($user)->getJson($path . 'queries' . $params)
+        ->assertOk()->assertJsonCount(1, 'queries')
+        ->assertJsonPath('queries.0.query', 'day trip')
+        ->assertJsonPath('queries.0.impressions', 300)
+        ->assertJsonPath('queries.0.position', 6);
+
+    $this->getJson($path . 'pages' . $params)
+        ->assertOk()->assertJsonCount(1, 'pages')
+        ->assertJsonPath('pages.0.page_path', '/day-trip/')
+        ->assertJsonPath('pages.0.clicks', 30);
+});
+
 it('hides another organization site from the seo endpoints', function () {
     [$userA] = makeOrgUser('seo-tenant-a@example.com');
     [, $orgB] = makeOrgUser('seo-tenant-b@example.com');

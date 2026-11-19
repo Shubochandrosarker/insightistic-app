@@ -172,7 +172,7 @@ export function SeverityBadge({ severity }: { severity: string }) {
  * counters, plus "Run crawl now" (owner/admin server-side — analysts get a
  * graceful 403 message instead of a hidden button, matching how the rest of
  * the dashboard treats role-gated writes). A dispatched crawl is polled every
- * 5s (max 60 tries) while pending/running; 409 and the monthly-quota 422 get
+ * 5s (up to 15 minutes) while pending/running; 409 and the monthly-quota 422 get
  * dedicated copy rather than a generic failure.
  */
 export function RunBar({
@@ -214,7 +214,7 @@ export function RunBar({
 
   const poll = useCallback((runId: number | string, tries: number) => {
     if (!alive.current) return;
-    if (tries >= 60) {
+    if (tries >= 180) {
       setPolling(false);
       setMsg({ text: "The crawl is still running in the background — check back in a few minutes for the results.", tone: "info" });
       onSettledRef.current?.();

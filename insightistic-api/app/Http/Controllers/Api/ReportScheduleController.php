@@ -109,6 +109,8 @@ class ReportScheduleController extends Controller
 
     private function canCreate(\App\Models\Organization $organization): bool
     {
-        return $this->usage->scheduledReportLimit($organization) > $this->usage->scheduledReportsUsed($organization);
+        $limit = $this->usage->scheduledReportLimit($organization);
+
+        return $limit === null || $this->usage->scheduledReportsUsed($organization) < $limit;
     }
 }

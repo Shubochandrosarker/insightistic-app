@@ -76,7 +76,7 @@ class PublicPlanController extends Controller
             'price' => $p['price'],
             'sites' => $p['sites'],
             'team_member_limit' => $p['team_member_limit'] ?? null,
-            'team_member_add_credits' => $p['team_member_add_credits'] ?? 10,
+            'team_member_add_credits' => $p['team_member_add_credits'],
             'standard_ai_requests' => $p['standard_ai_requests'],
             'monthly_ai_credits' => $p['monthly_credits'],
             'features' => $p['features'],
@@ -91,8 +91,10 @@ class PublicPlanController extends Controller
                 'monthly_ai_credits' => $p['monthly_credits'],
                 'client_ready_reports_monthly' => $p['reports'],
                 'team_member_limit' => $p['team_member_limit'] ?? null,
-                'team_member_add_credits' => $p['team_member_add_credits'] ?? 10,
-                'scheduled_report_limit' => $p['scheduled_report_limit'] ?? 0,
+                'team_member_add_credits' => $p['team_member_add_credits'],
+                'knowledge_bases' => $p['knowledge_bases'],
+                'knowledge_sources' => $p['knowledge_sources'],
+                'scheduled_report_limit' => $p['scheduled_report_limit'],
             ],
         ])->values();
 

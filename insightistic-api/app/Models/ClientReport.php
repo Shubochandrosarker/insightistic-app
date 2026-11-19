@@ -13,7 +13,7 @@ class ClientReport extends Model
 
     protected $fillable = [
         'organization_id', 'site_id', 'title', 'report_type',
-        'period_start', 'period_end', 'html_url', 'pdf_url', 'sent_to', 'sent_at',
+        'period_start', 'period_end', 'html_url', 'pdf_url', 'sent_to', 'sent_at', 'report_schedule_id',
     ];
 
     // pdf_url / html_url hold RELATIVE storage paths; expose signed, expiring

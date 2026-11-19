@@ -31,7 +31,7 @@ class LicenseService
      */
     public const FEATURES = [
         'basic_analytics', 'traffic_analytics', 'seo_analytics', 'performance_tracking',
-        'woocommerce_analytics', 'engagement_analytics', 'ai_insights', 'ai_copilot',
+        'woocommerce_analytics', 'engagement_analytics', 'ai_insights', 'ai_copilot', 'executive_insights',
         'advanced_reports', 'scheduled_reports', 'alerts', 'data_export',
         'multi_site', 'team_access', 'agency_white_label', 'custom_domain', 'api_access',
         'white_label_reports', 'white_label_dashboard', 'priority_support',

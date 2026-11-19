@@ -54,6 +54,10 @@ export default function TeamPage() {
 
   if (loading) return <Spinner />;
   const members = data?.members || [];
+  const addedMemberLimit: number | null = data?.added_member_limit ?? null;
+  const memberCreditCost: number | null = data?.member_add_credit_cost ?? null;
+  const addedMemberCount = members.filter((member: { is_owner: boolean }) => !member.is_owner).length;
+  const atMemberLimit = addedMemberLimit !== null && addedMemberCount >= addedMemberLimit;
 
   return (
     <div>
@@ -61,16 +65,24 @@ export default function TeamPage() {
         title="Team & access"
         subtitle="Invite teammates and scope client viewers to specific sites."
         right={
-          <button onClick={() => setOpen((o) => !o)}
-            className="inline-flex items-center gap-2 rounded-xl bg-brand px-4 py-2 text-sm font-semibold text-white shadow-[0_8px_20px_-8px_rgba(0,192,75,0.55)] hover:bg-brand2">
+          <button onClick={() => setOpen((o) => !o)} disabled={atMemberLimit}
+            className="inline-flex items-center gap-2 rounded-xl bg-brand px-4 py-2 text-sm font-semibold text-white shadow-[0_8px_20px_-8px_rgba(0,192,75,0.55)] hover:bg-brand2 disabled:opacity-50">
             <UserPlus size={16} /> Invite member
           </button>
         }
       />
+      {addedMemberLimit !== null && (
+        <p className="mb-4 text-sm text-muted" role="status">
+          {addedMemberCount} of {addedMemberLimit} added team members. {atMemberLimit && "All available seats are in use."}
+        </p>
+      )}
       {msg && <p className="mb-4 text-sm text-warn">{msg}</p>}
 
-      {open && (
+      {open && !atMemberLimit && (
         <Card className="mb-5" title="Invite teammate">
+          {memberCreditCost !== null && (
+            <p className="mb-3 text-sm text-muted">Adding this team member uses {memberCreditCost} Insight Credits once.</p>
+          )}
           <div className="grid gap-3 sm:grid-cols-2">
             <Field label="Name" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} />
             <Field label="Email" type="email" value={f.email} onChange={(e) => setF({ ...f, email: e.target.value })} />

@@ -24,9 +24,14 @@ class UsageService
         return (int) ($this->resolved($org)['limits']['standard_ai_requests_monthly'] ?? $org->plan?->ai_insight_limit ?? 0);
     }
 
-    public function reportLimit(Organization $org): int
+    public function reportLimit(Organization $org): ?int
     {
-        return (int) ($this->resolved($org)['limits']['client_ready_reports_monthly'] ?? $org->plan?->report_limit ?? 0);
+        $limits = $this->resolved($org)['limits'];
+        if (! empty($limits['unlimited_client_reports'])) {
+            return null;
+        }
+
+        return (int) ($limits['client_ready_reports_monthly'] ?? $org->plan?->report_limit ?? 0);
     }
 
     public function counter(Organization $org): UsageCounter
@@ -41,7 +46,9 @@ class UsageService
 
     public function canGenerateReport(Organization $org): bool
     {
-        return $this->counter($org)->reports_generated < $this->reportLimit($org);
+        $limit = $this->reportLimit($org);
+
+        return $limit === null || $this->counter($org)->reports_generated < $limit;
     }
 
     public function recordInsight(Organization $org): void
@@ -59,15 +66,21 @@ class UsageService
         return max(0, $this->insightLimit($org) - $this->counter($org)->ai_insights_used);
     }
 
-    public function reportRemaining(Organization $org): int
+    public function reportRemaining(Organization $org): ?int
     {
-        return max(0, $this->reportLimit($org) - $this->counter($org)->reports_generated);
+        $limit = $this->reportLimit($org);
+
+        return $limit === null ? null : max(0, $limit - $this->counter($org)->reports_generated);
     }
 
     /** Maximum number of active recurring report schedules for the organization. */
-    public function scheduledReportLimit(Organization $org): int
+    public function scheduledReportLimit(Organization $org): ?int
     {
         $resolved = $this->resolved($org);
+        if (! empty($resolved['limits']['unlimited_report_schedules'])) {
+            return null;
+        }
+
         if (array_key_exists('scheduled_report_limit', $resolved['limits'])) {
             return (int) $resolved['limits']['scheduled_report_limit'];
         }

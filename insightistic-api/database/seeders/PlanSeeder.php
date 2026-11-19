@@ -68,8 +68,8 @@ class PlanSeeder extends Seeder
             )),
             'crawl_pages_per_run' => min(5000, max(50, (int) ($plan['crawl_pages'] ?? 50))),
             'ai_prompt_runs_monthly' => (int) ($plan['standard_ai_requests'] ?? 0),
-            'knowledge_bases' => in_array($slug, ['free', 'starter', 'angel_solo', 'appsumo_tier_1', 'appsumo_solo'], true) ? 1 : 3,
-            'knowledge_sources' => $slug === 'free' ? 5 : 50,
+            'knowledge_bases' => $plan['knowledge_bases'] ?? (in_array($slug, ['free', 'starter', 'angel_solo', 'appsumo_solo'], true) ? 1 : 3),
+            'knowledge_sources' => $plan['knowledge_sources'] ?? ($slug === 'free' ? 5 : 50),
             'storage_mb' => $slug === 'free' ? 25 : 250,
             'monthly_ai_messages' => $slug === 'free' ? 25 : 300,
             'scheduled_reports' => in_array($slug, ['growth', 'agency', 'agency_pro', 'angel_studio', 'angel_agency',
@@ -79,12 +79,19 @@ class PlanSeeder extends Seeder
         ];
 
         // AppSumo uses an explicit added-member contract: Tier 1 allows
-        // three added members, while Tiers 2-5 are unlimited. Keep this
+        // five added members, while Tiers 2-5 are unlimited. Keep this
         // separate from the legacy total `team_seats` column so zero can mean
         // unlimited here without changing older plans.
         if (array_key_exists('team_member_limit', $plan)) {
             $limits['team_member_limit'] = (int) $plan['team_member_limit'];
-            $limits['team_member_add_credits'] = (int) ($plan['team_member_add_credits'] ?? 10);
+            $limits['team_member_add_credits'] = (int) $plan['team_member_add_credits'];
+            if ($plan['reports'] === null) {
+                $limits['unlimited_client_reports'] = 1;
+            }
+            if ($plan['scheduled_report_limit'] === null) {
+                $limits['scheduled_report_limit'] = 0;
+                $limits['unlimited_report_schedules'] = 1;
+            }
         }
 
         Plan::updateOrCreate(['slug' => $slug], [

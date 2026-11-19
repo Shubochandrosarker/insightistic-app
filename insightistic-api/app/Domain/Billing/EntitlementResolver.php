@@ -2,6 +2,7 @@
 
 namespace App\Domain\Billing;
 
+use App\Models\AppSumoLicense;
 use App\Models\EntitlementGrant;
 use App\Models\Organization;
 use App\Models\Plan;
@@ -115,6 +116,12 @@ final class EntitlementResolver
 
         $features = $plan ? $this->strings($plan->features_json) : [];
         $limits = $plan ? $this->planLimits($plan) : [];
+
+        if ($source === 'license' && $plan?->slug === 'appsumo_tier_3'
+            && AppSumoLicense::where('org_id', $organization->id)->where('tier', 3)
+                ->where('keeps_tier_three_features', true)->whereIn('license_status', ['active', 'inactive'])->exists()) {
+            $features = array_values(array_unique(array_merge($features, ['white_label_reports', 'priority_support'])));
+        }
 
         foreach ($this->activeGrants($organization) as $grant) {
             if ($source === 'none' && $grant->plan_id) {

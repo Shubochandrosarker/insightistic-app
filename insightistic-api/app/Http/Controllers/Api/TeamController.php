@@ -8,11 +8,13 @@ use App\Domain\Billing\Exceptions\InsufficientCreditsException;
 
 use App\Http\Controllers\Controller;
 use App\Mail\InviteMail;
+use App\Models\Organization;
 use App\Models\Site;
 use App\Models\SiteUserAccess;
 use App\Models\User;
 use App\Support\Tenancy;
 use App\Services\UsageService;
+use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
@@ -26,6 +28,14 @@ class TeamController extends Controller
         private CreditWallet $creditWallet,
         private EntitlementResolver $entitlements,
     ) {}
+
+    private function appSumoPlan(Organization $org): ?array
+    {
+        $resolved = $this->entitlements->resolve($org);
+        $slug = $resolved['plan']['slug'] ?? $org->plan?->slug ?? '';
+
+        return config("commercial.appsumo_plans.{$slug}");
+    }
 
     public function index()
     {
@@ -49,7 +59,13 @@ class TeamController extends Controller
             ];
         });
 
-        return response()->json(['members' => $members]);
+        $plan = $this->appSumoPlan($org);
+
+        return response()->json([
+            'members' => $members,
+            'member_add_credit_cost' => $plan['team_member_add_credits'] ?? null,
+            'added_member_limit' => ($plan['team_member_limit'] ?? 0) ?: null,
+        ]);
     }
 
     public function invite(Request $request, UsageService $usage)
@@ -79,54 +95,25 @@ class TeamController extends Controller
             }
         }
 
-        $resolved = $this->entitlements->resolve($org);
-        $planSlug = (string) ($resolved['plan']['slug'] ?? $org->plan?->slug ?? '');
-        $appsumoPlan = config("commercial.appsumo_plans.{$planSlug}");
-        $isAppSumoPlan = is_array($appsumoPlan) && array_key_exists('team_member_limit', $appsumoPlan);
-
-        if ($isAppSumoPlan) {
-            // AppSumo's Tier 1 limit counts added members, not the owner.
-            // Tiers 2-5 publish zero here to mean unlimited.
-            $memberLimit = (int) $appsumoPlan['team_member_limit'];
-            $addedMembers = $org->users()->where('users.id', '!=', $org->owner_user_id)->count();
-            if ($memberLimit > 0 && $addedMembers >= $memberLimit) {
-                return response()->json([
-                    'message' => "Your AppSumo tier allows {$memberLimit} added team members.",
-                    'code' => 'appsumo_team_member_limit_reached',
-                    'limit' => ['key' => 'team_member_limit', 'max' => $memberLimit, 'used' => $addedMembers],
-                ], 402);
-            }
-        } else {
-            // Preserve the existing total-seat contract for subscriptions and
-            // historical plans.
-            $limit = $usage->limit($org, 'team_seats');
-            if ($limit <= 0) {
-                $limit = 1;
-            }
-            if ($org->users()->count() >= $limit) {
-                return response()->json(['message' => "User limit reached for your plan ({$limit}).", 'code' => 'user_limit_reached'], 402);
-            }
-        }
-
-        $user = User::where('email', $data['email'])->first();
-
-        if ($user && $org->users()->where('users.id', $user->id)->exists()) {
-            return response()->json(['message' => 'That person is already in this organization.'], 409);
-        }
-
-        // Never pull a disabled/suspended/archived account into an
-        // organization — those states are admin decisions and must not be
-        // laundered through an invite (only active members and pending
-        // invited accounts are attachable).
-        if ($user && ($user->archived_at !== null || ! in_array($user->status, ['active', 'invited'], true))) {
-            return response()->json(['message' => 'That account is not available to invite.'], 422);
-        }
-
         $chargeReference = 'team-member:' . $org->id . ':' . Str::uuid();
         $createdInTransaction = false;
 
         try {
-            $user = DB::transaction(function () use ($org, $user, $data, $siteIds, $isAppSumoPlan, $appsumoPlan, $chargeReference, &$createdInTransaction) {
+            $user = DB::transaction(function () use ($org, $data, $siteIds, $usage, $chargeReference, &$createdInTransaction) {
+                // The lock makes the capacity check and membership change one operation.
+                $org = Organization::whereKey($org->id)->lockForUpdate()->firstOrFail();
+                $plan = $this->appSumoPlan($org);
+                $user = User::where('email', $data['email'])->first();
+                if ($user && $org->users()->where('users.id', $user->id)->exists()) {
+                    throw new HttpResponseException(response()->json(['message' => 'That person is already in this organization.'], 409));
+                }
+
+                if ($user && ($user->archived_at !== null || ! in_array($user->status, ['active', 'invited'], true))) {
+                    throw new HttpResponseException(response()->json(['message' => 'That account is not available to invite.'], 422));
+                }
+
+                $this->checkMemberCapacity($org, $plan, $usage);
+
                 // Keep creation, credit spend and attachment atomic so a
                 // failed wallet spend never leaves an orphan invitation.
                 if (! $user) {
@@ -139,11 +126,9 @@ class TeamController extends Controller
                     $createdInTransaction = true;
                 }
 
-                if ($isAppSumoPlan) {
-                    $cost = (int) ($appsumoPlan['team_member_add_credits'] ?? 10);
-                    if ($cost > 0) {
-                        $this->creditWallet->consume($org, $cost, 'team_member_added', $chargeReference);
-                    }
+                $cost = (int) ($plan['team_member_add_credits'] ?? 0);
+                if ($cost > 0) {
+                    $this->creditWallet->consume($org, $cost, 'team_member_added', $chargeReference);
                 }
 
                 $org->users()->attach($user->id, ['role' => $data['role']]);
@@ -158,7 +143,7 @@ class TeamController extends Controller
             });
         } catch (InsufficientCreditsException $e) {
             return response()->json([
-                'message' => 'Adding a team member needs 10 Insight Credits. Buy a credit pack or wait for the next monthly allowance.',
+                'message' => "Adding a team member needs {$e->expected} Insight Credits. Buy a credit pack or wait for the next monthly allowance.",
                 'code' => 'insufficient_credits',
                 'credits' => ['needed' => $e->expected, 'available' => $e->available],
             ], 402);
@@ -190,6 +175,35 @@ class TeamController extends Controller
             ],
             'note' => $sendInvite ? 'Invite email sent with a set-password link.' : null,
         ], 201);
+    }
+
+    private function checkMemberCapacity(Organization $org, ?array $plan, UsageService $usage): void
+    {
+        if ($plan !== null) {
+            $limit = (int) $plan['team_member_limit'];
+            if ($limit === 0) {
+                return;
+            }
+
+            $used = $org->users()->where('users.id', '!=', $org->owner_user_id)->count();
+            if ($used >= $limit) {
+                throw new HttpResponseException(response()->json([
+                    'message' => "Your AppSumo tier allows {$limit} added team members.",
+                    'code' => 'appsumo_team_member_limit_reached',
+                    'limit' => ['key' => 'team_member_limit', 'max' => $limit, 'used' => $used],
+                ], 402));
+            }
+
+            return;
+        }
+
+        $limit = max(1, $usage->limit($org, 'team_seats'));
+        if ($org->users()->count() >= $limit) {
+            throw new HttpResponseException(response()->json([
+                'message' => "User limit reached for your plan ({$limit}).",
+                'code' => 'user_limit_reached',
+            ], 402));
+        }
     }
 
     public function updateRole(Request $request, int $user)

@@ -141,6 +141,9 @@ class AppSumoLicenseService
                 'event_timestamp'    => (int) ($payload['event_timestamp'] ?? 0),
                 'is_test'            => (bool) ($payload['test'] ?? false),
             ]);
+            if ($tier === 3 && $previous?->tier === 3 && $previous->keeps_tier_three_features) {
+                $row->keeps_tier_three_features = true;
+            }
             $row->save();
 
             if ($previous) {

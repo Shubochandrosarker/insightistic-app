@@ -54,13 +54,12 @@ class DeliverScheduledReports extends Command
             if (! $this->isDueNow($schedule)) {
                 continue;
             }
-            if ($this->alreadySentThisPeriod($schedule)) {
-                continue;
-            }
-
             $recipients = $schedule->recipientList();
             if (! $recipients) {
                 $this->warn("Schedule {$schedule->id}: no recipients configured, skipping.");
+                continue;
+            }
+            if ($this->alreadySentThisPeriod($schedule, $recipients)) {
                 continue;
             }
 
@@ -73,8 +72,7 @@ class DeliverScheduledReports extends Command
             $action = 'advanced_multi_source_ai_report';
             $includeAi = ! $creditModel || $credits->entitledForAction($org, $action);
             if ($creditModel && $includeAi && ! $credits->canCharge($org, $action)) {
-                $this->warn("Schedule {$schedule->id}: insufficient Insight Credits, skipping.");
-                continue;
+                $includeAi = false;
             }
 
             $report = $builder->generate($schedule->site, $schedule->frequency, $includeAi);
@@ -84,8 +82,7 @@ class DeliverScheduledReports extends Command
                     $credits->charge($org, $action, $operationId, false);
                 } catch (InsufficientCreditsException) {
                     $builder->discard($report);
-                    $this->warn("Schedule {$schedule->id}: wallet changed during generation, skipping.");
-                    continue;
+                    $report = $builder->generate($schedule->site, $schedule->frequency, false);
                 }
             }
             $usage->recordReport($org);
@@ -98,7 +95,11 @@ class DeliverScheduledReports extends Command
             ];
 
             Mail::to($recipients)->send(new ClientReportMail($report, $brand));
-            $report->update(['sent_to' => implode(', ', $recipients), 'sent_at' => now()]);
+            $report->update([
+                'report_schedule_id' => $schedule->id,
+                'sent_to' => implode(', ', $recipients),
+                'sent_at' => now(),
+            ]);
 
             $sent++;
             $this->info("Schedule {$schedule->id} (site {$schedule->site_id}): sent {$schedule->frequency} report to " . count($recipients) . ' recipient(s).');
@@ -132,13 +133,17 @@ class DeliverScheduledReports extends Command
         return $now->hour === (int) $m[1];
     }
 
-    private function alreadySentThisPeriod(ReportSchedule $schedule): bool
+    private function alreadySentThisPeriod(ReportSchedule $schedule, array $recipients): bool
     {
         $since = $schedule->frequency === 'monthly' ? now()->subDays(27) : now()->subDays(6);
 
         return ClientReport::where('site_id', $schedule->site_id)
             ->where('report_type', $schedule->frequency)
-            ->whereNotNull('sent_at')
+            ->where(function ($query) use ($schedule, $recipients): void {
+                $query->where('report_schedule_id', $schedule->id)
+                    ->orWhere(fn ($legacy) => $legacy->whereNull('report_schedule_id')
+                        ->where('sent_to', implode(', ', $recipients)));
+            })
             ->where('sent_at', '>=', $since)
             ->exists();
     }

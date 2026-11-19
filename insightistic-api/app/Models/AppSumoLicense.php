@@ -31,6 +31,7 @@ class AppSumoLicense extends Model
             'raw'             => 'array',
             'event_timestamp' => 'integer',
             'is_test'         => 'boolean',
+        'keeps_tier_three_features' => 'boolean',
         ];
     }
 

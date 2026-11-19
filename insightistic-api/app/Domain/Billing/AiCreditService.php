@@ -59,10 +59,8 @@ final class AiCreditService
     {
         if ($type === 'executive') {
             $resolved = $this->entitlements->resolve($organization);
-            // Tier 5 includes the Executive dashboard insight at the published
-            // advanced-analysis tariff. Report exports retain their own gate.
-            if ($resolved['plan']['slug'] === 'appsumo_tier_5'
-                && in_array('ai_insights', $resolved['features'], true)) {
+            // Dashboard Executive evidence and advanced AI reports have independent gates.
+            if (in_array('executive_insights', $resolved['features'], true)) {
                 return true;
             }
         }

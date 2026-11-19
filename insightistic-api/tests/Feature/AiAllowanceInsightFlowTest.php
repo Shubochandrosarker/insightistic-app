@@ -151,10 +151,10 @@ it('charges the tariff once for a paid insight that the paid model answers', fun
         ->toBe(AiAllowanceReservation::STATUS_COMMITTED);
 });
 
-it('allows the Tier 5 Executive insight without unlocking other advanced report types', function () {
-    [$user, $org] = makeOrgUser('tier5-executive@example.com');
+it('allows the AppSumo Executive insight without unlocking other advanced report types', function (int $tier) {
+    [$user, $org] = makeOrgUser("tier-{$tier}-executive@example.com");
     $this->seed(\Database\Seeders\PlanSeeder::class);
-    $plan = Plan::where('slug', 'appsumo_tier_5')->firstOrFail();
+    $plan = Plan::where('slug', "appsumo_tier_{$tier}")->firstOrFail();
     $org->forceFill(['plan_id' => $plan->id, 'billing_provider' => 'license'])->save();
     $site = allowanceFlowSite($org);
     PerformanceRun::create([
@@ -181,4 +181,4 @@ it('allows the Tier 5 Executive insight without unlocking other advanced report 
     $this->postJson("/api/sites/{$site->id}/insights/generate", ['type' => 'report'])
         ->assertForbidden()
         ->assertJsonPath('code', 'feature_not_in_plan');
-});
+})->with([4, 5]);
